@@ -70,14 +70,18 @@ tools/relay-remote.py "$UDID" add-account                                  # Set
 tools/relay-remote.py "$UDID" switch username=bob                          # account switcher
 tools/relay-remote.py "$UDID" logout username=alice                        # Settings → Log Out → OK
 tools/relay-remote.py "$UDID" relogin                                      # "Log In" on "Session Expired"
+tools/relay-remote.py "$UDID" press button=confirm                         # "Continue" on "Log In as …?"
+tools/relay-remote.py "$UDID" dismiss-alerts                               # "OK" on a login error alert
 ```
+
+Launch with `SIMCTL_CHILD_RELAY_DEBUG_NO_PERMISSION_PROMPTS=1` from the first launch on: an unanswered notifications prompt is SpringBoard's and survives app restarts and reinstalls until the simulator reboots. Passwords filled by the remote are cleared once they are submitted, so iOS doesn't cover the screen with "Save Password?".
 
 ### Login and account lifecycle checks
 
 `tools/mm-dev-auth.py` (standard library only; reads `infra/dev-server/.env`, keeps TOTP secrets in `build-input/dev-mfa-secrets.json`):
 
 - MFA: `enable-server-mfa` (sysadmin, once), `enable-mfa carol`, `code carol` (current 6-digit code), `disable-mfa carol`.
-- Session expiry: `revoke-sessions dave` (sysadmin) ends all of dave's sessions; the app shows "Session Expired" at the next request or WebSocket reconnect. Logging in again as the same user keeps the local data; as another user, the old account's data is deleted and a new account is created.
+- Session expiry: `revoke-sessions dave` (sysadmin) ends all of dave's sessions; the app shows "Session Expired" at its next request (a 401), a WebSocket reconnect, or when it becomes active (send it to the background and back: `xcrun simctl launch "$UDID" com.apple.Preferences`, then launch Relay again). Logging in again as the same user keeps the local data; as another user, the old account's data is deleted and a new account is created.
 
 Use users nobody else is using for these (carol for MFA, dave for revocation): other agents and scripts log in as alice and bob.
 
