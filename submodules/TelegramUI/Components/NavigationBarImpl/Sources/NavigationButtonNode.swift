@@ -254,9 +254,12 @@ private final class NavigationButtonItemNode: ImmediateTextNode {
     
     // MATTERMOST: the getters below only answer when VoiceOver asks this node; when it finds the button by touch it
     // asks the node's view, which never got a label (the setters are no-ops). Store them on the node as well.
+    // A glass bar's back button has empty text and no image: VoiceOver gets the arrow instead (NavigationBarImpl).
     private func storeAccessibilityProperties() {
         super.accessibilityLabel = self.accessibilityLabel
         super.accessibilityHint = self.accessibilityHint
+        let isEmpty = (self.accessibilityLabel ?? "").isEmpty && self._image == nil && self.node == nil
+        super.isAccessibilityElement = !isEmpty
     }
     
     private var _text: String?
@@ -303,14 +306,16 @@ private final class NavigationButtonItemNode: ImmediateTextNode {
                 imageView.removeFromSuperview()
                 self.imageView = nil
             }
-            
+
             self.invalidateCalculatedLayout()
             self.setNeedsLayout()
+            self.storeAccessibilityProperties()
         }
     }
-    
+
     public var node: ASDisplayNode? {
         didSet {
+            self.storeAccessibilityProperties()
             if self.node !== oldValue {
                 oldValue?.removeFromSupernode()
                 if let node = self.node {
