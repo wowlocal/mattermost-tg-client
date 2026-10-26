@@ -463,7 +463,14 @@ extension MattermostAccountSync {
             apiStatus = .offline
         }
         let end = status == .dnd ? doNotDisturb.endTime(now: Date()) : nil
-        let updated = try await self.client.updateStatus(apiStatus, userId: self.ownUserId, dndEndTime: end)
+        MMLog.log("profile: setting status \(apiStatus.rawValue) (dnd end \(end.map(String.init) ?? "none"))")
+        let updated: UserStatus
+        do {
+            updated = try await self.client.updateStatus(apiStatus, userId: self.ownUserId, dndEndTime: end)
+        } catch {
+            MMLog.log("profile: status \(apiStatus.rawValue) refused: \(error)")
+            throw error
+        }
         MMLog.log("profile: status set to \(updated.status.rawValue) (dnd end \(updated.dndEndTime))")
         self.ownProfile.values.with { $0.status = updated }
         await self.writeOwnPresence(updated)

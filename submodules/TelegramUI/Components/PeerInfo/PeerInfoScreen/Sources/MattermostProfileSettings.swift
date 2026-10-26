@@ -41,7 +41,8 @@ func mattermostSettingsStatusItems(context: AccountContext, presentationData: Pr
     }))
     if MattermostProfile.currentOwnProfileFields(accountId: context.account.id)?.customStatusesEnabled ?? true {
         let custom = own?.customStatus
-        items.append(PeerInfoScreenDisclosureItem(id: "mattermost-custom-status", label: .text(custom.map(MattermostStatusAppearance.customStatusText) ?? strings.Relay_Status_SetCustomStatus), text: strings.Relay_Status_CustomStatus, icon: MattermostStatusAppearance.emojiIcon(custom?.emoji ?? "🙂", side: 30.0), action: {
+        // The icon is the status emoji; the label its text.
+        items.append(PeerInfoScreenDisclosureItem(id: "mattermost-custom-status", label: .text(custom.map { $0.text.isEmpty ? $0.emoji : $0.text } ?? strings.Relay_Status_SetCustomStatus), text: strings.Relay_Status_CustomStatus, icon: MattermostStatusAppearance.emojiIcon(custom?.emoji ?? "🙂", side: 30.0), action: {
             interaction.openSettings(.mattermostCustomStatus)
         }))
     }
@@ -373,7 +374,7 @@ extension PeerInfoScreenImpl {
         if MattermostProfile.currentOwnProfileFields(accountId: accountId)?.customStatusesEnabled ?? true {
             items.append(.separator)
             let custom = own?.customStatus
-            items.append(.action(ContextMenuActionItem(text: custom.map(MattermostStatusAppearance.customStatusText) ?? strings.Relay_Status_SetCustomStatus, icon: { _ in
+            items.append(.action(ContextMenuActionItem(text: custom.map { $0.text.isEmpty ? $0.emoji : $0.text } ?? strings.Relay_Status_SetCustomStatus, icon: { _ in
                 return MattermostStatusAppearance.emojiIcon(custom?.emoji ?? "🙂", side: 22.0)
             }, action: { [weak self] _, f in
                 f(.dismissWithoutContent)

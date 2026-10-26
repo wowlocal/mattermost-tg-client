@@ -734,6 +734,17 @@ public class ShareRootControllerImpl {
                             }
                             strongSelf.currentShareController = shareController
                             strongSelf.mainWindow?.present(shareController, on: .root)
+                            #if DEBUG
+                            // MATTERMOST: debug builds only (Phase 3F). Simulator taps don't reach the extension's
+                            // windows, so `<root>/relay-debug/share-auto.json` names a chat; after a few seconds the
+                            // other app's items are posted there through what the Send button runs.
+                            if MattermostBackend.isEnabled, let inputItems = strongSelf.getExtensionContext()?.inputItems {
+                                mattermostShareDebugAutoSend(rootPath: rootPath, account: context, rawSignals: TGItemProviderSignals.itemSignals(forInputItems: inputItems) ?? [], dismiss: { [weak shareController] in
+                                    shareController?.dismiss()
+                                    self?.getExtensionContext()?.completeRequest(returningItems: nil, completionHandler: nil)
+                                })
+                            }
+                            #endif
                         }
                     }
                     
@@ -1486,3 +1497,48 @@ private func mattermostShareExternalItems(rawSignals: [MTSignal], account: Share
         }
     )
 }
+
+#if DEBUG
+// MATTERMOST: debug builds only (Phase 3F). `{"peerId": <PeerId.toInt64()>, "comment": "…", "delay": 4}` in
+// `<root>/relay-debug/share-auto.json`: the request is removed, the items are shared to that chat with
+// `mattermostShareExternalItems` (the Send button's path), and the outcome goes to `share-result.json`.
+private func mattermostShareDebugAutoSend(rootPath: String, account: ShareControllerAccountContext, rawSignals: [MTSignal], dismiss: @escaping () -> Void) {
+    let directory = rootPath + "/relay-debug"
+    let requestPath = directory + "/share-auto.json"
+    guard let data = FileManager.default.contents(atPath: requestPath), let request = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], let peerIdValue = (request["peerId"] as? NSNumber)?.int64Value else {
+        return
+    }
+    try? FileManager.default.removeItem(atPath: requestPath)
+    let peerId = EnginePeer.Id(peerIdValue)
+    let started = CFAbsoluteTimeGetCurrent()
+    let writeResult: ([String: Any]) -> Void = { result in
+        var result = result
+        result["ms"] = Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
+        result["accountId"] = "\(account.accountId.int64)"
+        result["peerId"] = "\(peerIdValue)"
+        if let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: URL(fileURLWithPath: directory + "/share-result.json"))
+        }
+    }
+    Queue.mainQueue().after((request["delay"] as? Double) ?? 4.0, {
+        var statuses: [String] = []
+        let _ = (mattermostShareExternalItems(rawSignals: rawSignals, account: account, rootPath: rootPath, peerIds: [peerId], threadIds: [:], comment: (request["comment"] as? String) ?? "")
+        |> deliverOnMainQueue).start(next: { status in
+            switch status {
+            case let .preparing(long):
+                statuses.append("preparing(\(long))")
+            case let .progress(value):
+                statuses.append("progress(\(value))")
+            case .done:
+                statuses.append("done")
+            }
+        }, error: { error in
+            writeResult(["ok": false, "error": "\(error)", "statuses": statuses])
+            dismiss()
+        }, completed: {
+            writeResult(["ok": true, "statuses": statuses])
+            dismiss()
+        })
+    })
+}
+#endif

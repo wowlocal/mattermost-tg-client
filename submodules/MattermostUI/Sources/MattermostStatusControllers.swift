@@ -469,8 +469,10 @@ public func mattermostStatusController(context: AccountContext, openCustomStatus
             case "tomorrow":
                 arguments.selectDoNotDisturb(.tomorrow)
             case "custom":
-                let minutes = (command["minutes"] as? Int) ?? 90
-                arguments.toggleCustomDate()
+                let minutes = mattermostDebugInt(command, "minutes") ?? 90
+                if !stateValue.with({ $0.showsCustomDate }) {
+                    arguments.toggleCustomDate()
+                }
                 arguments.updateCustomDate(Int32(Date().timeIntervalSince1970) + Int32(minutes * 60))
                 arguments.confirmCustomDate()
             default:
@@ -905,7 +907,7 @@ public func mattermostCustomStatusController(context: AccountContext, pickEmoji:
             let value = (command["value"] as? String) ?? ""
             if value == "date_and_time" {
                 arguments.selectDuration(nil)
-                if let minutes = command["minutes"] as? Int {
+                if let minutes = mattermostDebugInt(command, "minutes") {
                     arguments.updateDate(Int32(Date().timeIntervalSince1970) + Int32(minutes * 60))
                 }
             } else {
@@ -913,14 +915,14 @@ public func mattermostCustomStatusController(context: AccountContext, pickEmoji:
             }
         },
         "recent": { command in
-            let index = (command["index"] as? Int) ?? 0
+            let index = mattermostDebugInt(command, "index") ?? 0
             let recent = stateValue.with { $0.recent }
             if index < recent.count {
                 arguments.apply(recent[index], CustomStatusDuration(apiValue: recent[index].duration) ?? .dontClear)
             }
         },
         "suggestion": { command in
-            let index = (command["index"] as? Int) ?? 0
+            let index = mattermostDebugInt(command, "index") ?? 0
             if index < CustomStatusSuggestion.defaults.count {
                 let suggestion = CustomStatusSuggestion.defaults[index]
                 arguments.apply(MattermostCustomStatus(emojiName: suggestion.emoji, text: suggestion.text, duration: suggestion.duration.apiValue, expiresAt: nil), suggestion.duration)

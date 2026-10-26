@@ -15,6 +15,24 @@ import MattermostSyncCore
 // position are inputs on that screen), and the notification preferences: the user's (Settings → Notifications →
 // Push and Mentions) and a chat's (the profile's Notifications → Customize).
 
+/// Debug remote arguments arrive as strings (`tools/relay-remote.py key=value`); JSON numbers and booleans work too.
+func mattermostDebugInt(_ command: [String: Any], _ key: String) -> Int? {
+    if let value = command[key] as? Int {
+        return value
+    }
+    return (command[key] as? String).flatMap { Int($0) }
+}
+
+func mattermostDebugBool(_ command: [String: Any], _ key: String, default defaultValue: Bool = true) -> Bool {
+    if let value = command[key] as? Bool {
+        return value
+    }
+    if let value = command[key] as? String {
+        return value == "true" || value == "1" || value == "yes"
+    }
+    return defaultValue
+}
+
 private func profileErrorText(_ error: MattermostProfileError, strings: PresentationStrings) -> String {
     switch error {
     case .unavailable:
@@ -275,7 +293,7 @@ private func mattermostProfileFieldController(context: AccountContext, name: Str
     }
     controller.debugActions = [
         "set": { command in
-            arguments.update((command["index"] as? Int) ?? 0, (command["value"] as? String) ?? "")
+            arguments.update(mattermostDebugInt(command, "index") ?? 0, (command["value"] as? String) ?? "")
         },
         "submit": { _ in
             submit()
@@ -569,13 +587,13 @@ public func mattermostNotificationPreferencesController(context: AccountContext)
             }
         },
         "threads": { command in
-            arguments.setThreads((command["value"] as? Bool) ?? true)
+            arguments.setThreads(mattermostDebugBool(command, "value"))
         },
         "first-name": { command in
-            arguments.setFirstName((command["value"] as? Bool) ?? true)
+            arguments.setFirstName(mattermostDebugBool(command, "value"))
         },
         "channel-wide": { command in
-            arguments.setChannelWide((command["value"] as? Bool) ?? true)
+            arguments.setChannelWide(mattermostDebugBool(command, "value"))
         },
         "keywords": { command in
             arguments.setKeywords((command["value"] as? String) ?? "")
@@ -818,16 +836,16 @@ public func mattermostChannelNotificationsController(context: AccountContext, pe
             arguments.setPush(PushLevel(rawValue: value))
         },
         "threads": { command in
-            arguments.setThreads((command["value"] as? Bool) ?? true)
+            arguments.setThreads(mattermostDebugBool(command, "value"))
         },
         "ignore-channel-mentions": { command in
-            arguments.setIgnoreChannelMentions((command["value"] as? Bool) ?? true)
+            arguments.setIgnoreChannelMentions(mattermostDebugBool(command, "value"))
         },
         "mute": { command in
-            arguments.setMuted((command["value"] as? Bool) ?? true)
+            arguments.setMuted(mattermostDebugBool(command, "value"))
         },
         "auto-follow": { command in
-            arguments.setAutoFollow((command["value"] as? Bool) ?? true)
+            arguments.setAutoFollow(mattermostDebugBool(command, "value"))
         }
     ]
     return controller

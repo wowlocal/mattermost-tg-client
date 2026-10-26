@@ -89,7 +89,7 @@ extension TelegramRootController {
                 completion(false, "no Settings screen", [:])
                 return true
             }
-            if !(command["keep"] as? Bool ?? false) {
+            if (command["keep"] as? String) != "1" {
                 self.popToRoot(animated: false)
             }
             let ok = settings.relayDebugOpenSettingsRow(row)
@@ -176,10 +176,10 @@ extension TelegramRootController {
             if let url = (command["url"] as? String).flatMap(URL.init(string:)) {
                 items.append(["url": url])
             }
-            for index in 0 ..< ((command["images"] as? Int) ?? 0) {
+            for index in 0 ..< (Int((command["images"] as? String) ?? "") ?? 0) {
                 items.append(["image": self.relayGeneratedImage(text: "\(index + 1)")])
             }
-            for index in 0 ..< ((command["files"] as? Int) ?? 0) {
+            for index in 0 ..< (Int((command["files"] as? String) ?? "") ?? 0) {
                 items.append(["data": Data("Shared file \(index + 1) from the share extension's code path.\n".utf8), "fileName": "shared-\(index + 1).txt", "mimeType": "text/plain"])
             }
             var threadIds: [PeerId: Int64] = [:]
