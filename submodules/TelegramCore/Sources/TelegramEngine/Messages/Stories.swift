@@ -1992,6 +1992,10 @@ public enum StoriesUploadAvailability {
 }
 
 func _internal_checkStoriesUploadAvailability(account: Account, target: Stories.PendingTarget) -> Signal<StoriesUploadAvailability, NoError> {
+    // MATTERMOST: no stories (`stories.canSendStory`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .single(.unknownLimit)
+    }
     return account.postbox.transaction { transaction -> Api.InputPeer? in
         switch target {
         case .myStories:

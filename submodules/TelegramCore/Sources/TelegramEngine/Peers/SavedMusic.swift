@@ -360,7 +360,8 @@ public final class ProfileSavedMusicContext {
         let signal = postbox.loadedPeerWithId(peerId)
         |> castError(MTRpcError.self)
         |> mapToSignal { peer -> Signal<([TelegramMediaFile], Int32), MTRpcError> in
-            guard let inputUser = apiInputUser(peer) else {
+            // MATTERMOST: as for a peer Telegram can't address (Phase 4B: nothing reaches the null network engine).
+            guard let inputUser = apiInputUser(peer), !MattermostBackend.isEnabled else {
                 return .complete()
             }
             return network.request(Api.functions.users.getSavedMusic(id: inputUser, offset: offset, limit: 32, hash: 0))

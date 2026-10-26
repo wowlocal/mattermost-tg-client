@@ -121,6 +121,11 @@ final class HistoryViewStateValidationContexts {
     
     func updateView(id: Int32, view: MessageHistoryView?, location: ChatLocationInput?) {
         assert(self.queue.isCurrent())
+        // MATTERMOST: validation re-requests history over MTProto (channels, threads, scheduled messages);
+        // MattermostSync keeps the stored history current.
+        if MattermostBackend.isEnabled {
+            return
+        }
         
         guard let view else {
             if self.contexts[id] != nil {

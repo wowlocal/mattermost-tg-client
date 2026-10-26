@@ -58,6 +58,10 @@ public struct ContentSettingsConfiguration: Equatable {
 }
 
 public func contentSettingsConfiguration(network: Network) -> Signal<ContentSettingsConfiguration, NoError> {
+    // MATTERMOST: no sensitive-content settings (`account.getContentSettings`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .never()
+    }
     return network.request(Api.functions.account.getContentSettings())
     |> map { result -> ContentSettingsConfiguration in
         switch result {

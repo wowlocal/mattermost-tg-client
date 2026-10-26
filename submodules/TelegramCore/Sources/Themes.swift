@@ -13,7 +13,11 @@ let telegramThemeFileExtension = "tgios-theme"
 
 func _internal_telegramThemes(postbox: Postbox, network: Network, accountManager: AccountManager<TelegramAccountManagerTypes>?, forceUpdate: Bool = false) -> Signal<[TelegramTheme], NoError> {
     let fetch: ([TelegramTheme]?, Int64?) -> Signal<[TelegramTheme], NoError> = { current, hash in
-        network.request(Api.functions.account.getThemes(format: telegramThemeFormat, hash: hash ?? 0))
+        // MATTERMOST: no cloud themes (`account.getThemes`) (Phase 4B: nothing reaches the null network engine).
+        if MattermostBackend.isEnabled {
+            return .complete()
+        }
+        return network.request(Api.functions.account.getThemes(format: telegramThemeFormat, hash: hash ?? 0))
         |> retryRequest
         |> mapToSignal { result -> Signal<([TelegramTheme], Int64), NoError> in
             switch result {

@@ -4,6 +4,10 @@ import TelegramApi
 import SwiftSignalKit
 
 func fetchAndUpdateSupplementalCachedPeerData(peerId rawPeerId: PeerId, accountPeerId: PeerId, network: Network, postbox: Postbox) -> Signal<Bool, NoError> {
+    // MATTERMOST: `messages.getPeerSettings` (report/add-contact bars); nothing to load for Mattermost peers.
+    if MattermostBackend.isEnabled {
+        return .single(true)
+    }
     return postbox.combinedView(keys: [.basicPeer(rawPeerId)])
     |> mapToSignal { views -> Signal<Peer, NoError> in
         guard let view = views.views[.basicPeer(rawPeerId)] as? BasicPeerView else {
@@ -155,6 +159,12 @@ func fetchAndUpdateSupplementalCachedPeerData(peerId rawPeerId: PeerId, accountP
 }
 
 func _internal_fetchAndUpdateCachedPeerData(accountPeerId: PeerId, peerId rawPeerId: PeerId, sourceMessageId: EngineMessage.Id? = nil, network: Network, postbox: Postbox) -> Signal<Bool, NoError> {
+    // MATTERMOST: `users.getFullUser` / `channels.getFullChannel`: MattermostSync writes the cached data of its peers
+    // and refreshes what it keeps lazily when asked (`MattermostChatObserver`).
+    if MattermostBackend.isEnabled {
+        mattermostPeerDataRequested(accountPeerId: accountPeerId, peerId: rawPeerId)
+        return .single(true)
+    }
     return postbox.combinedView(keys: [.basicPeer(rawPeerId)])
     |> mapToSignal { views -> Signal<Bool, NoError> in
         if accountPeerId == rawPeerId {

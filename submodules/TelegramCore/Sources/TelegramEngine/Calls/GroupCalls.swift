@@ -2909,6 +2909,10 @@ func _internal_editGroupCallTitle(account: Account, callId: Int64, accessHash: I
 }
 
 func _internal_groupCallDisplayAsAvailablePeers(accountPeerId: PeerId, network: Network, postbox: Postbox, peerId: PeerId) -> Signal<[FoundPeer], NoError> {
+    // MATTERMOST: no group calls (`phone.getGroupCallJoinAs`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .single([])
+    }
     return postbox.transaction { transaction -> Api.InputPeer? in
         return transaction.getPeer(peerId).flatMap(apiInputPeer)
     }

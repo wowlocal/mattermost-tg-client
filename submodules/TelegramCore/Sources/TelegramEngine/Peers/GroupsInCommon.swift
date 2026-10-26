@@ -95,7 +95,8 @@ private final class GroupsInCommonContextImpl {
                 return transaction.getPeer(peerId).flatMap(apiInputUser)
             }
             |> mapToSignal { inputUser -> Signal<([Peer], Int), NoError> in
-                guard let inputUser = inputUser else {
+                // MATTERMOST: as for a peer Telegram can't address (Phase 4B: nothing reaches the null network engine).
+                guard let inputUser = inputUser, !MattermostBackend.isEnabled else {
                     return .single(([], 0))
                 }
                 return network.request(Api.functions.messages.getCommonChats(userId: inputUser, maxId: maxId?._internalGetInt64Value() ?? 0, limit: limit))

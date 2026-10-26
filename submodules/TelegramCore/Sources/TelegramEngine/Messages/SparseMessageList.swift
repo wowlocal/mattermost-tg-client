@@ -96,7 +96,8 @@ public final class SparseMessageList {
                     return transaction.getPeer(peerId).flatMap(apiInputPeer)
                 }
                 |> mapToSignal { inputPeer -> Signal<SparseMessageSkeleton, NoError> in
-                    guard let inputPeer = inputPeer else {
+                    // MATTERMOST: as for a peer Telegram can't address (Phase 4B: nothing reaches the null network engine).
+                    guard let inputPeer = inputPeer, !MattermostBackend.isEnabled else {
                         return .single(SparseMessageSkeleton(items: []))
                     }
                     guard let messageFilter = messageFilterForTagMask(messageTag) else {
@@ -802,7 +803,8 @@ private func loadSparseCalendarPage(account: Account, peer: Peer, messageTag: Me
     let accountPeerId = account.peerId
     let peerId = peer.id
     let emptyPage = SparseCalendarPagingState.Page(peerId: peerId, messagesByDay: [:], nextOffset: nil, bounds: nil)
-    guard let inputPeer = apiInputPeer(peer), let messageFilter = messageFilterForTagMask(messageTag) else {
+    // MATTERMOST: as for a peer Telegram can't address (Phase 4B: nothing reaches the null network engine).
+    guard let inputPeer = apiInputPeer(peer), let messageFilter = messageFilterForTagMask(messageTag), !MattermostBackend.isEnabled else {
         return .single(emptyPage)
     }
 

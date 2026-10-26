@@ -171,6 +171,10 @@ public final class CachedPremiumGiftCodeOptions: Codable {
 }
 
 func _internal_premiumGiftCodeOptions(account: Account, peerId: EnginePeer.Id?, onlyCached: Bool = false) -> Signal<[PremiumGiftCodeOption], NoError> {
+    // MATTERMOST: no Premium gift codes (`payments.getPremiumGiftCodeOptions`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .single([])
+    }
     if let peerId {
         if peerId.namespace == Namespaces.Peer.SecretChat {
             return .single([])
@@ -230,6 +234,10 @@ func _internal_premiumGiftCodeOptions(account: Account, peerId: EnginePeer.Id?, 
 
 
 func _internal_premiumGiftCodeOptions(account: Account, peerId: EnginePeer.Id?) -> Signal<[PremiumGiftCodeOption], NoError> {
+    // MATTERMOST: no Premium gift codes (`payments.getPremiumGiftCodeOptions`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .single([])
+    }
     if let peerId {
         if peerId.namespace == Namespaces.Peer.SecretChat {
             return .single([])

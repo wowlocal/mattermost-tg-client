@@ -49,6 +49,10 @@ public func _internal_getRecentPeers(transaction: Transaction) -> [PeerId] {
 }
 
 public func _internal_managedUpdatedRecentPeers(accountPeerId: PeerId, postbox: Postbox, network: Network) -> Signal<Void, NoError> {
+    // MATTERMOST: no server-side top peers (`contacts.getTopPeers`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .complete()
+    }
     let key = PostboxViewKey.cachedItem(cachedRecentPeersEntryId())
     let peersEnabled = postbox.combinedView(keys: [key])
     |> map { views -> Bool in
@@ -151,6 +155,10 @@ func _internal_updateRecentPeersEnabled(postbox: Postbox, network: Network, enab
 }
 
 func _internal_managedRecentlyUsedInlineBots(postbox: Postbox, network: Network, accountPeerId: PeerId) -> Signal<Void, NoError> {
+    // MATTERMOST: no inline bots (`contacts.getTopPeers`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .complete()
+    }
     var flags: Int32 = 0
     flags |= 1 << 2
     flags |= 1 << 17
@@ -279,6 +287,10 @@ public func _internal_recentApps(accountPeerId: PeerId, postbox: Postbox) -> Sig
 }
 
 public func _internal_managedUpdatedRecentApps(accountPeerId: PeerId, postbox: Postbox, network: Network) -> Signal<Void, NoError> {
+    // MATTERMOST: no mini apps (`contacts.getTopPeers`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .complete()
+    }
     let key = PostboxViewKey.cachedItem(cachedRecentAppsEntryId())
     let peersEnabled = postbox.combinedView(keys: [key])
     |> map { views -> Bool in

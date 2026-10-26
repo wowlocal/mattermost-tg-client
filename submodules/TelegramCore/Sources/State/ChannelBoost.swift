@@ -83,6 +83,10 @@ public struct ChannelBoostStatus: Equatable {
 }
 
 func _internal_getChannelBoostStatus(account: Account, peerId: PeerId) -> Signal<ChannelBoostStatus?, NoError> {
+    // MATTERMOST: no channel boosts (`premium.getBoostsStatus`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .single(nil)
+    }
     return account.postbox.transaction { transaction -> Api.InputPeer? in
         return transaction.getPeer(peerId).flatMap(apiInputPeer)
     }

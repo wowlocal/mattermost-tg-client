@@ -2059,7 +2059,8 @@ private final class ProfileGiftsContextImpl {
             return transaction.getPeer(peerId).flatMap(apiInputPeer)
         }
         |> mapToSignal { inputPeer -> Signal<([ProfileGiftsContext.State.StarGift], Int32, String?, Bool?), NoError> in
-            guard let inputPeer else {
+            // MATTERMOST: as for a peer Telegram can't address (Phase 4B: nothing reaches the null network engine).
+            guard let inputPeer, !MattermostBackend.isEnabled else {
                 return .single(([], 0, nil, nil))
             }
             var flags: Int32 = 0

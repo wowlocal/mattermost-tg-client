@@ -1270,6 +1270,10 @@ public extension BuiltinWallpaperData {
     )
 
     static func generate(network: Network) {
+        // MATTERMOST: debug-only dump of Telegram's built-in wallpaper slugs (`account.getWallPaper` ×16 per theme screen).
+        if MattermostBackend.isEnabled {
+            return
+        }
         let slugToName: [(String, String)] = [
             ("fqv01SQemVIBAAAApND8LDRUhRU", "`default`"),
             ("Ye7DfT2kCVIKAAAAhzXfrkdOjxs", "legacy"),

@@ -474,7 +474,8 @@ public final class AccountContextImpl: AccountContext {
         
         let langCode = sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode
         self.currentCountriesConfiguration = Atomic(value: CountriesConfiguration(countries: loadCountryCodes()))
-        if !temp {
+        // MATTERMOST: the bundled country list only (`help.getCountriesList`).
+        if !temp && !MattermostBackend.isEnabled {
             let currentCountriesConfiguration = self.currentCountriesConfiguration
             self.countriesConfigurationDisposable = (self.engine.localization.getCountriesList(accountManager: sharedContext.accountManager, langCode: langCode)
             |> deliverOnMainQueue).start(next: { [weak self] value in
@@ -652,6 +653,10 @@ public final class AccountContextImpl: AccountContext {
             ))
         })
 
+        // MATTERMOST: no Telegram two-step verification (`account.getPassword`).
+        if MattermostBackend.isEnabled {
+            self.twoStepAuthData.set(.single(nil))
+        } else {
         self.twoStepAuthData.set(
             .single(nil)
             |> then(
@@ -662,6 +667,7 @@ public final class AccountContextImpl: AccountContext {
                 }
             )
         )
+        }
 
         if let walletContext = self.walletContext {
             self.account.walletTransferTasksRunning.set(walletContext.hasTransferBackgroundTasks)

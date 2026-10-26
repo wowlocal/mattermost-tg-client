@@ -2068,6 +2068,14 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
         
         let screenData: Signal<PeerInfoScreenData, NoError>
         if self.isSettings {
+            // MATTERMOST: Telegram's notification exceptions, privacy settings, archived stickers and two-step
+            // verification state (the Settings rows that show them are hidden) are not requested (Phase 4B).
+            if MattermostBackend.isEnabled {
+                self.notificationExceptions.set(.single(NotificationExceptionsList(peers: [:], settings: [:])))
+                self.privacySettings.set(.single(nil))
+                self.archivedPacks.set(.single(nil))
+                self.twoStepAccessConfiguration.set(.single(nil))
+            } else {
             self.notificationExceptions.set(.single(NotificationExceptionsList(peers: [:], settings: [:]))
             |> then(
                 context.engine.peers.notificationExceptionsList()
@@ -2079,6 +2087,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             |> map { value -> TwoStepVerificationAccessConfiguration? in
                 return TwoStepVerificationAccessConfiguration(configuration: value, password: nil)
             }))
+            }
             
             let hasPassport = self.twoStepAuthData.get()
             |> map { data -> Bool in
@@ -6279,6 +6288,10 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
         if !self.isSettings && !self.isMyProfile {
             return
         }
+        // MATTERMOST: no personal channel on the profile (`channels.getAdminedPublicChannels`).
+        if MattermostBackend.isEnabled {
+            return
+        }
         if self.personalChannelsDisposable != nil {
             return
         }
@@ -6584,6 +6597,10 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
                 
         if isSettings || isMyProfile {
             let activeSessionsContextAndCountSignal = deferred { () -> Signal<(ActiveSessionsContext, Int, WebSessionsContext)?, NoError> in
+                // MATTERMOST: Devices lists the Mattermost sessions (MattermostUI); Telegram's sessions are not loaded.
+                if MattermostBackend.isEnabled {
+                    return .single(nil)
+                }
                 let activeSessionsContext = context.engine.privacy.activeSessions()
                 let webSessionsContext = context.engine.privacy.webSessions()
                 let otherSessionCount = activeSessionsContext.state

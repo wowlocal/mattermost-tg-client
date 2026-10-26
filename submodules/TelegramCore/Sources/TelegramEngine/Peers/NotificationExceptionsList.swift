@@ -19,6 +19,10 @@ public final class NotificationExceptionsList: Equatable {
 }
 
 func _internal_notificationExceptionsList(accountPeerId: PeerId, postbox: Postbox, network: Network, isStories: Bool) -> Signal<NotificationExceptionsList, NoError> {
+    // MATTERMOST: notification exceptions are Mattermost channel settings (`account.getNotifyExceptions`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .single(NotificationExceptionsList(peers: [:], settings: [:]))
+    }
     var flags: Int32 = 0
     if isStories {
         flags |= 1 << 2

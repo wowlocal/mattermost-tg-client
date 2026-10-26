@@ -35,6 +35,11 @@ private final class NotificationAutolockReportManagerImpl {
     }
     
     private func updateDeadline(_ deadline: Int32?) {
+        // MATTERMOST: `account.updateDeviceLocked` tells Telegram's servers when to stop pushing message previews;
+        // Mattermost has no equivalent.
+        if MattermostBackend.isEnabled {
+            return
+        }
         self.isPerformingUpdate.set(true)
         let value: Int32
         if let deadline = deadline {
