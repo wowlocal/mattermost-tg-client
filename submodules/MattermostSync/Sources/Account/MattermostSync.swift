@@ -406,13 +406,21 @@ public enum MattermostSync {
                 return nil
             })
         }.awaitValue()
+        // Telegram's `managedCleanupAccounts` also deletes directories of removed records, so the two may
+        // race; what counts is that the directory is gone.
         do {
             if FileManager.default.fileExists(atPath: basePath) {
                 try FileManager.default.removeItem(atPath: basePath)
             }
-            MMLog.log("logout: account \(accountId.int64) removed (record, token, \(basePath))")
         } catch {
-            MMLog.log("logout: account \(accountId.int64): could not delete \(basePath): \(error)")
+            if FileManager.default.fileExists(atPath: basePath) {
+                try? FileManager.default.removeItem(atPath: basePath)
+            }
+        }
+        if FileManager.default.fileExists(atPath: basePath) {
+            MMLog.log("logout: account \(accountId.int64): could not delete \(basePath)")
+        } else {
+            MMLog.log("logout: account \(accountId.int64) removed (record, token, \(basePath))")
         }
     }
 }
