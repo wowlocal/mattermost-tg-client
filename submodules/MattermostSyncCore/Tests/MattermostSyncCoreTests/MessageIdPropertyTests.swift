@@ -5,13 +5,18 @@ import XCTest
 /// ids are unique, positive and within range, strictly increasing in `(createAt, postId)` order;
 /// every renumber plan describes exactly the id changes that happened; every island really is
 /// contiguous on the server; holes contain no mapped ids; the start/latest flags are true.
-final class MessageIdPropertyTests: XCTestCase {
+/// `SQLiteMessageIdPropertyTests` runs them again against the SQLite store.
+class MessageIdPropertyTests: XCTestCase {
+    func makeStore() throws -> any InspectableMessageIdStore {
+        return InMemoryMessageIdStore()
+    }
+
     private struct Simulation {
         let channel = "c"
         let allocator: MessageIdAllocator
         var rng: SeededGenerator
         var server: FakeServer
-        var store = InMemoryMessageIdStore()
+        var store: any InspectableMessageIdStore
         /// The ids we expect the store to hold, maintained only from operation results.
         var shadow: [String: Int32] = [:]
         var connected = true
@@ -20,7 +25,8 @@ final class MessageIdPropertyTests: XCTestCase {
         var clock: Int64
         var stats: [String: Int] = [:]
 
-        init(seed: UInt64, configuration: MessageIdAllocator.Configuration, initialPosts: Int) {
+        init(seed: UInt64, configuration: MessageIdAllocator.Configuration, initialPosts: Int, store: any InspectableMessageIdStore) {
+            self.store = store
             allocator = MessageIdAllocator(configuration: configuration)
             rng = SeededGenerator(seed: seed)
             var posts: [PostOrderKey] = []
@@ -68,7 +74,16 @@ final class MessageIdPropertyTests: XCTestCase {
 
         // MARK: Operations
 
+        /// One random operation, as one store transaction when the store has them.
         mutating func step() throws {
+            if let runner = store.operationRunner {
+                try runner { try self.randomOperation() }
+            } else {
+                try randomOperation()
+            }
+        }
+
+        mutating func randomOperation() throws {
             trace("islands=\(store.islands(channelId: channel))")
             let roll = random(100)
             switch roll {
@@ -320,7 +335,7 @@ final class MessageIdPropertyTests: XCTestCase {
     }
 
     private func run(seed: UInt64, steps: Int, configuration: MessageIdAllocator.Configuration, initialPosts: Int) throws -> [String: Int] {
-        var simulation = Simulation(seed: seed, configuration: configuration, initialPosts: initialPosts)
+        var simulation = Simulation(seed: seed, configuration: configuration, initialPosts: initialPosts, store: try makeStore())
         for step in 0 ..< steps {
             try simulation.step()
             // Plan consistency is checked on every operation (`absorb`); the full O(n) invariant
@@ -364,6 +379,17 @@ final class MessageIdPropertyTests: XCTestCase {
         for post in simulation.server.livePosts {
             XCTAssertTrue(mapped.contains(post.postId), "seed \(seed): \(post) never loaded")
         }
+        // A persistent store reads back exactly what it held.
+        let channel = simulation.channel
+        let deletedIds = Array(simulation.server.deleted)
+        let entries = simulation.store.allEntries(channelId: channel)
+        let islands = simulation.store.islands(channelId: channel)
+        let tombstones = simulation.store.unmappedTombstones(channelId: channel, among: deletedIds)
+        let reopened = try simulation.store.reopened()
+        XCTAssertEqual(reopened.allEntries(channelId: channel), entries, "seed \(seed)")
+        XCTAssertEqual(reopened.islands(channelId: channel), islands, "seed \(seed)")
+        XCTAssertEqual(reopened.unmappedTombstones(channelId: channel, among: deletedIds), tombstones, "seed \(seed)")
+        XCTAssertEqual(reopened.validate(channelId: channel, maxId: configuration.maxId), [], "seed \(seed)")
         if ProcessInfo.processInfo.environment["SIM_STATS"] != nil {
             print("STATS seed \(seed): \(simulation.stats.sorted { $0.key < $1.key }) entries=\(simulation.store.allEntries(channelId: simulation.channel).count)")
         }

@@ -2,13 +2,14 @@
 
 Pure-Swift logic between the Mattermost API client and Telegram-iOS's Postbox. It is used by `MattermostSync` (which owns Postbox access). See `docs/plan/02-domain-mapping.md` and `docs/plan/03-sync-engine.md`.
 
-- **Foundation only**: no dependencies (not even MattermostKit) and no resources. Inputs are small structs defined here.
+- **Foundation and SQLite only**: no package dependencies (not even MattermostKit) and no resources. Inputs are small structs defined here. SQLite is Telegram's vendored SQLCipher under Bazel and the system `SQLite3` module under SwiftPM (see [Sync store](#sync-store-sqlitemattermostsyncstore)).
 - Value types, `Sendable`, deterministic. Builds cleanly with `-warnings-as-errors` and `-strict-concurrency=complete`.
 - Built by SwiftPM for tests (`swift test`) and by Bazel inside Telegram-iOS (`BUILD`, library only).
 
 ```
 Sources/MattermostSyncCore/
   MessageIds/   PostOrderKey, MessageIdStore (+ InMemoryMessageIdStore), MessageIdAllocator
+  Store/        SQLiteMattermostSyncStore (+ MessageIdStore conformance), schema and migrations, SQLiteConnection
   Markdown/     TextEntity, MattermostMarkdown (parse + serialize), InlineParser, EmojiTable
   Mapping/      ReadStateMapper, PresenceMapper, ServiceAction
 ```
@@ -47,7 +48,7 @@ The general primitive is `ingestRun(_:anchors:reachesStart:reachesLatest:)`: "th
    - If `renumberPlan` is set: delete every message at a `from` id, then re-insert each at its `to` id. Ids can be swapped between moved posts, so don't interleave deletes and inserts per move. Also remap any other stored local ids: read state, thread ids (`root_id` → local id), reply references.
    - Insert the `.inserted` allocations. Skip `.deleted` ones (tombstones).
    - Remove `islandRange` from Postbox's hole index; everything inside an island is loaded. After a renumber, rebuild holes inside `renumberPlan.affectedRange` from `holes`.
-3. **Persistence**: implement `MessageIdStore` on SQLite or a Postbox table. It needs indexes on `(channel, post_id)`, `(channel, create_at, post_id)` and `(channel, local_id)`. Each allocator call reads through the query methods and then calls `apply(_:)` exactly once, so wrap that in a single transaction. `InMemoryMessageIdStore` is the reference implementation and has `validate(channelId:)` for debugging.
+3. **Persistence**: `SQLiteMattermostSyncStore` (below) implements `MessageIdStore`. Each allocator call reads through the query methods and then calls `apply(_:)` exactly once; run it inside `store.transaction { … }` so the whole operation is one transaction. `InMemoryMessageIdStore` is the reference implementation; both have `validate(channelId:)` for debugging.
 4. **Catch-up** (`since=`): apply new posts with `insertPost` in time order, or, if the newest island was live up to `lastSyncAt`, as one `ingestPage(…, extending: newestPost, direction: .newer, reachedEnd: true)`. If there are too many, call `invalidateLatest()` and let hole filling load them.
 
 ### Renumbering
@@ -65,6 +66,64 @@ When a gap has no room left:
 - **"Renumber the smaller island"** becomes "shift the smaller *part* of an island between the insertion and the island's far edge". This only applies to exhausted holes. An exhausted gap *inside* an island uses a minimal local window instead: moving a whole island for one late insert would rewrite thousands of messages.
 - **Proportional placement** gives every hole a floor share (≥ 1/(8·holes) of the free space), so a hole that is short in time still has room. Time below the oldest known post is measured from `historyFloorTime` (2010-01-01); imports older than that still work, they're just placed less proportionally. The open space above the newest island counts as at least the other holes combined, or 30 days, whichever is larger.
 - **A single late post that falls into a hole** becomes its own island. The plan only covers inserts between known neighbours.
+
+## Sync store (`SQLiteMattermostSyncStore`)
+
+The per-account store from the design doc's "Storage" section: one SQLite file (`<rootPath>/account-<id>/mattermost/sync.sqlite`; the caller passes the path, missing directories are created) holding the message id map and every other id mapping the sync engine needs.
+
+```swift
+let store = try SQLiteMattermostSyncStore(path: path)   // creates/migrates; WAL, synchronous=NORMAL, foreign keys on
+let result = try store.transaction { store in           // BEGIN IMMEDIATE … COMMIT
+    try store.allocatePeer(mattermostId: userId, kind: .user)
+    let mediaId = try store.allocateMediaId(fileId: fileId)
+    return try allocator.ingestPage(posts, extending: anchor, direction: .older, reachedEnd: end, channelId: channelId, store: &store)
+}
+```
+
+| Area | API |
+|---|---|
+| Message ids | `MessageIdStore` conformance; `allEntries(channelId:)`, `validate(channelId:maxId:)`, `removeChannel(_:)` (full resync); `setThreadRootIds(_:channelId:)` + `threadReplies(rootPostIds:channelId:)` to find the replies of a root moved by a `RenumberPlan` |
+| Peers | `allocatePeer(mattermostId:kind:teamId:)` (sequential per namespace from 1, stable; updates kind/team), `reserveOwnUserPeerId(userId:hash:)`, `peer(mattermostId:)`, `peer(namespace:peerId:)`, `peer(channelId:)` (a DM resolves to the other user's peer) |
+| DM channels | `setDirectChannel(channelId:userId:)`, `directChannelUserId(channelId:)`, `directChannelId(userId:)` |
+| Pending posts | `registerPendingPost(_:)` (idempotent per `pendingPostId`), `pendingPost(pendingPostId:)` / `(globallyUniqueId:)` / `(channelId:localMessageId:)`, `allPendingPosts()`, `removePendingPost(pendingPostId:)` |
+| Files | `allocateMediaId(fileId:)` (sequential from 1, stable), `mediaId(fileId:)`, `fileId(mediaId:)` |
+| Cursors | `cursor(_:)`, `setCursor(_:_:)` (nil removes); keys in `MattermostSyncCursorKey` |
+| Server | `serverInfo()`, `setServerInfo(_:)` (url, user id, site name, version, capabilities JSON) |
+
+### Schema (version 1)
+
+| Table | Key | Notes |
+|---|---|---|
+| `schema_version` | — | one row; forward-only migrations in `MattermostSyncStoreSchema.migrations`, all pending ones in one transaction. A file from a newer build throws `unsupportedSchemaVersion`. |
+| `server` | `id = 1` | one row |
+| `peers` | `mm_id` | `kind` (`user`/`channel`/`gm`), `namespace` (0 CloudUser, 1 CloudChannel), `peer_id`, `team_id`; unique `(namespace, peer_id)` |
+| `dm_channels` | `channel_id` | `user_mm_id`, indexed |
+| `sequences` | `name` | next candidate of each sequential allocator (`peer.0`, `peer.1`, `media`) |
+| `post_channels` | `channel_key` | channel id interned to an integer (keeps the id map small) |
+| `posts` | `(channel_key, create_at_ms, post_id)` | `local_id`, `tombstone`, `thread_root_id`; clustered by the ordering key, unique indexes on `(channel_key, post_id)` and `(channel_key, local_id)`, partial index on thread roots |
+| `post_tombstones` | `(channel_key, post_id)` | posts deleted before they were mapped |
+| `islands` | `(channel_key, ordinal)` | boundary keys and flags |
+| `pending` | `pending_post_id` | `channel_id`, unique `globally_unique_id`, `local_message_id` (indexed with the channel) |
+| `files` | `file_id` | unique `media_id` |
+| `cursors` | `key` | `value` |
+
+`posts`, `post_tombstones` and `islands` reference `post_channels` with `ON DELETE CASCADE`. Every protocol query is an index search with no sort step (`testQueriesUseIndexes` checks the plans; the thread index is named with `INDEXED BY` because without `ANALYZE` statistics SQLite would scan the channel instead).
+
+### Behaviour
+
+- **Same semantics as `InMemoryMessageIdStore`** for every change set the allocator produces (a lockstep test compares every result and query). The schema also enforces unique local ids and post ids per channel, so an invalid change set fails as a whole instead of being stored. Renumber moves are applied in two passes (park on negative ids, then the final ids) because moves can shift into each other's ids.
+- **Atomicity**: every write method is one transaction; inside `transaction(_:)` they nest as savepoints. `apply(_:)` writes all parts of a change set or nothing.
+- **Errors**: typed methods throw `MattermostSyncStoreError`. `MessageIdStore` methods can't throw, so they record the first failure in `messageIdError`, return empty results and skip `apply` while it is set. `transaction(_:)` clears it on entry and, if set on exit, rolls back and throws it. Outside a transaction, check `messageIdError` and call `clearMessageIdError()`.
+- **Peer ids**: users get CloudUser ids, channels and GMs share CloudChannel ids. A DM isn't a peer of its own: `dm_channels` maps it to the other user (the own user for the self-DM). `reserveOwnUserPeerId(userId:hash:)` stores the caller's stable hash of `(server URL, user id)`; sequential allocation skips any taken id, so it never collides even if the hash is small. Call it at login, before the own user is allocated any other way.
+- **Threading**: no internal locking or queue. Use one instance from one serial queue at a time (`MattermostAccount.queue`). Other processes may open the same file (WAL, 5 s busy timeout); only the app should write the id map, because channel keys are cached per connection.
+- **SQLite library**: `#if canImport(sqlcipher) import sqlcipher #else import SQLite3`. Under Bazel the target depends on `//submodules/sqlcipher:sqlcipher`, so the app never links the system libsqlite3 next to SQLCipher. Only the C API both provide is used (open/prepare/bind/step/column/finalize/exec, `sqlite3_busy_timeout`). The file is not encrypted (no `PRAGMA key`).
+
+### Deviations from the design doc
+
+- `posts` is keyed by an interned channel key instead of `peer_id`: the `MessageIdStore` protocol is keyed by Mattermost channel id, and a DM's peer is the other user, so the channel is the natural key. `peer(channelId:)` maps a channel to its peer.
+- `peers.kind` has no `dm` value; DMs live in `dm_channels` only.
+- `pending` also stores `channel_id`, since local message ids are per peer.
+- Extra tables: `post_channels`, `post_tombstones`, `islands`, `sequences`.
 
 ## Markdown → text + entities
 
@@ -89,6 +148,8 @@ swift test
 `.swift-version` pins swiftly to the `xcode` toolchain in this directory. The swiftly Swift 6.3.3 toolchain on the dev Mac can't load the Swift overlay of the installed SDK's Foundation (`Date` and `String.trimmingCharacters` are missing, and it prints `unknown argument: '-target-arch-variant'`). Without swiftly, `xcrun swift test` does the same.
 
 The tests cover the plan's Spike C scenarios: initial page, backward paging over 10,000 posts, a permalink jump then paging until the islands join, late inserts, same-millisecond/same-second bursts, 2013 imports mixed with 2026, gap and hole exhaustion with renumber plans, cursors and tombstones. There are also **property tests**: seeded random interleavings of every operation (paging both ways, permalinks, live/late/burst posts, deletes, disconnect/catch-up, replays) against a simulated server, in three id-space sizes. After each step they check that ids are unique, positive and in range, strictly ordered by `(createAt, postId)`, that every renumber plan matches the actual id changes, that every island really is contiguous on the server, and that holes contain no mapped ids. Set `SIM_TRACE=<dir>` to dump the operation log of a failing seed and `SIM_STATS=1` to print per-seed operation counts.
+
+The scenario and property tests run twice: against `InMemoryMessageIdStore` and, through subclasses in `Tests/MattermostSyncCoreTests/Store/`, against `SQLiteMattermostSyncStore` on temp files (property steps inside `transaction`; every store is closed and reopened at the end and must read back identically). The store tests add a lockstep comparison of the allocator and every query against the in-memory store, atomicity of failed `apply` calls and transactions, migrations (empty file, failed migration, newer file), query plans, and the peer, DM, pending, file, cursor and server tables.
 
 Markdown tests are table-driven per feature, with UTF-16 offset checks for emoji, skin tones, ZWJ sequences, flags and Cyrillic text, pathological inputs, random-input validity, and round trips for the reverse direction.
 

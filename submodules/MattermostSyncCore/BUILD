@@ -9,6 +9,11 @@ swift_library(
     copts = [
         "-warnings-as-errors",
     ],
+    deps = [
+        # SQLiteMattermostSyncStore uses Telegram's SQLCipher (`import sqlcipher`); SwiftPM builds
+        # fall back to the system SQLite3 module. Never link the system libsqlite3 here.
+        "//submodules/sqlcipher:sqlcipher",
+    ],
     visibility = [
         "//visibility:public",
     ],

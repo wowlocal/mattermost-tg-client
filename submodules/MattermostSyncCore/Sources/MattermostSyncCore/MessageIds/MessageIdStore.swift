@@ -172,7 +172,8 @@ public struct InMemoryMessageIdStore: MessageIdStore, Sendable {
             return []
         }
         let start = key.map { channel.index(ofFirstKeyGreaterThan: $0) } ?? 0
-        let end = min(channel.entries.count, start + limit)
+        // `start + limit` would overflow for limits near Int.max.
+        let end = start + min(limit, channel.entries.count - start)
         if start >= end {
             return []
         }
@@ -185,7 +186,7 @@ public struct InMemoryMessageIdStore: MessageIdStore, Sendable {
         }
         if ascending {
             let start = channel.index(ofFirstLocalIdNotLessThan: localId)
-            let end = min(channel.entries.count, start + limit)
+            let end = start + min(limit, channel.entries.count - start)
             if start >= end {
                 return []
             }
@@ -278,6 +279,22 @@ public struct InMemoryMessageIdStore: MessageIdStore, Sendable {
             return []
         }
         var problems: [String] = []
+        for entry in channel.entries where channel.keyByPostId[entry.postId] != entry.key {
+            problems.append("post id index out of sync: \(entry)")
+        }
+        if channel.keyByPostId.count != channel.entries.count {
+            problems.append("post id index has \(channel.keyByPostId.count) rows for \(channel.entries.count) entries")
+        }
+        return Self.invariantProblems(entries: channel.entries, islands: channel.islands, maxId: maxId) + problems
+    }
+
+    /// The id map invariants of one channel, given its entries in key order and its islands
+    /// (shared with persistent stores).
+    static func invariantProblems(entries: [MessageIdEntry], islands: [HistoryIsland], maxId: Int32) -> [String] {
+        var channel = Channel()
+        channel.entries = entries
+        channel.islands = islands
+        var problems: [String] = []
         var previous: MessageIdEntry?
         var seenIds = Set<Int32>()
         for entry in channel.entries {
@@ -295,13 +312,7 @@ public struct InMemoryMessageIdStore: MessageIdStore, Sendable {
                     problems.append("ids not strictly increasing: \(previous) then \(entry)")
                 }
             }
-            if channel.keyByPostId[entry.postId] != entry.key {
-                problems.append("post id index out of sync: \(entry)")
-            }
             previous = entry
-        }
-        if channel.keyByPostId.count != channel.entries.count {
-            problems.append("post id index has \(channel.keyByPostId.count) rows for \(channel.entries.count) entries")
         }
         var previousIsland: HistoryIsland?
         var boundaryIds: [(Int32, Int32)] = []

@@ -1,15 +1,20 @@
 import XCTest
 @testable import MattermostSyncCore
 
-final class MessageIdAllocatorTests: XCTestCase {
+/// Allocator scenarios. `SQLiteMessageIdAllocatorTests` runs them again against the SQLite store.
+class MessageIdAllocatorTests: XCTestCase {
     let channel = "channel-1"
 
-    private func assertValid(_ store: InMemoryMessageIdStore, maxId: Int32 = Int32.max, file: StaticString = #filePath, line: UInt = #line) {
+    func makeStore() throws -> any InspectableMessageIdStore {
+        return InMemoryMessageIdStore()
+    }
+
+    private func assertValid(_ store: any InspectableMessageIdStore, maxId: Int32 = Int32.max, file: StaticString = #filePath, line: UInt = #line) {
         let problems = store.validate(channelId: channel, maxId: maxId)
         XCTAssertEqual(problems, [], file: file, line: line)
     }
 
-    private func ids(_ store: InMemoryMessageIdStore) -> [Int32] {
+    private func ids(_ store: any InspectableMessageIdStore) -> [Int32] {
         return store.allEntries(channelId: channel).map { $0.localId }
     }
 
@@ -17,7 +22,7 @@ final class MessageIdAllocatorTests: XCTestCase {
 
     func testFirstPostGetsTwoToTheThirtieth() throws {
         var rng = SeededGenerator(seed: 1)
-        var store = InMemoryMessageIdStore()
+        var store = try makeStore()
         let allocator = MessageIdAllocator()
         let post = PostOrderKey(createAt: Times.year2026, postId: randomPostId(&rng))
         let result = try allocator.insertPost(post, channelId: channel, store: &store)
@@ -29,7 +34,7 @@ final class MessageIdAllocatorTests: XCTestCase {
 
     func testInitialPage() throws {
         var rng = SeededGenerator(seed: 2)
-        var store = InMemoryMessageIdStore()
+        var store = try makeStore()
         let allocator = MessageIdAllocator()
         let posts = makePosts(count: 60, start: Times.year2026, spacing: 1000, rng: &rng)
         let result = try allocator.ingestLatestPage(posts.shuffled(using: &rng), reachedStart: false, channelId: channel, store: &store)
@@ -52,8 +57,8 @@ final class MessageIdAllocatorTests: XCTestCase {
         XCTAssertEqual(ids(store), expected)
     }
 
-    func testEmptyChannelHasOneHole() {
-        let store = InMemoryMessageIdStore()
+    func testEmptyChannelHasOneHole() throws {
+        let store = try makeStore()
         let allocator = MessageIdAllocator()
         XCTAssertEqual(allocator.holes(channelId: channel, store: store), [HistoryHole(range: 1 ... Int32.max, lowerBoundary: nil, upperBoundary: nil)])
         XCTAssertEqual(allocator.fillCursor(direction: .older, boundaryLocalId: Int32.max, channelId: channel, store: store), .latest)
@@ -74,7 +79,7 @@ final class MessageIdAllocatorTests: XCTestCase {
             posts.append(PostOrderKey(createAt: time, postId: randomPostId(&rng)))
         }
         let server = FakeServer(posts: posts)
-        var store = InMemoryMessageIdStore()
+        var store = try makeStore()
         let allocator = MessageIdAllocator()
 
         let first = server.latest(limit: 60)
@@ -107,7 +112,7 @@ final class MessageIdAllocatorTests: XCTestCase {
         var rng = SeededGenerator(seed: 4)
         let posts = makePosts(count: 3000, start: Times.year2025, spacing: 10 * 60 * 1000, rng: &rng)
         let server = FakeServer(posts: posts)
-        var store = InMemoryMessageIdStore()
+        var store = try makeStore()
         let allocator = MessageIdAllocator()
 
         let latest = server.latest(limit: 60)
@@ -171,7 +176,7 @@ final class MessageIdAllocatorTests: XCTestCase {
     func testLateArrivingPostBetweenAdjacentPosts() throws {
         var rng = SeededGenerator(seed: 5)
         let posts = makePosts(count: 60, start: Times.year2026, spacing: 60_000, rng: &rng)
-        var store = InMemoryMessageIdStore()
+        var store = try makeStore()
         let allocator = MessageIdAllocator()
         _ = try allocator.ingestLatestPage(posts, reachedStart: true, channelId: channel, store: &store)
         let before = store.allEntries(channelId: channel)
@@ -194,7 +199,7 @@ final class MessageIdAllocatorTests: XCTestCase {
     func testLivePostExtendsLatestIsland() throws {
         var rng = SeededGenerator(seed: 6)
         let posts = makePosts(count: 10, start: Times.year2026, spacing: 60_000, rng: &rng)
-        var store = InMemoryMessageIdStore()
+        var store = try makeStore()
         let allocator = MessageIdAllocator()
         _ = try allocator.ingestLatestPage(posts, reachedStart: false, channelId: channel, store: &store)
         let live = PostOrderKey(createAt: posts.last!.createAt + 5000, postId: randomPostId(&rng))
@@ -221,7 +226,7 @@ final class MessageIdAllocatorTests: XCTestCase {
         let instant = Times.year2026 + 123
         let posts = (0 ..< 1000).map { _ in PostOrderKey(createAt: instant, postId: randomPostId(&rng)) }.sorted()
         let server = FakeServer(posts: posts)
-        var store = InMemoryMessageIdStore()
+        var store = try makeStore()
         let allocator = MessageIdAllocator()
 
         let latest = server.latest(limit: 100)
@@ -240,7 +245,7 @@ final class MessageIdAllocatorTests: XCTestCase {
     func testManyPostsInTheSameSecondArrivingLive() throws {
         var rng = SeededGenerator(seed: 8)
         let second = Times.year2026
-        var store = InMemoryMessageIdStore()
+        var store = try makeStore()
         let allocator = MessageIdAllocator()
         let seed = makePosts(count: 5, start: second - 10_000, spacing: 1000, rng: &rng)
         _ = try allocator.ingestLatestPage(seed, reachedStart: true, channelId: channel, store: &store)
@@ -281,7 +286,7 @@ final class MessageIdAllocatorTests: XCTestCase {
         let imported = makePosts(count: 500, start: Times.year2013, spacing: Times.day / 3, rng: &rng)
         let recent = makePosts(count: 500, start: Times.year2026, spacing: 15 * 60 * 1000, rng: &rng)
         var server = FakeServer(posts: imported + recent)
-        var store = InMemoryMessageIdStore()
+        var store = try makeStore()
         let allocator = MessageIdAllocator()
 
         let latest = server.latest(limit: 60)
@@ -324,7 +329,7 @@ final class MessageIdAllocatorTests: XCTestCase {
     func testExhaustedGapInsideIslandProducesMinimalRenumberPlan() throws {
         var rng = SeededGenerator(seed: 10)
         let posts = makePosts(count: 200, start: Times.year2026, spacing: 60_000, rng: &rng)
-        var store = InMemoryMessageIdStore()
+        var store = try makeStore()
         let allocator = MessageIdAllocator()
         _ = try allocator.ingestLatestPage(posts, reachedStart: true, channelId: channel, store: &store)
         var shadow: [String: Int32] = [:]
@@ -372,7 +377,7 @@ final class MessageIdAllocatorTests: XCTestCase {
         let dense = makePosts(count: 800, start: Times.year2026 - 800 * 1000, spacing: 1000, rng: &rng)
         let recent = makePosts(count: 1500, start: Times.year2026, spacing: 60_000, rng: &rng)
         let server = FakeServer(posts: old + dense + recent)
-        var store = InMemoryMessageIdStore()
+        var store = try makeStore()
 
         let latest = server.latest(limit: 1500)
         _ = try allocator.ingestLatestPage(latest.posts, reachedStart: false, channelId: channel, store: &store)
@@ -431,7 +436,7 @@ final class MessageIdAllocatorTests: XCTestCase {
         var rng = SeededGenerator(seed: 12)
         let posts = makePosts(count: 500, start: Times.year2026, spacing: 60_000, rng: &rng)
         let server = FakeServer(posts: posts)
-        var store = InMemoryMessageIdStore()
+        var store = try makeStore()
         let allocator = MessageIdAllocator()
         _ = try allocator.ingestLatestPage(server.latest(limit: 50).posts, reachedStart: false, channelId: channel, store: &store)
         let target = posts[100]
@@ -459,7 +464,7 @@ final class MessageIdAllocatorTests: XCTestCase {
     func testTombstonesPreventResurrection() throws {
         var rng = SeededGenerator(seed: 13)
         let posts = makePosts(count: 20, start: Times.year2026, spacing: 60_000, rng: &rng)
-        var store = InMemoryMessageIdStore()
+        var store = try makeStore()
         let allocator = MessageIdAllocator()
         _ = try allocator.ingestLatestPage(Array(posts.prefix(10)), reachedStart: true, channelId: channel, store: &store)
         let mappedId = store.entries(channelId: channel, postIds: [posts[3].postId])[posts[3].postId]?.localId
@@ -480,8 +485,8 @@ final class MessageIdAllocatorTests: XCTestCase {
         assertValid(store)
     }
 
-    func testUnknownAnchorThrows() {
-        var store = InMemoryMessageIdStore()
+    func testUnknownAnchorThrows() throws {
+        var store = try makeStore()
         let allocator = MessageIdAllocator()
         XCTAssertThrowsError(try allocator.ingestPage([], extending: "missing", direction: .older, reachedEnd: false, channelId: channel, store: &store)) { error in
             XCTAssertEqual(error as? MessageIdAllocationError, .unknownAnchor(postId: "missing"))
@@ -491,7 +496,7 @@ final class MessageIdAllocatorTests: XCTestCase {
     func testCapacityExhaustedThrows() throws {
         var rng = SeededGenerator(seed: 14)
         let allocator = MessageIdAllocator(configuration: MessageIdAllocator.Configuration(firstId: 32, maxId: 64))
-        var store = InMemoryMessageIdStore()
+        var store = try makeStore()
         let posts = makePosts(count: 70, start: Times.year2026, spacing: 1000, rng: &rng)
         XCTAssertThrowsError(try allocator.ingestLatestPage(posts, reachedStart: true, channelId: channel, store: &store)) { error in
             XCTAssertEqual(error as? MessageIdAllocationError, .capacityExhausted(channelId: channel))
@@ -502,7 +507,7 @@ final class MessageIdAllocatorTests: XCTestCase {
     func testReadStateFromStore() throws {
         var rng = SeededGenerator(seed: 15)
         let posts = makePosts(count: 10, start: Times.year2026, spacing: 60_000, rng: &rng)
-        var store = InMemoryMessageIdStore()
+        var store = try makeStore()
         let allocator = MessageIdAllocator()
         _ = try allocator.ingestLatestPage(posts, reachedStart: true, channelId: channel, store: &store)
         let counters = ChannelReadCounters(lastViewedAt: posts[6].createAt, totalMessageCount: 10, memberMessageCount: 7, mentionCount: 1)
@@ -514,5 +519,21 @@ final class MessageIdAllocatorTests: XCTestCase {
         XCTAssertEqual(state.mentionCount, 1)
         let fromList = ReadStateMapper.readState(knownPosts: entries.map { .init(localId: $0.localId, createAt: $0.createAt) }, counters: counters)
         XCTAssertEqual(fromList, state)
+    }
+
+    /// Regression: the in-memory store computed `start + limit` and trapped on overflow.
+    func testStoreQueriesAcceptAnyLimit() throws {
+        var rng = SeededGenerator(seed: 16)
+        var store = try makeStore()
+        let posts = makePosts(count: 10, start: Times.year2026, spacing: 60_000, rng: &rng)
+        _ = try MessageIdAllocator().ingestLatestPage(posts, reachedStart: true, channelId: channel, store: &store)
+        let all = store.allEntries(channelId: channel)
+        XCTAssertEqual(store.entries(channelId: channel, newerThan: posts[3], limit: .max), Array(all[4...]))
+        XCTAssertEqual(store.entries(channelId: channel, newerThan: nil, limit: .max), all)
+        XCTAssertEqual(store.entries(channelId: channel, olderThan: posts[3], limit: .max), Array(all[..<3].reversed()))
+        XCTAssertEqual(store.entries(channelId: channel, fromLocalId: all[2].localId, ascending: true, limit: .max), Array(all[2...]))
+        XCTAssertEqual(store.entries(channelId: channel, fromLocalId: all[2].localId, ascending: false, limit: .max), Array(all[...2].reversed()))
+        XCTAssertEqual(store.entries(channelId: channel, newerThan: nil, limit: 0), [])
+        XCTAssertEqual(store.entries(channelId: channel, olderThan: nil, limit: -1), [])
     }
 }

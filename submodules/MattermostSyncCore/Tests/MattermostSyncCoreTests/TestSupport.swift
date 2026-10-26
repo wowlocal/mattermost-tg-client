@@ -159,3 +159,27 @@ struct FakeServer {
 func makePosts<G: RandomNumberGenerator>(count: Int, start: Int64, spacing: Int64, rng: inout G) -> [PostOrderKey] {
     return (0 ..< count).map { PostOrderKey(createAt: start + Int64($0) * spacing, postId: randomPostId(&rng)) }.sorted()
 }
+
+/// Runs one operation inside a store transaction.
+typealias OperationRunner = (() throws -> Void) throws -> Void
+
+/// A `MessageIdStore` the allocator scenario and property tests can inspect, so they run
+/// against every implementation (`InMemoryMessageIdStore`, `SQLiteMattermostSyncStore`).
+protocol InspectableMessageIdStore: MessageIdStore {
+    func allEntries(channelId: String) -> [MessageIdEntry]
+    func validate(channelId: String, maxId: Int32) -> [String]
+    /// Wraps each simulated operation in a transaction; nil runs it directly.
+    var operationRunner: OperationRunner? { get }
+    /// Closes and reopens a persistent store; an in-memory store returns itself.
+    func reopened() throws -> any InspectableMessageIdStore
+}
+
+extension InMemoryMessageIdStore: InspectableMessageIdStore {
+    var operationRunner: OperationRunner? {
+        return nil
+    }
+
+    func reopened() throws -> any InspectableMessageIdStore {
+        return self
+    }
+}
