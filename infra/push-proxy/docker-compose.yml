@@ -1,0 +1,40 @@
+# mattermost-push-proxy for Relay (bundle id / APNs topic org.relaychat.Relay).
+#
+#   ./up.sh       render the config from .env + the template, start (needs the APNs key, see README)
+#   ./down.sh     stop
+#
+# Compose project "relaypush" (container relaypush-push-proxy-1). It joins the dev server's network
+# (mmdev_default, from infra/dev-server) under the name "push-proxy", so the dev Mattermost server reaches
+# it at http://push-proxy:8066. The port is also published on 127.0.0.1 for the host (curl, sim-bridge.py).
+#
+# No secrets in this directory: the APNs auth key (.p8) is mounted read-only from APNS_KEY_FILE, a path
+# outside the repository; the rendered config (.state/, git-ignored) holds only the key id and team id.
+
+name: relaypush
+
+services:
+  push-proxy:
+    # Release 6.6.0 (2026-09-18), pinned by digest (multi-arch: amd64, arm64).
+    image: mattermost/mattermost-push-proxy:6.6.0@sha256:be5dd6735cc78e95db16576fb6003908f3f7da4ad56b09dd7ac5520cf443c161
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${PUSH_PROXY_PORT:-8066}:8066"
+    volumes:
+      # The image reads ./config/mattermost-push-proxy.json (WORKDIR /mattermost-push-proxy).
+      - ./.state/mattermost-push-proxy.json:/mattermost-push-proxy/config/mattermost-push-proxy.json:ro
+      - ${APNS_KEY_FILE:?set APNS_KEY_FILE in .env (see README)}:/mattermost-push-proxy/certs/AuthKey.p8:ro
+    networks:
+      mmdev:
+        aliases:
+          - push-proxy
+    healthcheck:
+      # The image has netcat; the proxy answers on / once it listens.
+      test: ["CMD", "nc", "-z", "127.0.0.1", "8066"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+networks:
+  mmdev:
+    external: true
+    name: mmdev_default

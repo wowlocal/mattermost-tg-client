@@ -1,0 +1,8 @@
+# Compose override for the dev server (infra/dev-server, project "mmdev"): its docker-compose.yml pins
+# `MM_EMAILSETTINGS_SENDPUSHNOTIFICATIONS: "false"`, and a setting fixed by an environment variable cannot be
+# changed through the REST API. configure-dev-server.py --enable recreates the mattermost container with this
+# file added (data stays in the volumes). Running infra/dev-server/up.sh again turns pushes off again.
+services:
+  mattermost:
+    environment:
+      MM_EMAILSETTINGS_SENDPUSHNOTIFICATIONS: "true"

@@ -1,0 +1,5 @@
+# APNs key id / team id and the rendered config; throwaway dev keys and captured payloads.
+.env
+.state/
+*.p8
+__pycache__/
