@@ -1608,6 +1608,8 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
         }
         // MATTERMOST: Save Post / Remove from Saved (`MattermostFinding.swift`).
         actions.append(contentsOf: mattermostSavedPostContextMenuItems(context: context, message: messages[0], controllerInteraction: controllerInteraction, strings: chatPresentationInterfaceState.strings))
+        // MATTERMOST: Copy Link / Share Link with the post's permalink (`MattermostLinks.swift`).
+        actions.append(contentsOf: mattermostPermalinkContextMenuItems(context: context, message: messages[0], controllerInteraction: controllerInteraction, strings: chatPresentationInterfaceState.strings))
         if let _ = threadId, !isPinnedMessages {
             let text: String
             if threadMessageCount != 0 {

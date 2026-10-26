@@ -386,11 +386,17 @@ private func openCheckedExternalUrl(context: AccountContext, urlContext: OpenURL
         context.sharedContext.applicationBindings.openUrl(url)
         return
     }
-    
+
+    // MATTERMOST: permalinks and other links into a signed-in server, relay:// links (`MattermostLinks.swift`).
+    if mattermostOpenLink(context: context, url: url, navigationController: navigationController) {
+        dismissInput()
+        return
+    }
+
     guard let canonicalUrl = canonicalExternalUrl(from: url) else {
         return
     }
-    
+
     if canonicalUrl.scheme == "mailto" {
         context.sharedContext.applicationBindings.openUrl(url)
         return

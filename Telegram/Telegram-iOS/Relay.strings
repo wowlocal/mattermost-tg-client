@@ -307,3 +307,11 @@
 "Relay.Search.JoinText" = "You aren't a member of this channel. Join it to read and post.";
 "Relay.Search.Join" = "Join";
 "Relay.Search.JoinFailed" = "You couldn't join this channel.";
+
+/* Links (Phase 3E): permalinks and other links into a signed-in server open in the app; Copy Link / Share Link in the
+   message menu give the post's permalink. */
+"Relay.Link.Share" = "Share Link";
+"Relay.Link.PostNotFound" = "This message was deleted, or you don't have access to it.";
+"Relay.Link.ChannelNotFound" = "This channel doesn't exist, or you don't have access to it.";
+"Relay.Link.UserNotFound" = "This user doesn't exist.";
+"Relay.Link.Unreachable" = "The link couldn't be opened. Check your connection and try again.";
