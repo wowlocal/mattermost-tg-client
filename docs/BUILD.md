@@ -159,6 +159,33 @@ tools/relay-remote.py "$UDID" dialog-cancel                     # Cancel (notifi
 
 Interactive dialogs need an integration the server can reach: the dev server only allows `localhost` integration URLs, so run a small responder (Python stdlib, keep it outside `infra/`) in a container that shares the Mattermost container's network namespace (`docker run --network container:mmdev-mattermost-1 …`): it listens on `127.0.0.1:<port>`, answers the slash command registered with `POST /api/v4/commands` (url `http://localhost:<port>/command`), opens dialogs with `POST /api/v4/actions/dialogs/open` (no token needed, the trigger id expires after 3 s) and gets the submissions. Built-in commands (`/away`, `/me`, `/join`, …) need nothing.
 
+#### Phase 3D-2: directory and membership (debug builds only)
+
+The directory screens (MattermostUI `MattermostDirectoryDebug.swift`) and the channel profile (PeerInfoScreen `MattermostPeerInfoDirectory.swift`) register what their taps run; output in the result's `extra`:
+
+```sh
+tools/relay-remote.py "$UDID" new-message                                # the chat list's compose button → New Message
+tools/relay-remote.py "$UDID" directory                                  # the visible directory screen and its state
+tools/relay-remote.py "$UDID" directory-do do=search text=car            # type into its search field
+tools/relay-remote.py "$UDID" directory-do do=tap username=carol         # a user row (New Message: opens the DM; selection screens: toggles)
+tools/relay-remote.py "$UDID" directory-do do=new-group                  # New Group Message (also: new-channel, browse)
+tools/relay-remote.py "$UDID" directory-do do=submit                     # Create / Add / Save
+tools/relay-remote.py "$UDID" directory-do do=team team=design           # a team tab (Browse Channels, New Channel)
+tools/relay-remote.py "$UDID" directory-do do=archived value=true        # Browse Channels: the Archived switch
+tools/relay-remote.py "$UDID" directory-do do=tap name=<channel name>    # Browse Channels: a channel (preview, or the chat when joined)
+tools/relay-remote.py "$UDID" directory-do do=join                       # the preview's Join Channel
+tools/relay-remote.py "$UDID" directory-do do=set field=name value="Ops" # New Channel / Channel Settings fields: name, url, purpose, header, private
+tools/relay-remote.py "$UDID" directory-do do=archive                    # Channel Settings: archive / unarchive / convert (confirmed); confirm-archive shows the alert
+tools/relay-remote.py "$UDID" peerinfo                                   # the profile of the chat on top
+tools/relay-remote.py "$UDID" info-state                                 # its access bits, members and their actions
+tools/relay-remote.py "$UDID" info-edit                                  # the Edit button (Channel Settings)
+tools/relay-remote.py "$UDID" info-add-member                            # Add Members
+tools/relay-remote.py "$UDID" info-member username=dave do=menu          # a member's context menu (do=promote toggles channel admin, do=remove-confirmed removes)
+tools/relay-remote.py "$UDID" info-leave confirm=1                       # Leave: the confirmation, then what its Leave button runs
+```
+
+`tools/relay-remote.py "$UDID" alert do=confirm` (or `do=cancel`) presses a button of the confirmation alert these screens show (archive, unarchive, convert: `directory-do do=confirm-archive` etc. show it; Remove from Channel: `info-member … do=remove`). Telegram's own Leave alert can't be pressed: `info-leave confirm=1` runs what its Leave button runs.
+
 #### Phase 2D hooks (debug builds only)
 
 - `RELAY_DEBUG_OPEN_SCREEN=devices` (Settings → Devices), `openlinks` (Open Links In), `reaction-notifications`, `authorinfo` (profile of the newest message's author in the chat `RELAY_DEBUG_OPEN_CHAT` opened, e.g. a webhook's name override), `settings:add-account` (Settings → Add Account through the Settings handler, account limit included).
