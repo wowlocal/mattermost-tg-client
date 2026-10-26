@@ -237,6 +237,44 @@ network namespace (`docker run --network container:mmdev-mattermost-1 …`, list
 `http://localhost:<port>/…` links. Preview images load only from the server itself or through its image proxy
 (`ImageProxySettings.Enable`, `PUT /api/v4/config/patch` as sysadmin; it is off on the dev server by default).
 
+#### Phase 3F: own status, profile, notification preferences, sharing (debug builds only)
+
+TelegramUI `RelayDebugProfile.swift`, PeerInfoScreen `RelayDebugProfileSettings.swift`; the screens they open are
+MattermostUI list screens, read and driven with `directory` / `directory-do` (their `debugActions`). Remote arguments
+are strings (`key=value`); numbers and booleans are parsed by the screens.
+
+```sh
+tools/relay-remote.py "$UDID" profile-state                            # own status, custom status, profile fields (compare with REST)
+tools/relay-remote.py "$UDID" settings-row row=status                  # Settings rows: status, custom-status, edit, avatar, notifications, username, email (keep=1: don't pop first)
+tools/relay-remote.py "$UDID" directory-do do=select status=away       # Status screen: online/away/dnd/offline
+tools/relay-remote.py "$UDID" directory-do do=dnd duration=30m         # Do Not Disturb: (none: until turned off) 30m 1h 2h tomorrow, custom minutes=90
+tools/relay-remote.py "$UDID" status-menu                              # the Settings tab's long-press status items; status-menu-show presents the menu
+tools/relay-remote.py "$UDID" status-menu-pick "title=Do Not Disturb" "sub=For 1 Hour"   # an item's own action
+tools/relay-remote.py "$UDID" directory-do do=pick-emoji               # Custom Status: Telegram's emoji picker on the emoji row
+tools/relay-remote.py "$UDID" directory-do do=emoji value=palm_tree    # … the emoji a pick turns into (taps don't reach the picker here)
+tools/relay-remote.py "$UDID" directory-do do=text "value=On vacation" # … text; duration value=one_hour (dont_clear, thirty_minutes, four_hours, today, this_week, date_and_time minutes=N)
+tools/relay-remote.py "$UDID" directory-do do=submit                   # … Set; also recent index=N, suggestion index=N, clear
+tools/relay-remote.py "$UDID" edit-profile do=begin                    # Edit Profile: set field=first|last|nickname|position value=…, done, cancel
+tools/relay-remote.py "$UDID" directory-do do=set index=0 value=…      # Username / Email screens (email: index=1 is the password); submit
+tools/relay-remote.py "$UDID" avatar do=set text=3F                    # a generated picture through the Settings photo handler; do=remove: the removal
+tools/relay-remote.py "$UDID" push-mentions                            # Settings → Notifications → Push and Mentions; directory-do do=push value=all, push-status, threads, first-name, channel-wide (value=true|false), keywords
+tools/relay-remote.py "$UDID" chat-notifications                       # on a chat's profile (peerinfo first): Customize; directory-do do=push value=default|all|mention|none, threads, ignore-channel-mentions, mute, auto-follow
+tools/relay-remote.py "$UDID" share-test chat=relay-3f-share "text=…" url=… images=2 files=1 thread=<root post id>   # the share extension's posting, in the app
+tools/relay-remote.py "$UDID" share-extension "text=…" images=1 files=1   # the real share extension, hosted by the app (see below)
+tools/relay-remote.py "$UDID" chats-tab                                # back to the Chats tab
+```
+
+**The real share extension.** Simulator taps reach neither Relay's windows nor Photos' share sheet on this setup
+(AXe's touches only work on SpringBoard alerts), so the extension can't be driven from Photos. Instead the app hosts
+its own extension the way `UIActivityViewController` does (`NSExtension` + `instantiateViewControllerWithInputItems:`,
+MattermostUI `MattermostShareExtensionDebug.swift`) with generated items (text, URL, JPEG and text files as file URLs):
+the extension runs in its own process with its own Keychain access, Postbox and uploads. Its picker can't be tapped
+either, so a debug file in the app group names the chat: `{"peerId": <PeerId.toInt64()>, "comment": "…", "delay": 6}`
+in `<group container>/telegram-data/relay-debug/share-auto.json` (`xcrun simctl get_app_container "$UDID"
+org.relaychat.Relay groups`; the peer id from `peerinfo` + `info-state`). After `delay` seconds the extension posts
+through what its Send button runs and writes `share-result.json` next to it; the extension logs
+`[Relay] share: shared …`. It uses the current account (switch first with `switch username=…`).
+
 #### Phase 2D hooks (debug builds only)
 
 - `RELAY_DEBUG_OPEN_SCREEN=devices` (Settings → Devices), `openlinks` (Open Links In), `reaction-notifications`, `authorinfo` (profile of the newest message's author in the chat `RELAY_DEBUG_OPEN_CHAT` opened, e.g. a webhook's name override), `settings:add-account` (Settings → Add Account through the Settings handler, account limit included).
@@ -257,12 +295,13 @@ Simulator builds (`--disableProvisioningProfiles`) get `aps-environment: develop
 
 ## Pure Swift packages
 
-`submodules/MattermostKit`, `submodules/MattermostSyncCore` and `submodules/MattermostPush` are SwiftPM packages with no Telegram dependencies:
+`submodules/MattermostKit`, `submodules/MattermostSyncCore`, `submodules/MattermostPush` and `submodules/MattermostShare` are SwiftPM packages with no Telegram dependencies:
 
 ```sh
 cd submodules/MattermostKit && swift test
 cd submodules/MattermostSyncCore && swift test
 cd submodules/MattermostPush && swift test
+cd submodules/MattermostShare && swift test            # MM_INTEGRATION=1: also shares as dave into ~relay-3f-share on the dev server
 ```
 
 ## Local Mattermost server

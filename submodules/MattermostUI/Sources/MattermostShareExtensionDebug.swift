@@ -62,6 +62,20 @@ enum MattermostShareExtensionDebug {
             completion(false, "no instantiateViewControllerWithInputItems:connectionHandler:")
             return
         }
+        // The extension completes or cancels its request: close the sheet, as the system share sheet does.
+        typealias RequestBlock = @convention(block) (NSUUID?, NSArray?) -> Void
+        typealias SetRequestBlock = @convention(c) (AnyObject, Selector, RequestBlock) -> Void
+        var presentedController: UIViewController?
+        let finished: RequestBlock = { _, _ in
+            DispatchQueue.main.async {
+                presentedController?.dismiss(animated: true)
+                presentedController = nil
+            }
+        }
+        let setCompletion = NSSelectorFromString("setRequestCompletionBlock:")
+        if (shareExtension as? NSObject)?.responds(to: setCompletion) == true, let setter = class_getMethodImplementation(type(of: shareExtension), setCompletion) {
+            unsafeBitCast(setter, to: SetRequestBlock.self)(shareExtension, setCompletion, finished)
+        }
         let handler: Handler = { _, viewController, error in
             DispatchQueue.main.async {
                 guard let viewController else {
@@ -73,6 +87,7 @@ enum MattermostShareExtensionDebug {
                     top = presented
                 }
                 viewController.modalPresentationStyle = .formSheet
+                presentedController = viewController
                 top?.present(viewController, animated: true)
                 completion(true, nil)
             }

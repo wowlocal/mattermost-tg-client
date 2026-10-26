@@ -238,7 +238,8 @@ public final class MattermostShareSender: @unchecked Sendable {
                 let uploads = post.files.map { FileUpload(fileName: $0.fileName, mimeType: $0.mimeType, content: $0.content) }
                 let base = sentBytes
                 let response = try await self.client.uploadFiles(uploads, channelId: channelId, progress: { value in
-                    progress?(Double(base + value.bytesSent) / Double(totalBytes))
+                    // Multipart framing makes the bytes sent a little more than the files' sizes.
+                    progress?(min(1.0, Double(base + value.bytesSent) / Double(totalBytes)))
                 })
                 // The answer keeps the order of `client_ids`.
                 for clientId in uploads.map(\.clientId) {
