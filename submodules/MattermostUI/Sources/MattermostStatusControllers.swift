@@ -662,9 +662,9 @@ private struct CustomStatusScreenState: Equatable {
     var busy: Bool = false
 }
 
-/// Settings → Custom Status. `pickEmoji(sourceView, completion)` shows an emoji picker anchored to the emoji row and
-/// calls `completion` with the chosen emoji (Unicode, or `:name:`).
-public func mattermostCustomStatusController(context: AccountContext, pickEmoji: @escaping (UIView, @escaping (String) -> Void) -> Void) -> ViewController {
+/// Settings → Custom Status. `pickEmoji(sourceView, completion)` shows an emoji picker anchored to the emoji row, calls
+/// `completion` with the chosen emoji (Unicode, or `:name:`) and returns the picker (dismissed with the screen).
+public func mattermostCustomStatusController(context: AccountContext, pickEmoji: @escaping (UIView, @escaping (String) -> Void) -> ViewController?) -> ViewController {
     let accountId = context.account.id
     let current = MattermostProfile.currentOwnStatus(accountId: accountId)?.customStatus
     var initialDuration: CustomStatusDuration? = .today
@@ -688,6 +688,7 @@ public func mattermostCustomStatusController(context: AccountContext, pickEmoji:
     var presentImpl: ((ViewController) -> Void)?
     var dismissImpl: (() -> Void)?
     var emojiSourceView: (() -> UIView?)?
+    weak var emojiPicker: ViewController?
 
     recentDisposable.set((MattermostProfile.recentCustomStatuses(accountId: accountId)
     |> deliverOnMainQueue).start(next: { recent in
@@ -734,7 +735,7 @@ public func mattermostCustomStatusController(context: AccountContext, pickEmoji:
         guard let sourceView = emojiSourceView?() else {
             return
         }
-        pickEmoji(sourceView, { emoji in
+        emojiPicker = pickEmoji(sourceView, { emoji in
             guard let name = MattermostCustomStatus.emojiName(forDisplayEmoji: emoji) else {
                 return
             }
@@ -861,6 +862,7 @@ public func mattermostCustomStatusController(context: AccountContext, pickEmoji:
         controller?.present(c, in: .window(.root))
     }
     dismissImpl = { [weak controller] in
+        emojiPicker?.dismiss()
         controller?.view.endEditing(true)
         controller?.dismiss()
     }
@@ -883,7 +885,8 @@ public func mattermostCustomStatusController(context: AccountContext, pickEmoji:
     }
     controller.debugActions = [
         "emoji": { command in
-            // `value`: an emoji name (as the picker's result would be turned into).
+            // `value`: an emoji name (as the picker's result would be turned into); the picker closes as after a tap.
+            emojiPicker?.dismiss()
             if let value = command["value"] as? String {
                 updateState { state in
                     var state = state

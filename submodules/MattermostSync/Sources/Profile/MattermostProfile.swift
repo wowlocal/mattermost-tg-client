@@ -120,6 +120,9 @@ final class MattermostOwnProfileState {
         var status: UserStatus?
         var config: [String: String] = [:]
         var customStatusExpiryTask: Task<Void, Never>?
+        /// Others' statuses as last written (the poller writes changes only).
+        var knownStatuses: [String: UserStatus] = [:]
+        var statusPollerStarted = false
     }
 
     let values = MMLocked(Values())
@@ -404,6 +407,7 @@ extension MattermostAccountSync {
         }
         self.publishOwnProfile()
         self.scheduleCustomStatusExpiry()
+        self.startStatusPolling()
     }
 
     /// `status_change` for the user (another device, the server's DND end or auto away).
@@ -553,6 +557,85 @@ extension MattermostAccountSync {
         MMLog.log("profile: notify props of \(channelId): \(preferences.props.sorted(by: { $0.key < $1.key }).map { "\($0.key)=\($0.value)" }.joined(separator: " "))")
         // Mute lives in Telegram's notification settings; `channel_member_updated` rewrites it as well.
         await self.refreshChannel(channelId)
+    }
+
+    // MARK: Others' statuses
+
+    /// Mattermost sends `status_change` only to the user whose status changed; its clients poll
+    /// `POST /users/status/ids` (every `UsersStatusAndProfileFetchingPollIntervalMilliseconds`). This polls the
+    /// statuses of the users with a DM (and the other users the sync knows, up to 400) while the WebSocket is up, at
+    /// least every 20 s, and writes the presences that changed.
+    func startStatusPolling() {
+        let start = self.ownProfile.values.with { values -> Bool in
+            if values.statusPollerStarted {
+                return false
+            }
+            values.statusPollerStarted = true
+            return true
+        }
+        guard start else {
+            return
+        }
+        self.addTask(Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self = self, !self.isStopped else {
+                    return
+                }
+                let configured = self.ownProfile.values.with { Double($0.config["UsersStatusAndProfileFetchingPollIntervalMilliseconds"] ?? "") ?? 0 } / 1000.0
+                let interval = max(20.0, configured)
+                if self.isConnected.with({ $0 }) {
+                    await self.pollStatuses()
+                }
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            }
+        })
+    }
+
+    func pollStatuses() async {
+        let ownUserId = self.ownUserId
+        let userIds = self.state.with { state -> [String] in
+            var direct: [String] = []
+            for channelState in state.channels.values where channelState.kind == .direct {
+                if let partner = channelState.channel.directMessagePartnerId(myUserId: ownUserId) {
+                    direct.append(partner)
+                }
+            }
+            var others = state.users.keys.filter { $0 != ownUserId && !direct.contains($0) }.sorted()
+            others = Array(others.prefix(max(0, 400 - direct.count)))
+            return Array(Set(direct)).sorted() + others
+        }
+        if userIds.isEmpty {
+            return
+        }
+        var statuses: [UserStatus] = []
+        for start in stride(from: 0, to: userIds.count, by: 200) {
+            guard let page = try? await self.client.userStatuses(ids: Array(userIds[start ..< min(userIds.count, start + 200)])) else {
+                return
+            }
+            statuses.append(contentsOf: page)
+        }
+        let changed = self.ownProfile.values.with { values -> [UserStatus] in
+            var changed: [UserStatus] = []
+            for status in statuses {
+                let previous = values.knownStatuses[status.userId]
+                if previous?.status != status.status || previous?.dndEndTime != status.dndEndTime {
+                    changed.append(status)
+                }
+                values.knownStatuses[status.userId] = status
+            }
+            return changed
+        }
+        if changed.isEmpty {
+            return
+        }
+        await self.postbox.mmTransaction { transaction in
+            self.writePresences(changed, transaction: transaction)
+        }
+        if changed.count < 10 {
+            MMLog.log("profile: statuses changed: \(changed.map { "\($0.userId)=\($0.status.rawValue)" }.joined(separator: " "))")
+        } else {
+            MMLog.log("profile: \(changed.count) statuses changed")
+        }
     }
 
     // MARK: Custom status expiry

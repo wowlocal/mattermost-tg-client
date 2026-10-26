@@ -31,7 +31,12 @@ func mattermostSettingsStatusItems(context: AccountContext, presentationData: Pr
     var items: [PeerInfoScreenItem] = []
     let own = MattermostProfile.currentOwnStatus(accountId: context.account.id)
     let status = own?.status ?? .online
-    items.append(PeerInfoScreenDisclosureItem(id: "mattermost-status", label: .text(own.map { MattermostStatusAppearance.label($0, strings: strings) } ?? ""), text: strings.Relay_Status_Title, icon: MattermostStatusAppearance.settingsIcon(status), action: {
+    // The row names the status ("Do Not Disturb"), the label its end ("Until 4:35 PM").
+    var label = ""
+    if status == .dnd, let end = own?.dndEnd, end > Date() {
+        label = strings.Relay_Status_Until(MattermostStatusAppearance.shortDate(end)).string
+    }
+    items.append(PeerInfoScreenDisclosureItem(id: "mattermost-status", label: .text(label), text: own.map { MattermostStatusAppearance.title($0.status, strings: strings) } ?? strings.Relay_Status_Title, icon: MattermostStatusAppearance.settingsIcon(status), action: {
         interaction.openSettings(.mattermostStatus)
     }))
     if MattermostProfile.currentOwnProfileFields(accountId: context.account.id)?.customStatusesEnabled ?? true {
@@ -234,9 +239,9 @@ extension PeerInfoScreenNode {
         let context = self.context
         let statusController = mattermostCustomStatusController(context: context, pickEmoji: { [weak controller] sourceView, completion in
             guard let controller else {
-                return
+                return nil
             }
-            mattermostPickEmoji(context: context, sourceView: sourceView, present: { picker in
+            return mattermostPickEmoji(context: context, sourceView: sourceView, present: { picker in
                 // Over the custom status screen (presented modally above Settings).
                 if let top = (controller.navigationController as? NavigationController)?.topViewController as? ViewController {
                     top.present(picker, in: .window(.root))
@@ -270,7 +275,8 @@ extension PeerInfoScreenNode {
 }
 
 /// Telegram's emoji keyboard (Unicode emoji, categories, search) as the custom status's emoji picker.
-func mattermostPickEmoji(context: AccountContext, sourceView: UIView, present: (ViewController) -> Void, completion: @escaping (String) -> Void) {
+@discardableResult
+func mattermostPickEmoji(context: AccountContext, sourceView: UIView, present: (ViewController) -> Void, completion: @escaping (String) -> Void) -> ViewController {
     let picker = EmojiStatusSelectionController(
         context: context,
         mode: .customStatusSelection(completion: { file, _ in
@@ -304,6 +310,7 @@ func mattermostPickEmoji(context: AccountContext, sourceView: UIView, present: (
         }
     )
     present(picker)
+    return picker
 }
 
 // MARK: - Settings tab menu

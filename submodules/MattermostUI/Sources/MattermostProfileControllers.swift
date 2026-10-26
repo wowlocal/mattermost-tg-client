@@ -793,7 +793,7 @@ public func mattermostChannelNotificationsController(context: AccountContext, pe
             entries.append(.loading(strings.Relay_PostList_Loading))
         }
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(strings.Relay_ChannelNotifications_Title), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: strings.Common_Back))
-        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries.sorted(by: <), style: .blocks, animateChanges: false)
         return (controllerState, (listState, arguments))
     }
     |> afterDisposed {
