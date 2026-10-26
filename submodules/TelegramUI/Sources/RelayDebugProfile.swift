@@ -20,6 +20,7 @@ import MattermostUI
 // - `edit-profile` (`do`: begin, set, done, cancel; `field`: first, last, nickname, position; `value`);
 // - `avatar` (`do`: set (a generated picture), remove): through the Settings photo handler;
 // - `chat-notifications`: the visible chat's profile → Notifications → Customize;
+// - `push-mentions`: Settings → Notifications → Push and Mentions; `chats-tab`: the Chats tab;
 // - `share-test` (`chat` as `chat` names it; `text`, `url`, `images`, `files`, `thread` root post id): the share extension's posting (`MattermostShareExtension`) with generated items, as the extension
 //   runs it for the other app's items (the current account).
 extension TelegramRootController {
@@ -96,6 +97,28 @@ extension TelegramRootController {
             after(1.5) {
                 completion(ok, ok ? nil : "unknown row", self.relayProfileState(context: context))
             }
+            return true
+        case "push-mentions":
+            // Settings → Notifications → Push and Mentions: the row's constructor (`MattermostUIHooks`).
+            guard let settings = self.relaySettingsScreen, let controller = MattermostUIHooks.makeNotificationPreferencesController?(context) else {
+                completion(false, "no Settings screen or hook", [:])
+                return true
+            }
+            self.popToRoot(animated: false)
+            let _ = settings.relayDebugOpenSettingsRow("notifications")
+            after(0.8) {
+                self.pushViewController(controller)
+                after(1.5) {
+                    completion(true, nil, [:])
+                }
+            }
+            return true
+        case "chats-tab":
+            if let rootTabController = self.rootTabController, let index = rootTabController.controllers.firstIndex(where: { $0 is ChatListController }) {
+                self.popToRoot(animated: false)
+                rootTabController.selectedIndex = index
+            }
+            completion(true, nil, [:])
             return true
         case "status-menu":
             guard let settings = self.relaySettingsScreen else {

@@ -361,6 +361,9 @@
 "Relay.CustomStatus.Disabled" = "Custom statuses are turned off on this server.";
 "Relay.Profile.Edit.Nickname" = "Nickname";
 "Relay.Profile.Edit.Position" = "Position";
+"EditProfile.NameAndPhotoOrVideoHelp" = "Enter your name and add an optional profile photo.";
+"Settings.AddAnotherAccount.Help" = "Sign in to another account, on this or another Mattermost server.";
+"Settings.SetProfilePhotoOrVideo" = "Set Profile Photo";
 "Relay.Profile.Edit.Help" = "Your nickname and position show on your profile. Your name and picture show everywhere.";
 "Relay.Profile.Edit.Managed" = "Managed by your login provider";
 "Relay.Profile.SaveFailed" = "Couldn't save your profile: %@";
