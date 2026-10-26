@@ -18,6 +18,7 @@ import MattermostSyncCore
 /// |---|---|
 /// | `send\|<chat>\|<text>` (`**bold**` etc. become entities, like the composer's formatting) | `enqueueMessages` |
 /// | `reply\|<chat>\|<msg>\|<text>` | `enqueueMessages` with `replyToMessageId` |
+/// | `senduser\|<username>\|<text>` (to the user's peer; creates the DM channel if needed) | `enqueueMessages` |
 /// | `image\|<chat>\|<caption>` (a generated 1200×800 JPEG) | `enqueueMessages` with a local `TelegramMediaImage` |
 /// | `file\|<chat>\|<file name>\|<content>` | `enqueueMessages` with a local `TelegramMediaFile` |
 /// | `react\|<chat>\|<msg>\|<emoji>` / `unreact\|…` | `updateMessageReactionsInteractively` (as a reaction tap) |
@@ -65,6 +66,16 @@ enum MattermostDebugWriter {
                 try? await Task.sleep(nanoseconds: 250_000_000)
             }
             return "timed out"
+        }
+        if action == "senduser" {
+            // A message to a user's peer, as a new chat from the compose screen (the DM channel may not exist).
+            if sync.state.with({ $0.userIdByUsername[field(1).lowercased()] }) == nil, let user = try? await sync.client.users(usernames: [field(1)]).first {
+                await sync.ensureUsers([user.id])
+            }
+            guard let userId = sync.state.with({ $0.userIdByUsername[field(1).lowercased()] }), let userPeerId = sync.userPeerId(userId) else {
+                return "no user \(field(1))"
+            }
+            return await enqueue(account: account, peerId: userPeerId, message: .message(text: field(2), attributes: [], inlineStickers: [:], mediaReference: nil, threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: []))
         }
         guard let channelId = sync.debugFindChannel(field(1)), let channelState = sync.channelState(channelId) else {
             return "no chat \(field(1))"

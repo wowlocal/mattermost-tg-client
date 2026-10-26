@@ -59,6 +59,7 @@ The credentials are only used when no account exists yet; later launches reuse t
 |---|---|
 | `send\|<chat>\|<text>` (`**b**`, `_i_`, `` `c` `` become composer entities) | `enqueueMessages` |
 | `reply\|<chat>\|<msg>\|<text>` | `enqueueMessages` with a reply subject |
+| `senduser\|<username>\|<text>` (a new chat; creates the DM channel) | `enqueueMessages` to the user's peer |
 | `image\|<chat>\|<caption>` / `file\|<chat>\|<name>\|<content>` | `enqueueMessages` with local media, as the media picker |
 | `react\|<chat>\|<msg>\|<emoji>` / `unreact\|…` | `updateMessageReactionsInteractively` |
 | `edit\|<chat>\|<msg>\|<text>` | `account.pendingUpdateMessageManager.add` |

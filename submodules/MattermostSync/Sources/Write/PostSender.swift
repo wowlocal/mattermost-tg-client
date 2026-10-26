@@ -126,7 +126,7 @@ final class PostSender: MattermostMessageSender {
         guard let message = message else {
             return
         }
-        guard let channelId = sync.channelId(forPeerId: messageId.peerId) else {
+        guard let channelId = await sync.ensureChannel(forPeerId: messageId.peerId) else {
             throw SendFailure.unknownChat
         }
         var items: [(mediaIndex: Int, upload: FileUpload)] = []
@@ -171,9 +171,13 @@ final class PostSender: MattermostMessageSender {
             try await self.upload(messageId: messageId, sync: sync, progress: { _ in })
             files = self.uploadedFiles(messageId: messageId)
         }
-        guard let draft = await sync.outgoingDraft(messageId: messageId, fileIds: files.map { $0.fileId }) else {
+        guard await sync.messageExists(messageId) else {
             MMLog.log("send: \(messageId) is gone; nothing to send")
             return
+        }
+        guard await sync.ensureChannel(forPeerId: messageId.peerId) != nil, let draft = await sync.outgoingDraft(messageId: messageId, fileIds: files.map { $0.fileId }) else {
+            sync.notice("Couldn't send the message: this chat is not on the server.")
+            throw SendFailure.unknownChat
         }
         let pendingPostId = draft.post.pendingPostId
         let queuedAt = CFAbsoluteTimeGetCurrent()

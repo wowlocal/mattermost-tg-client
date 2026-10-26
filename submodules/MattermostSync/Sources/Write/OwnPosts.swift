@@ -113,6 +113,27 @@ extension MattermostAccountSync {
         }
     }
 
+    /// The channel of a chat, creating the DM channel for a user without one yet (a new chat started from
+    /// the compose screen).
+    func ensureChannel(forPeerId peerId: PeerId) async -> String? {
+        if let channelId = self.channelId(forPeerId: peerId) {
+            return channelId
+        }
+        guard peerId.namespace == Namespaces.Peer.CloudUser, let user = self.store.peer(namespace: .user, peerId: peerId.id._internalGetInt64Value()) else {
+            return nil
+        }
+        do {
+            let channel = try await self.retryingTransient("direct channel with \(user.mattermostId)", isStillWanted: { true }) {
+                try await self.client.createDirectChannel(userId: self.ownUserId, otherUserId: user.mattermostId)
+            }
+            await self.refreshChannel(channel.id)
+            MMLog.log("send: created DM channel \(channel.id) with \(user.mattermostId)")
+        } catch {
+            MMLog.log("send: could not create the DM channel with \(user.mattermostId): \(error)")
+        }
+        return self.channelId(forPeerId: peerId)
+    }
+
     // MARK: Building the post
 
     /// The `POST /posts` body of an outgoing message, and its `pending` row (registered here, before the
