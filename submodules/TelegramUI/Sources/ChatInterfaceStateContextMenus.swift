@@ -2755,7 +2755,8 @@ func chatAvailableMessageActionsImpl(engine: TelegramEngine, accountPeerId: Engi
                         if !message.flags.contains(.Incoming) {
                             optionsMap[id]!.insert(.deleteGlobally)
                         } else {
-                            if channel.hasPermission(.deleteAllMessages) {
+                            // MATTERMOST: or Mattermost's `delete_others_posts` in this channel (4F).
+                            if channel.hasPermission(.deleteAllMessages) || channel.mattermostAccess?.contains(.deleteOthersPosts) == true {
                                 optionsMap[id]!.insert(.deleteGlobally)
                             }
                         }

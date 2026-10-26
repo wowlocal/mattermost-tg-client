@@ -18,6 +18,8 @@ public enum ChannelAccessRules {
         public var canLeave = false
         /// The team's default channel (town square): it can't be left, archived or made private.
         public var isDefaultChannel = false
+        /// Delete other users' posts (`delete_others_posts`: channel and team admins by default, 4F).
+        public var canDeleteOthersPosts = false
 
         public init() {
         }
@@ -33,11 +35,13 @@ public enum ChannelAccessRules {
         var result = Result()
         let isPublic = channelType == "O"
         let isPrivate = channelType == "P"
+        let has: (String) -> Bool = { permissions.contains($0) || permissions.contains("manage_system") }
+        // Archived channels are read-only.
+        result.canDeleteOthersPosts = !isArchived && has("delete_others_posts")
         guard isPublic || isPrivate else {
             // Group messages: members are fixed, there is nothing to leave or archive.
             return result
         }
-        let has: (String) -> Bool = { permissions.contains($0) || permissions.contains("manage_system") }
         result.isDefaultChannel = channelName == self.defaultChannelName
         if isArchived {
             // Restoring needs `manage_team` (api4 `restoreChannel`).

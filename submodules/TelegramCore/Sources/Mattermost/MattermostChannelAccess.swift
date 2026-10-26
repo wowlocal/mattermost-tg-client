@@ -32,6 +32,8 @@ public struct MattermostChannelAccess: OptionSet, Equatable, Hashable {
     public static let privateChannel = MattermostChannelAccess(rawValue: 1 << 9)
     public static let groupMessage = MattermostChannelAccess(rawValue: 1 << 10)
     public static let archived = MattermostChannelAccess(rawValue: 1 << 11)
+    /// Delete other users' posts (`delete_others_posts`, 4F): the message menu offers Delete for them.
+    public static let deleteOthersPosts = MattermostChannelAccess(rawValue: 1 << 12)
 
     /// Whether the channel settings screen (the profile's Edit button) has anything for the user.
     public var hasSettings: Bool {

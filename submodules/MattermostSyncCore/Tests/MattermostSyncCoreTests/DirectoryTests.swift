@@ -97,6 +97,16 @@ final class ChannelAccessRulesTests: XCTestCase {
         XCTAssertFalse(systemAdmin.canConvertToPrivate)
     }
 
+    func testDeleteOthersPosts() {
+        XCTAssertFalse(ChannelAccessRules.evaluate(permissions: channelUser, channelType: "O", channelName: "ops", isArchived: false).canDeleteOthersPosts)
+        // Channel admins (`channel_admin` has `delete_others_posts` by default), in channels and group messages.
+        XCTAssertTrue(ChannelAccessRules.evaluate(permissions: channelUser.union(["delete_others_posts"]), channelType: "P", channelName: "ops", isArchived: false).canDeleteOthersPosts)
+        XCTAssertTrue(ChannelAccessRules.evaluate(permissions: ["delete_others_posts"], channelType: "G", channelName: "gm", isArchived: false).canDeleteOthersPosts)
+        XCTAssertTrue(ChannelAccessRules.evaluate(permissions: ["manage_system"], channelType: "O", channelName: "ops", isArchived: false).canDeleteOthersPosts)
+        // Not in an archived channel.
+        XCTAssertFalse(ChannelAccessRules.evaluate(permissions: ["delete_others_posts"], channelType: "O", channelName: "ops", isArchived: true).canDeleteOthersPosts)
+    }
+
     func testArchivedChannel() {
         let member = ChannelAccessRules.evaluate(permissions: channelUser, channelType: "O", channelName: "old", isArchived: true)
         XCTAssertFalse(member.canEditProperties)
@@ -110,7 +120,10 @@ final class ChannelAccessRulesTests: XCTestCase {
 
     func testGroupMessagesHaveNoSettings() {
         let result = ChannelAccessRules.evaluate(permissions: ["manage_system"], channelType: "G", channelName: "x", isArchived: false)
-        XCTAssertEqual(result, ChannelAccessRules.Result())
+        // Nothing to edit, leave or archive; a system admin may still delete others' posts (4F).
+        var expected = ChannelAccessRules.Result()
+        expected.canDeleteOthersPosts = true
+        XCTAssertEqual(result, expected)
     }
 
     func testRoleNames() {

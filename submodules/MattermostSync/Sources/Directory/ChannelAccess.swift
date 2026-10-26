@@ -67,6 +67,9 @@ extension MattermostAccountSync {
         if result.isDefaultChannel {
             access.insert(.defaultChannel)
         }
+        if result.canDeleteOthersPosts {
+            access.insert(.deleteOthersPosts)
+        }
         return access
     }
 

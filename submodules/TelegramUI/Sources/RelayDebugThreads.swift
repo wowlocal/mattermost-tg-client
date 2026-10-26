@@ -201,6 +201,22 @@ extension TelegramRootController {
             after(1.5) {
                 completion(found, found ? nil : "message not visible", [:])
             }
+        case "actions":
+            // What the message menu offers for a post in the visible chat (4F: Delete for others' posts with
+            // `delete_others_posts`), from the same `chatAvailableMessageActionsImpl` the menu uses.
+            guard let chat = self.relayTopChat, let postId = command["post"] as? String, let messageId = MattermostSync.debugMessageId(accountId: accountId, postId: postId) else {
+                completion(false, "no chat or message", [:])
+                return true
+            }
+            let _ = (chatAvailableMessageActionsImpl(engine: chat.context.engine, accountPeerId: chat.context.account.peerId, messageIds: [messageId], keepUpdated: false)
+            |> deliverOnMainQueue).startStandalone(next: { actions in
+                completion(true, nil, [
+                    "deleteGlobally": actions.options.contains(.deleteGlobally),
+                    "deleteLocally": actions.options.contains(.deleteLocally),
+                    "forward": actions.options.contains(.forward),
+                    "report": actions.options.contains(.report)
+                ])
+            })
         case "goto", "reply":
             // `goto`: jump to a post in the visible chat (`navigateToMessage`, as a reply header or the pinned bar
             // does); `reply`: Reply on it (`setupReplyMessage`, as the menu and the swipe do).
