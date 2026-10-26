@@ -106,6 +106,10 @@ extension MattermostAccountSync {
                 if deleted.contains(DisplaySettingName.linkPreviews) || deleted.contains(DisplaySettingName.renderEmoticonsAsEmoji) {
                     await self.reloadRichContentPreferences()
                 }
+                // Notification sender names back to the server default (4F).
+                if deleted.contains("name_format") {
+                    await self.reloadPushNameFormat()
+                }
             } else {
                 var changed = event.decodeEmbedded([Preference].self, key: "preferences") ?? []
                 if let single = event.decodeEmbedded(Preference.self, key: "preference") {
@@ -113,10 +117,14 @@ extension MattermostAccountSync {
                 }
                 await self.applyPreferencesChanged(changed)
                 await self.applyRichContentPreferences(changed)
+                if changed.contains(where: { $0.category == PreferenceCategory.displaySettings && $0.name == "name_format" }) {
+                    await self.reloadPushNameFormat()
+                }
             }
         case .configChanged:
             await self.refreshCollapsedThreadsConfig()
             await self.refreshRichContentConfig()
+            await self.reloadPushNameFormat()
         case .threadUpdated, .threadReadChanged, .threadFollowChanged:
             await self.applyThreadEvent(event)
         case .userUpdated:

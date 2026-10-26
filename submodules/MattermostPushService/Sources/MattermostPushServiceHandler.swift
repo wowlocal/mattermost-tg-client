@@ -35,6 +35,14 @@ private func mmLog(_ text: String) {
     NSLog("[Relay] %@: %@", role, text)
 }
 
+/// A sender's names, cached by the extension for a day (4F).
+private struct MattermostPushSenderCache: Codable {
+    let username: String
+    let firstName: String
+    let lastName: String
+    let nickname: String
+}
+
 /// One account on this device, as far as the extension needs it.
 private struct MattermostDeviceAccount {
     let account: MattermostPushAccount
@@ -171,8 +179,12 @@ public final class MattermostPushServiceHandler: @unchecked Sendable {
         let names = accounts.count > 1 ? (routed.username ?? routed.userId) : nil
         let lockedMessage = self.lockedMessage(rootPath: rootPath)
 
+        // The sender as this account's display setting names users (4F); a cached name for the first version.
+        let namesDirectory = pushDirectory + "/names"
+        let cachedSenderName = lockedMessage == nil ? self.senderDisplayName(payload: payload, device: device, cacheDirectory: namesDirectory, user: nil) : nil
+
         // A first version without network work, in case time runs out.
-        self.setFallback(self.content(payload: payload, kind: kind, device: device, recipientAccountName: names, lockedMessage: lockedMessage, avatar: nil))
+        self.setFallback(self.content(payload: payload, kind: kind, device: device, recipientAccountName: names, lockedMessage: lockedMessage, avatar: nil, senderDisplayName: cachedSenderName))
 
         let client = self.client(for: routed)
         if client == nil {
@@ -184,11 +196,55 @@ public final class MattermostPushServiceHandler: @unchecked Sendable {
         let wantsAvatar = payload.type == .message && lockedMessage == nil
         async let ackResponse: Data? = self.acknowledge(payload: pushed, client: client)
         async let avatarData: Data? = wantsAvatar ? self.avatar(payload: pushed, device: device, client: client, cacheDirectory: pushDirectory + "/avatars") : nil
+        async let senderUser: MattermostPushSenderCache? = (wantsAvatar && cachedSenderName == nil) ? self.senderUser(payload: pushed, device: device, client: client, cacheDirectory: namesDirectory) : nil
         if let data = await ackResponse, payload.isIdLoaded, let response = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
             payload.merge(idLoadedResponse: response)
         }
         let avatar = await avatarData
-        return self.content(payload: payload, kind: kind, device: device, recipientAccountName: names, lockedMessage: lockedMessage, avatar: avatar)
+        let fetchedUser = await senderUser
+        let senderName = cachedSenderName ?? (lockedMessage == nil ? self.senderDisplayName(payload: payload, device: device, cacheDirectory: namesDirectory, user: fetchedUser) : nil)
+        return self.content(payload: payload, kind: kind, device: device, recipientAccountName: names, lockedMessage: lockedMessage, avatar: avatar, senderDisplayName: senderName)
+    }
+
+    // MARK: Sender name (4F)
+
+    /// The sender's name in the account's display format (`MattermostPushSenderName`, stored by the app), from
+    /// `user` or the cache; nil without a stored format, for webhook names, and when the sender isn't known yet.
+    private func senderDisplayName(payload: MattermostPushPayload, device: MattermostDeviceAccount, cacheDirectory: String, user: MattermostPushSenderCache?) -> String? {
+        guard payload.type == .message, let senderId = payload.senderId, (payload.overrideUsername ?? "").isEmpty, let format = (try? device.store.cursor(MattermostPushSenderName.nameFormatCursor)) ?? nil else {
+            return nil
+        }
+        guard let user = user ?? self.cachedSender(accountId: device.account.accountId, senderId: senderId, cacheDirectory: cacheDirectory) else {
+            return nil
+        }
+        return MattermostPushSenderName.displayName(username: user.username, firstName: user.firstName, lastName: user.lastName, nickname: user.nickname, format: format)
+    }
+
+    private func cachedSender(accountId: Int64, senderId: String, cacheDirectory: String) -> MattermostPushSenderCache? {
+        let path = cacheDirectory + "/\(accountId)-\(senderId).json"
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: path), let modified = attributes[.modificationDate] as? Date, Date().timeIntervalSince(modified) < 24 * 60 * 60, let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(MattermostPushSenderCache.self, from: data)
+    }
+
+    /// `GET /users/{id}` for the sender (cached for a day), when the account has a stored display format.
+    private func senderUser(payload: MattermostPushPayload, device: MattermostDeviceAccount, client: MattermostClient?, cacheDirectory: String) async -> MattermostPushSenderCache? {
+        guard let client = client, let senderId = payload.senderId, (payload.overrideUsername ?? "").isEmpty, ((try? device.store.cursor(MattermostPushSenderName.nameFormatCursor)) ?? nil) != nil else {
+            return nil
+        }
+        do {
+            let user = try await client.user(id: senderId)
+            let value = MattermostPushSenderCache(username: user.username, firstName: user.firstName, lastName: user.lastName, nickname: user.nickname)
+            try? FileManager.default.createDirectory(atPath: cacheDirectory, withIntermediateDirectories: true)
+            if let data = try? JSONEncoder().encode(value) {
+                try? data.write(to: URL(fileURLWithPath: cacheDirectory + "/\(device.account.accountId)-\(senderId).json"), options: .atomic)
+            }
+            return value
+        } catch {
+            mmLog("sender \(senderId) not loaded: \(error)")
+            return nil
+        }
     }
 
     // MARK: Accounts
@@ -346,7 +402,7 @@ public final class MattermostPushServiceHandler: @unchecked Sendable {
         return content
     }
 
-    private func content(payload: MattermostPushPayload, kind: MattermostPushChannelKind, device: MattermostDeviceAccount, recipientAccountName: String?, lockedMessage: String?, avatar: Data?) -> UNNotificationContent {
+    private func content(payload: MattermostPushPayload, kind: MattermostPushChannelKind, device: MattermostDeviceAccount, recipientAccountName: String?, lockedMessage: String?, avatar: Data?, senderDisplayName: String?) -> UNNotificationContent {
         let content = UNMutableNotificationContent()
         var userInfo = self.request.content.userInfo
         for (key, value) in MattermostPushUserInfo.additions(accountId: device.account.accountId, serverURL: device.account.serverURL) {
@@ -367,7 +423,7 @@ public final class MattermostPushServiceHandler: @unchecked Sendable {
             return content
         }
 
-        let text = MattermostPushTextBuilder.text(for: payload, kind: kind, siteName: device.siteName)
+        let text = MattermostPushTextBuilder.text(for: payload, kind: kind, siteName: device.siteName, senderDisplayName: senderDisplayName)
         let names = MattermostPushNames(title: text.title, recipientAccountName: recipientAccountName)
         content.title = names.title
         if let subtitle = text.subtitle {

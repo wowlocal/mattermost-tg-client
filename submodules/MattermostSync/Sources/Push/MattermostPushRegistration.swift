@@ -112,3 +112,28 @@ extension MattermostAccountSync {
         }
     }
 }
+
+extension MattermostAccountSync {
+    /// The account's name format for the notification extension's sender names (4F, `MattermostPushSenderName`):
+    /// the user's `name_format` display preference, else the server's `TeammateNameDisplay`. Kept without a config
+    /// (an old server or a failed request), so the last known one stays.
+    func updatePushNameFormat(config: ClientConfig?, preferences: [Preference]) {
+        guard let config = config else {
+            return
+        }
+        let preference = preferences.last(where: { $0.category == PreferenceCategory.displaySettings && $0.name == "name_format" })?.value
+        let format = MattermostPushSenderName.nameFormat(preference: preference, serverDefault: config["TeammateNameDisplay"], locked: config.bool("LockTeammateNameDisplay") ?? false)
+        if self.store.cursor(MattermostPushSenderName.nameFormatCursor) != format {
+            self.store.setCursor(MattermostPushSenderName.nameFormatCursor, format)
+            MMLog.log("push: sender names as \(format)")
+        }
+    }
+
+    /// After a `name_format` preference or the server config changed.
+    func reloadPushNameFormat() async {
+        guard let config = try? await self.client.clientConfig(), let preferences = try? await self.client.preferences() else {
+            return
+        }
+        self.updatePushNameFormat(config: config, preferences: preferences)
+    }
+}

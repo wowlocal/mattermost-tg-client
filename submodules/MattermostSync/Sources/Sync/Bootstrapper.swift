@@ -54,6 +54,8 @@ extension MattermostAccountSync {
         let config = try? await self.client.clientConfig()
         let collapsedThreadsSetting = config?.collapsedThreads ?? self.state.with { $0.collapsedThreadsSetting }
         let collapsedThreadsChanged = self.updateCollapsedThreads(setting: collapsedThreadsSetting, preferences: preferences)
+        // Sender names in notifications as the user's display setting has them (4F).
+        self.updatePushNameFormat(config: config, preferences: preferences)
         // Rich content (3E): link previews, the image proxy, emoticons and inline LaTeX, before posts are written.
         self.setRichContent(self.richContent.withConfig(config).withPreferences(preferences), reason: "bootstrap")
         if let siteURL = config?.siteURL, !siteURL.isEmpty {

@@ -211,6 +211,61 @@ final class MattermostPushTextTests: XCTestCase {
     }
 }
 
+final class MattermostPushSenderNameTests: XCTestCase {
+    func testNameFormat() {
+        typealias N = MattermostPushSenderName
+        // The user's preference wins over the server default…
+        XCTAssertEqual(N.nameFormat(preference: "full_name", serverDefault: "username", locked: false), "full_name")
+        XCTAssertEqual(N.nameFormat(preference: "nickname_full_name", serverDefault: nil, locked: false), "nickname_full_name")
+        // …unless the server locks it, or the preference is unknown or missing.
+        XCTAssertEqual(N.nameFormat(preference: "full_name", serverDefault: "username", locked: true), "username")
+        XCTAssertEqual(N.nameFormat(preference: "bogus", serverDefault: "full_name", locked: false), "full_name")
+        XCTAssertEqual(N.nameFormat(preference: nil, serverDefault: "full_name", locked: false), "full_name")
+        XCTAssertEqual(N.nameFormat(preference: nil, serverDefault: nil, locked: false), "username")
+        XCTAssertEqual(N.nameFormat(preference: nil, serverDefault: "", locked: true), "username")
+    }
+
+    func testDisplayName() {
+        typealias N = MattermostPushSenderName
+        XCTAssertEqual(N.displayName(username: "bob", firstName: "Bob", lastName: "Brennan", nickname: "Bobby", format: "username"), "bob")
+        XCTAssertEqual(N.displayName(username: "bob", firstName: "Bob", lastName: "Brennan", nickname: "Bobby", format: "full_name"), "Bob Brennan")
+        XCTAssertEqual(N.displayName(username: "bob", firstName: "Bob", lastName: "Brennan", nickname: "Bobby", format: "nickname_full_name"), "Bobby")
+        XCTAssertEqual(N.displayName(username: "bob", firstName: "Bob", lastName: "Brennan", nickname: " ", format: "nickname_full_name"), "Bob Brennan")
+        XCTAssertEqual(N.displayName(username: "bob", firstName: "", lastName: "Brennan", nickname: "", format: "full_name"), "Brennan")
+        XCTAssertEqual(N.displayName(username: "bob", firstName: "", lastName: "", nickname: "", format: "full_name"), "bob")
+        XCTAssertEqual(N.displayName(username: "bob", firstName: "", lastName: "", nickname: "", format: "nickname_full_name"), "bob")
+    }
+
+    func testCapturedDirectMessageShowsTheDisplayName() throws {
+        // The dev server names users by username, so its push says "@bob" (title, sender, the DM's channel_name).
+        let payload = try XCTUnwrap(MattermostPushPayload(userInfo: try fixture("captured-dm")))
+        XCTAssertEqual(MattermostPushTextBuilder.text(for: payload, kind: .direct, siteName: nil).senderName, "@bob")
+        let text = MattermostPushTextBuilder.text(for: payload, kind: .unknown, siteName: nil, senderDisplayName: "Bob Brennan")
+        XCTAssertEqual(text.title, "Bob Brennan")
+        XCTAssertEqual(text.senderName, "Bob Brennan")
+        // Still recognised as a DM by the server's own name for the sender.
+        XCTAssertNil(text.groupName)
+        XCTAssertEqual(text.body, "Fixture: a direct message")
+    }
+
+    func testChannelShowsTheDisplayNameAndStripsTheServersPrefix() throws {
+        var payload = try XCTUnwrap(MattermostPushPayload(userInfo: try fixture("channel-mention")))
+        payload.senderName = "@bob"
+        payload.message = "@bob: @alice can you review the release notes?"
+        let text = MattermostPushTextBuilder.text(for: payload, kind: .channel, siteName: nil, senderDisplayName: "Bob Brennan")
+        XCTAssertEqual(text.title, "Town Square")
+        XCTAssertEqual(text.senderName, "Bob Brennan")
+        XCTAssertEqual(text.body, "@alice can you review the release notes?")
+    }
+
+    func testWebhookOverrideKeepsItsName() {
+        let webhook = MattermostPushPayload(type: .message, channelId: "c", senderId: "u", senderName: "ci-bot", overrideUsername: "ci-bot", isFromWebhook: true, channelName: "Builds", message: "ci-bot: build 42 passed")
+        let text = MattermostPushTextBuilder.text(for: webhook, kind: .channel, siteName: nil, senderDisplayName: "Integration Owner")
+        XCTAssertEqual(text.senderName, "ci-bot")
+        XCTAssertEqual(text.body, "build 42 passed")
+    }
+}
+
 final class MattermostPushRouterTests: XCTestCase {
     private let alice = MattermostPushAccount(accountId: 1, serverURL: "http://localhost:8065", serverId: serverId, userId: "aliceuserid00000000000000a", username: "alice", order: 1)
     private let bob = MattermostPushAccount(accountId: 2, serverURL: "http://localhost:8065", serverId: serverId, userId: "bobuserid000000000000000bb", username: "bob", order: 2)

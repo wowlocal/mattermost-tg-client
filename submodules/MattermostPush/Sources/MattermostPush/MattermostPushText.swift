@@ -48,10 +48,16 @@ public struct MattermostPushText: Equatable, Sendable {
 /// This keeps the server's wording and only arranges it: DMs are titled by the sender and lose the sender
 /// prefix, channels are titled by the channel with the sender in the body, thread replies say so in the
 /// title.
+///
+/// `senderDisplayName` (4F) is the sender as the recipient's display setting names them
+/// (`MattermostPushSenderName`): it replaces the server's `sender_name` in the title and as the person shown, unless
+/// a webhook overrides the name.
 public enum MattermostPushTextBuilder {
-    public static func text(for payload: MattermostPushPayload, kind: MattermostPushChannelKind, siteName: String?) -> MattermostPushText {
+    public static func text(for payload: MattermostPushPayload, kind: MattermostPushChannelKind, siteName: String?, senderDisplayName: String? = nil) -> MattermostPushText {
         let threadIdentifier = payload.channelId ?? payload.threadIdentifier ?? "mattermost"
-        let sender = nonEmpty(payload.overrideUsername) ?? nonEmpty(payload.senderName)
+        // The server's name for the sender, which its text uses (`"@bob: hello"`, a DM's `channel_name`).
+        let serverSender = nonEmpty(payload.overrideUsername) ?? nonEmpty(payload.senderName)
+        let sender = nonEmpty(payload.overrideUsername) ?? nonEmpty(senderDisplayName) ?? nonEmpty(payload.senderName)
         let site = nonEmpty(siteName) ?? "Mattermost"
 
         switch payload.type {
@@ -83,7 +89,7 @@ public enum MattermostPushTextBuilder {
         var resolvedKind = kind
         if resolvedKind == .unknown {
             // A DM's `channel_name` is the sender's name (the server names a DM after the other user).
-            if let channelName = channelName, let sender = sender, channelName == sender {
+            if let channelName = channelName, let serverSender = serverSender, channelName == serverSender {
                 resolvedKind = .direct
             } else {
                 resolvedKind = .channel
@@ -94,8 +100,8 @@ public enum MattermostPushTextBuilder {
 
         switch resolvedKind {
         case .direct:
-            if let sender = sender {
-                body = stripSenderPrefix(body, sender: sender)
+            if let serverSender = serverSender {
+                body = stripSenderPrefix(body, sender: serverSender)
             }
             let title = sender ?? channelName ?? site
             return MattermostPushText(
@@ -114,10 +120,10 @@ public enum MattermostPushTextBuilder {
             if isReply && !payload.isCRTEnabled {
                 title = "Reply in \(title)"
             }
-            if let sender = sender {
+            if let serverSender = serverSender {
                 // The group intent shows the sender with its avatar; the body keeps the server's
                 // "sender: text" only when there is no sender to show.
-                body = stripSenderPrefix(body, sender: sender)
+                body = stripSenderPrefix(body, sender: serverSender)
             }
             return MattermostPushText(
                 title: title,
