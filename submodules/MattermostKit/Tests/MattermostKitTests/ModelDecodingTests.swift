@@ -397,3 +397,38 @@ final class ModelDecodingTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(ClientConfig.self, from: JSONEncoder().encode(config)), config)
     }
 }
+
+final class DialogValidationTests: XCTestCase {
+    func testRequiredAndOptional() {
+        let required = DialogElement(name: "a", type: "text")
+        XCTAssertEqual(required.validate(nil), .required)
+        XCTAssertEqual(required.validate(.string("  ")), .required)
+        XCTAssertNil(required.validate(.string("x")))
+        XCTAssertNil(DialogElement(name: "b", type: "text", optional: true).validate(nil))
+        XCTAssertEqual(DialogElement(name: "c", type: "select").validate(nil), .required)
+        XCTAssertNil(DialogElement(name: "d", type: "bool").validate(nil))
+    }
+
+    func testLengthsAndSubtypes() {
+        let text = DialogElement(name: "a", type: "text", minLength: 3, maxLength: 5)
+        XCTAssertEqual(text.validate(.string("ab")), .tooShort(minLength: 3))
+        XCTAssertEqual(text.validate(.string("abcdef")), .tooLong(maxLength: 5))
+        XCTAssertNil(text.validate(.string("abcd")))
+        XCTAssertEqual(DialogElement(name: "e", type: "text", subtype: "email").validate(.string("nope")), .invalidEmail)
+        XCTAssertNil(DialogElement(name: "e", type: "text", subtype: "email").validate(.string("a@b.c")))
+        XCTAssertEqual(DialogElement(name: "n", type: "text", subtype: "number").validate(.string("12a")), .invalidNumber)
+        XCTAssertEqual(DialogElement(name: "u", type: "text", subtype: "url").validate(.string("example.com")), .invalidURL)
+        XCTAssertNil(DialogElement(name: "u", type: "text", subtype: "url").validate(.string("https://example.com")))
+    }
+
+    func testSubmissionValues() {
+        let number = DialogElement(name: "n", type: "text", subtype: "number")
+        XCTAssertEqual(number.submissionValue(text: "42"), .int(42))
+        XCTAssertEqual(number.submissionValue(text: "4.5"), .double(4.5))
+        XCTAssertEqual(DialogElement(name: "t", type: "text").submissionValue(text: "42"), .string("42"))
+        XCTAssertEqual(DialogElement(name: "b", type: "bool", defaultValue: "true").defaultSubmissionValue, .bool(true))
+        XCTAssertEqual(DialogElement(name: "b", type: "bool").defaultSubmissionValue, .bool(false))
+        XCTAssertEqual(DialogElement(name: "s", type: "select", defaultValue: "prod").defaultSubmissionValue, .string("prod"))
+        XCTAssertNil(DialogElement(name: "s", type: "select").defaultSubmissionValue)
+    }
+}

@@ -175,3 +175,95 @@ public struct DialogOption: Codable, Sendable, Equatable {
         value = c.string(.value)
     }
 }
+
+// MARK: - Validation
+
+/// Why a dialog value is refused before submitting (Mattermost's clients check the same).
+public enum DialogValidationError: Equatable, Sendable {
+    case required
+    case tooShort(minLength: Int)
+    case tooLong(maxLength: Int)
+    case invalidEmail
+    case invalidNumber
+    case invalidURL
+}
+
+extension DialogElement {
+    /// The submission value of the element's default (`"true"` for a checkbox becomes `true`), or nil.
+    public var defaultSubmissionValue: JSONValue? {
+        switch kind {
+        case .bool:
+            let value = defaultValue.lowercased()
+            return .bool(value == "true" || value == "1")
+        default:
+            if defaultValue.isEmpty {
+                return nil
+            }
+            return submissionValue(text: defaultValue)
+        }
+    }
+
+    /// A text field's text as its submission value: numbers (`subtype` `number`) as numbers, else the text.
+    public func submissionValue(text: String) -> JSONValue {
+        if kind == .text && subtype == "number" {
+            let trimmed = text.trimmingCharacters(in: .whitespaces)
+            if let value = Int64(trimmed) {
+                return .int(value)
+            }
+            if let value = Double(trimmed) {
+                return .double(value)
+            }
+        }
+        return .string(text)
+    }
+
+    /// Checks a value as Mattermost's own clients do before submitting: required fields, text lengths and the
+    /// email, number and URL subtypes. Checkboxes are never missing.
+    public func validate(_ value: JSONValue?) -> DialogValidationError? {
+        if kind == .bool {
+            return nil
+        }
+        let text: String
+        switch value {
+        case let .string(string)?:
+            text = string
+        case let .int(number)?:
+            text = String(number)
+        case let .double(number)?:
+            text = String(number)
+        default:
+            text = ""
+        }
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return optional ? nil : .required
+        }
+        if kind == .text || kind == .textarea {
+            if minLength > 0 && text.count < minLength {
+                return .tooShort(minLength: minLength)
+            }
+            if maxLength > 0 && text.count > maxLength {
+                return .tooLong(maxLength: maxLength)
+            }
+        }
+        if kind == .text {
+            switch subtype {
+            case "email":
+                if !text.contains("@") || text.hasPrefix("@") || text.hasSuffix("@") {
+                    return .invalidEmail
+                }
+            case "number":
+                if Double(text.trimmingCharacters(in: .whitespaces)) == nil {
+                    return .invalidNumber
+                }
+            case "url":
+                let lowercased = text.lowercased()
+                if !lowercased.hasPrefix("http://") && !lowercased.hasPrefix("https://") {
+                    return .invalidURL
+                }
+            default:
+                break
+            }
+        }
+        return nil
+    }
+}
