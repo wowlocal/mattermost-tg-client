@@ -82,7 +82,7 @@
 "Relay.About.Title" = "About Relay";
 "Relay.About.Version" = "Version";
 "Relay.About.SourceCode" = "Source Code";
-"Relay.About.SourceCodeInfo" = "Relay is built from the open-source Telegram-iOS project. Its complete source code, including Relay's changes, is published at the address above.";
+"Relay.About.SourceCodeInfo" = "Relay is built from the open-source Telegram-iOS project. Its complete source code, including Relay's changes, is published at:";
 "Relay.About.Disclaimer" = "Relay is an independent app. It is not affiliated with or endorsed by Telegram or Mattermost.";
 
 /* Login (MattermostUI). */
@@ -419,3 +419,12 @@
 "Relay.Link.ChannelNotFound" = "This channel doesn't exist, or you don't have access to it.";
 "Relay.Link.UserNotFound" = "This user doesn't exist.";
 "Relay.Link.Unreachable" = "The link couldn't be opened. Check your connection and try again.";
+
+/* About and licenses (Phase 4A): Settings → About Relay → Open Source Licenses. */
+"Relay.About.Licenses" = "Open Source Licenses";
+"Relay.Licenses.Title" = "Open Source Licenses";
+"Relay.Licenses.TelegramInfo" = "Relay is built from Telegram-iOS. Telegram's source is published under the GNU General Public License (GPL); Relay, including its own changes, is distributed under the same license.";
+"Relay.Licenses.TelegramText" = "Relay is built from Telegram-iOS (https://github.com/TelegramMessenger/Telegram-iOS). Telegram's source is published under the GNU General Public License (GPL). Relay, including its own changes, is distributed under the same license, and its complete source code is published.";
+"Relay.Licenses.SourceText" = "Source code of Relay:";
+"Relay.Licenses.ComponentsHeader" = "Components";
+"Relay.Licenses.ComponentsInfo" = "Relay includes these open-source components, most of them as bundled by Telegram-iOS. Tap one for its license and copyright notices. \"Not determined\" marks components whose license file is not part of the source tree.";
