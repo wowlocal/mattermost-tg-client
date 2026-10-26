@@ -36,6 +36,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | Telegram internals map (Spike A prep, assumptions) | [telegram-internals.md](research/telegram-internals.md) | Done |
 | SQLite sync store (ID map, peers, cursors) | `submodules/MattermostSyncCore` | Agent working |
 | Spike A: null network engine + seeded account | TelegramCore, `submodules/MattermostSync` | Done (commit `f0820341`); screenshots in `docs/research/spike-a-*.png` |
+| Spike D: real data as alice (bootstrap, holes, live events) | `submodules/MattermostSync` | Agent working (owns Bazel) |
 
 ## Phase 0 checklist
 
@@ -84,3 +85,4 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   - Opening a channel still triggers Telegram's channel polling (parked); switch it off before MVP.
   - Also fixed: the call reflector benchmark sent UDP to Telegram (internal builds); now off.
   - Debug hook: `SIMCTL_CHILD_RELAY_DEBUG_OPEN_CHAT=1|ios-team|town-square|dm|off-topic|saved`.
+- Spike D started (agent): debug login as alice, bootstrap, hole filler, WebSocket events, converters, media resources.
