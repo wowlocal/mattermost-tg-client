@@ -17,7 +17,9 @@ public let telegramPostboxSeedConfiguration: SeedConfiguration = {
         upgradedMessageHoles[peerNamespace] = [
             Namespaces.Message.Cloud: Set([
                 MessageTags.gif,
-                MessageTags.pinned
+                MessageTags.pinned,
+                // MATTERMOST: see `MessageTags.mattermostRootPost`.
+                MessageTags.mattermostRootPost
             ])
         ]
     }
