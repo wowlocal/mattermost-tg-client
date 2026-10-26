@@ -6,7 +6,7 @@ null network engine once a minute.
   tools/relay-session.py <udid> [--minutes 10] [--out session.jsonl] [--no-background]
 
 Each cycle: chat list → firehose (scroll to top and back, profile) → town square (thread) → DM with bob
-(profile) → Saved Messages → sandbox → search → Settings rows and screens (status, Data and Storage,
+(profile) → Saved Messages → sandbox (a draft with a link, not sent) → search → Settings rows and screens (status, Data and Storage,
 Privacy, Notifications, Appearance) → threads list → background/foreground (Settings app, then Relay).
 
 Samples (one JSON line each): wall time, the app's phys_footprint and resident size from inside the app (the
@@ -76,7 +76,7 @@ STEPS = [
     ("chat", {"query": "engineering/town-square"}), ("replies", {"index": "0"}), ("back", {}), ("back", {}),
     ("chat", {"query": "dm:bob"}), ("peerinfo", {}), ("back", {}), ("back", {}),
     ("chat", {"query": "saved"}), ("back", {}),
-    ("chat", {"query": "sandbox"}), ("back", {}),
+    ("chat", {"query": "sandbox"}), ("compose", {"text": "4B session draft https://example.com/4b", "focus": "0"}), ("compose", {"text": "", "focus": "0"}), ("back", {}),
     ("search", {"query": "deploy"}), ("search-cancel", {}),
     ("settings-row", {"row": "status"}), ("chats-tab", {}),
     ("screen", {"name": "data"}), ("screen", {"name": "privacy"}), ("screen", {"name": "notifications"}), ("screen", {"name": "appearance"}),
