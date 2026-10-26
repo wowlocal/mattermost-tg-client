@@ -59,7 +59,12 @@ protocol MattermostDebugDrivable: AnyObject {
 /// - `threads-row` (`index`): a tap on that row of the visible threads screen (Phase 3B);
 /// - chat-screen commands (Phase 3B), handled by TelegramUI's `chatCommandHandler` (`RelayDebugScreens`): `chat`,
 ///   `post`, `replies`, `threads`, `follow`, `unfollow`, `scroll`, `visible`, `menu`, `back`. Their output is in
-///   the result's `extra`.
+///   the result's `extra`;
+/// - composer commands (Phase 3D), handled by TelegramUI's `RelayDebugComposer`: `compose` (`text`), `suggestions`,
+///   `pick` (`index`), `send-composer`, `input`, `open-thread` (`post`). Their output is in the result's
+///   `state.chat`;
+/// - `dialog`, `dialog-set` (`name`, `value`, `type`), `dialog-picker` (`name`), `dialog-submit`, `dialog-cancel`:
+///   the visible interactive dialog (Phase 3D), its state in the result's `state.dialog`.
 ///
 /// Passwords filled by the remote are cleared once the login succeeds, so iOS doesn't offer to save them
 /// (its "Save Password?" sheet would cover the next screenshots).

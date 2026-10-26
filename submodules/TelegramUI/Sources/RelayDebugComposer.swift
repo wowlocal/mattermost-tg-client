@@ -16,7 +16,8 @@ import MattermostSync
 // - `suggestions`: the visible suggestion panel's entries (`state.chat.suggestions`) and the composer text;
 // - `pick` (`index`): selects an entry of the visible panel through the panel's own selection closure, as a
 //   tap on it does (the `mattermostDebug…Pick` wrappers around the mention, command and emoji panels' closures);
-// - `send`: the send button (`sendCurrentMessage`);
+// - `send-composer`: the send button with what the composer holds (`sendCurrentMessage`; 3B's `send` types a
+//   `text` first);
 // - `input`: the composer text;
 // - `open-thread` (`post`): the thread view of a loaded root post of the visible chat (as a tap on its replies).
 // Release builds compile none of the driver; the panel wrappers just return their closure.
@@ -137,7 +138,7 @@ final class RelayDebugComposer {
 
     private func run(action: String, command: [String: Any], completion: @escaping (Bool, String?, [String: Any]) -> Void) -> Bool {
         switch action {
-        case "compose", "suggestions", "pick", "send", "input", "open-thread":
+        case "compose", "suggestions", "pick", "send-composer", "input", "open-thread":
             break
         default:
             return false
@@ -198,7 +199,7 @@ final class RelayDebugComposer {
                     }
                 }
             })
-        case "send":
+        case "send-composer":
             chat.chatDisplayNode.sendCurrentMessage()
             Queue.mainQueue().after(1.0) {
                 completion(true, nil, self.info(chat))

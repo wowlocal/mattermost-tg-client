@@ -140,6 +140,25 @@ Failed writes the UI can't show (a refused delete, an unsendable message) appear
 
 `RELAY_DEBUG_OPEN_SCREEN=button:<title>` taps the inline button with that title on the newest message of the chat that `RELAY_DEBUG_OPEN_CHAT` opened, through the chat's `requestMessageActionCallback` exactly as a tap does. For a menu button (title ends in ` ▾`) the option sheet opens; `RELAY_DEBUG_SELECT_OPTION=<option text or value>` picks that option four seconds later (time for a screenshot). Ephemeral answers show as a toast, refused actions as an alert.
 
+#### Phase 3D: composer, slash commands, dialogs (debug builds only)
+
+The simulator takes no scripted touches here (AXe's HID taps had no effect on this Xcode 27 setup, which has no Simulator.app), so the composer is driven through the debug remote (TelegramUI `RelayDebugComposer.swift`; output in the result's `state.chat`). `pick` runs the suggestion panel's own selection closure, as a tap on the row does:
+
+```sh
+tools/relay-remote.py "$UDID" compose "text=Ping @b"          # set the composer text (focus=0: keep the keyboard as is); suggestions load
+tools/relay-remote.py "$UDID" suggestions                       # the visible panel (mentions/commands/emojis) and its entries
+tools/relay-remote.py "$UDID" pick index=0                      # select an entry (inserts @bob / ~channel / emoji / the command line)
+tools/relay-remote.py "$UDID" send-composer                     # the send button (a slash command runs on the server)
+tools/relay-remote.py "$UDID" open-thread post=<root post id>   # the thread view of a root post in the visible chat
+tools/relay-remote.py "$UDID" dialog                            # the visible interactive dialog: title, values, errors
+tools/relay-remote.py "$UDID" dialog-set name=name value=api    # a field (type=bool|number for those)
+tools/relay-remote.py "$UDID" dialog-picker name=reviewer       # open a select's option screen
+tools/relay-remote.py "$UDID" dialog-submit                     # the submit button (local checks, then the server)
+tools/relay-remote.py "$UDID" dialog-cancel                     # Cancel (notifies the integration if it asked)
+```
+
+Interactive dialogs need an integration the server can reach: the dev server only allows `localhost` integration URLs, so run a small responder (Python stdlib, keep it outside `infra/`) in a container that shares the Mattermost container's network namespace (`docker run --network container:mmdev-mattermost-1 …`): it listens on `127.0.0.1:<port>`, answers the slash command registered with `POST /api/v4/commands` (url `http://localhost:<port>/command`), opens dialogs with `POST /api/v4/actions/dialogs/open` (no token needed, the trigger id expires after 3 s) and gets the submissions. Built-in commands (`/away`, `/me`, `/join`, …) need nothing.
+
 #### Phase 2D hooks (debug builds only)
 
 - `RELAY_DEBUG_OPEN_SCREEN=devices` (Settings → Devices), `openlinks` (Open Links In), `reaction-notifications`, `authorinfo` (profile of the newest message's author in the chat `RELAY_DEBUG_OPEN_CHAT` opened, e.g. a webhook's name override), `settings:add-account` (Settings → Add Account through the Settings handler, account limit included).
