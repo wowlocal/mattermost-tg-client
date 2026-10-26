@@ -112,15 +112,16 @@ public struct HistoryHole: Hashable, Sendable, CustomStringConvertible {
     /// when nothing is above); `.newer` fills from the lower edge (`after=` the post below it, or
     /// nil when nothing is below, because Mattermost can't page forward from the channel start).
     public func cursor(direction: HistoryDirection) -> HistoryCursor? {
+        // A boundary may be a part (`PostParts`): page from its post.
         switch direction {
         case .older:
             if let upper = upperBoundary {
-                return .before(postId: upper.postId)
+                return .before(postId: upper.serverPostId)
             }
             return .latest
         case .newer:
             if let lower = lowerBoundary {
-                return .after(postId: lower.postId)
+                return .after(postId: lower.serverPostId)
             }
             return nil
         }

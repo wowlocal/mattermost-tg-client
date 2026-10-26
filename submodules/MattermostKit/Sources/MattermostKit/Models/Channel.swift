@@ -365,3 +365,37 @@ public struct ChannelUnreadAt: Codable, Sendable, Equatable {
         notifyProps = c.stringMap(.notifyProps)
     }
 }
+
+/// Response of `GET /channels/{channel_id}/stats`.
+public struct ChannelStats: Codable, Sendable, Equatable {
+    public var channelId: String
+    public var memberCount: Int64
+    public var guestCount: Int64
+    public var pinnedPostCount: Int64
+    public var filesCount: Int64
+
+    public init(channelId: String = "", memberCount: Int64 = 0, guestCount: Int64 = 0, pinnedPostCount: Int64 = 0, filesCount: Int64 = 0) {
+        self.channelId = channelId
+        self.memberCount = memberCount
+        self.guestCount = guestCount
+        self.pinnedPostCount = pinnedPostCount
+        self.filesCount = filesCount
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case channelId = "channel_id"
+        case memberCount = "member_count"
+        case guestCount = "guest_count"
+        case pinnedPostCount = "pinnedpost_count"
+        case filesCount = "files_count"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        channelId = c.string(.channelId)
+        memberCount = c.int64(.memberCount)
+        guestCount = c.int64(.guestCount)
+        pinnedPostCount = c.int64(.pinnedPostCount)
+        filesCount = c.int64(.filesCount)
+    }
+}

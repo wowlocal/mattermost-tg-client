@@ -62,6 +62,11 @@ extension MattermostClient {
         try await send(APIRequest(.get, apiPath("channels", channelId, "members", userId)))
     }
 
+    /// `GET /channels/{channel_id}/stats`: member count and other counters.
+    public func channelStats(channelId: String) async throws -> ChannelStats {
+        try await send(APIRequest(.get, apiPath("channels", channelId, "stats")))
+    }
+
     /// `GET /teams/{team_id}/channels`: public channels in a team (browse).
     public func publicChannels(teamId: String, page: Int? = nil, perPage: Int? = nil) async throws -> [Channel] {
         var query = QueryBuilder()

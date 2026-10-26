@@ -193,4 +193,31 @@ final class ServiceActionTests: XCTestCase {
         )
         XCTAssertEqual(map("system_channel_deleted", props: ["username": "alice"])?.fallbackText(name: name), "@alice archived the channel.")
     }
+
+    func testFormattedTextMarksUsersAndQuotedValues() {
+        let name: (ServiceUserRef) -> String = { $0.username.map { "@" + $0 } ?? "Someone" }
+        func substring(_ text: String, _ range: Range<Int>) -> String {
+            let utf16 = Array(text.utf16)
+            return String(decoding: utf16[range], as: UTF16.self)
+        }
+        let added = map("system_add_to_channel", props: ["userId": "u1", "username": "bob", "addedUserId": "u2", "addedUsername": "carol"])!.formattedText(name: name)
+        XCTAssertEqual(added.text, "@carol was added to the channel by @bob.")
+        XCTAssertEqual(added.mentions.map { substring(added.text, $0.range) }, ["@carol", "@bob"])
+        XCTAssertEqual(added.mentions.map { $0.user.userId }, ["u2", "u1"])
+        XCTAssertEqual(added.emphasized, [])
+
+        // Ranges are UTF-16 offsets: names and values with emoji and other scripts.
+        let header = map("system_header_change", props: ["username": "zoë", "old_header": "Old 🐈‍⬛", "new_header": "Новый 🌍"])!.formattedText(name: name)
+        XCTAssertEqual(header.text, "@zoë updated the channel header from: Old 🐈‍⬛ to: Новый 🌍")
+        XCTAssertEqual(header.mentions.map { substring(header.text, $0.range) }, ["@zoë"])
+        XCTAssertEqual(header.emphasized.map { substring(header.text, $0) }, ["Old 🐈‍⬛", "Новый 🌍"])
+
+        let removed = map("system_purpose_change", props: ["username": "a", "old_purpose": "x", "new_purpose": ""])!.formattedText(name: name)
+        XCTAssertEqual(removed.text, "@a removed the channel purpose (was: x)")
+        XCTAssertEqual(removed.emphasized.map { substring(removed.text, $0) }, ["x"])
+
+        let generic = map("system_generic", message: "Server text")!.formattedText(name: name)
+        XCTAssertEqual(generic.text, "Server text")
+        XCTAssertEqual(generic.mentions, [])
+    }
 }

@@ -83,6 +83,7 @@ final class RequestBuildingTests: StubbedClientTestCase {
         await check({ _ = try await $0.publicChannels(teamId: "t1", page: 2, perPage: 50) }, response: "[]", method: "GET", path: "/api/v4/teams/t1/channels", query: ["page": "2", "per_page": "50"])
         await check({ _ = try await $0.channel(id: "c1") }, response: channel, method: "GET", path: "/api/v4/channels/c1")
         await check({ _ = try await $0.channelMember(channelId: "c1") }, method: "GET", path: "/api/v4/channels/c1/members/me")
+        await check({ _ = try await $0.channelStats(channelId: "c1") }, method: "GET", path: "/api/v4/channels/c1/stats")
         await check({ _ = try await $0.pinnedPosts(channelId: "c1") }, method: "GET", path: "/api/v4/channels/c1/pinned")
     }
 
