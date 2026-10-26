@@ -105,6 +105,14 @@ final class RequestBuildingTests: StubbedClientTestCase {
         await check({ _ = try await $0.createGroupChannel(userIds: ["u1", "u2", "u3"]) }, response: channel, method: "POST", path: "/api/v4/channels/group", body: ["u1", "u2", "u3"])
         await check({ try await $0.addChannelMember(channelId: "c1", userId: "u2") }, method: "POST", path: "/api/v4/channels/c1/members", body: ["user_id": "u2"])
         await check({ try await $0.removeChannelMember(channelId: "c1") }, method: "DELETE", path: "/api/v4/channels/c1/members/me")
+        await check({ try await $0.updateChannelNotifyProps(channelId: "c1", props: ["mark_unread": "mention"]) }, response: #"{"status":"OK"}"#, method: "PUT", path: "/api/v4/channels/c1/members/me/notify_props", body: ["mark_unread": "mention"])
+        await check(
+            { try await $0.updateSidebarCategories([SidebarCategory(id: "cat1", userId: "u1", teamId: "t1", sortOrder: 0, sorting: "manual", type: .favorites, displayName: "Favorites", channelIds: ["c1", "c2"])], teamId: "t1") },
+            response: "[]",
+            method: "PUT",
+            path: "/api/v4/users/me/teams/t1/channels/categories",
+            body: [["id": "cat1", "user_id": "u1", "team_id": "t1", "sort_order": 0, "sorting": "manual", "type": "favorites", "display_name": "Favorites", "muted": false, "collapsed": false, "channel_ids": ["c1", "c2"]]]
+        )
     }
 
     // MARK: Posts
