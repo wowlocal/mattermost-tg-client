@@ -81,6 +81,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
     private let tasks = MMLocked<[Task<Void, Never>]>([])
     private(set) var socket: MattermostWebSocket?
     private var holeFiller: HoleFiller?
+    /// Member lists for Telegram's member UI (Phase 3D, `MemberLists.swift`); TelegramCore keeps it weakly.
+    private var memberProvider: MemberListProvider?
     private var readStatePusher: ReadStatePusher?
     let bootstrapped = ValuePromise<Bool>(false, ignoreRepeated: true)
 
@@ -137,6 +139,10 @@ public final class MattermostAccountSync: @unchecked Sendable {
         let sender = PostSender(sync: self)
         self.sender = sender
         self.account.mattermostSetMessageSender(sender)
+
+        let memberProvider = MemberListProvider(sync: self)
+        self.memberProvider = memberProvider
+        self.account.mattermostSetMemberProvider(memberProvider)
 
         let holeFiller = HoleFiller(sync: self)
         self.holeFiller = holeFiller

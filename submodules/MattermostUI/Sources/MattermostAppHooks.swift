@@ -13,6 +13,8 @@ import MattermostSync
 public enum MattermostAppHooks {
     public static func sharedContextCreated(_ sharedContext: SharedAccountContext) {
         MattermostSessionExpiryPresenter.shared.start(sharedContext: sharedContext)
+        // Phase 3D: interactive dialogs and live member list changes.
+        MattermostChatHooks.shared.start(sharedContext: sharedContext)
         #if DEBUG
         MattermostDebugRemote.shared.start(sharedContext: sharedContext)
         #endif

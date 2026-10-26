@@ -24,6 +24,8 @@ swift_library(
         "//submodules/CodeInputView:CodeInputView",
         "//submodules/OverlayStatusController:OverlayStatusController",
         "//submodules/ItemListUI:ItemListUI",
+        # Phase 3D: live updates of the open member lists.
+        "//submodules/TemporaryCachedPeerDataManager:TemporaryCachedPeerDataManager",
         "//submodules/MattermostKit:MattermostKit",
         "//submodules/MattermostSync:MattermostSync",
         # Phase 3A: the debug remote's simulated push delivery.

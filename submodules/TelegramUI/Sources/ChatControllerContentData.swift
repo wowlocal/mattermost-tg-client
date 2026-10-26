@@ -314,10 +314,17 @@ extension ChatControllerImpl {
                     }
                     |> distinctUntilChanged
                     |> mapToSignal { isLarge -> Signal<(total: Int32?, recent: Int32?), NoError> in
-                        // MATTERMOST: member lists come from Telegram's server (an empty list would show "0 members"); the
-                        // member count is MattermostSync's `participantsSummary`.
+                        // MATTERMOST: the member count is MattermostSync's `participantsSummary`; small groups (up to 50) also count
+                        // the online members of their member list, which comes from the Mattermost server (Phase 3D). Large groups
+                        // would ask Telegram's server for an online count.
                         if MattermostBackend.isEnabled {
-                            return .single((nil, nil))
+                            guard isLarge == false else {
+                                return .single((nil, nil))
+                            }
+                            return context.peerChannelMemberCategoriesContextsManager.recentOnlineSmall(engine: context.engine, accountPeerId: context.account.peerId, peerId: peerId)
+                            |> map { value -> (total: Int32?, recent: Int32?) in
+                                return (value.total > 0 ? value.total : nil, value.recent)
+                            }
                         }
                         if let isLarge = isLarge {
                             if isLarge {
@@ -1370,10 +1377,17 @@ extension ChatControllerImpl {
                     }
                     |> distinctUntilChanged
                     |> mapToSignal { isLarge -> Signal<(total: Int32?, recent: Int32?), NoError> in
-                        // MATTERMOST: member lists come from Telegram's server (an empty list would show "0 members"); the
-                        // member count is MattermostSync's `participantsSummary`.
+                        // MATTERMOST: the member count is MattermostSync's `participantsSummary`; small groups (up to 50) also count
+                        // the online members of their member list, which comes from the Mattermost server (Phase 3D). Large groups
+                        // would ask Telegram's server for an online count.
                         if MattermostBackend.isEnabled {
-                            return .single((nil, nil))
+                            guard isLarge == false else {
+                                return .single((nil, nil))
+                            }
+                            return context.peerChannelMemberCategoriesContextsManager.recentOnlineSmall(engine: context.engine, accountPeerId: context.account.peerId, peerId: peerId)
+                            |> map { value -> (total: Int32?, recent: Int32?) in
+                                return (value.total > 0 ? value.total : nil, value.recent)
+                            }
                         }
                         if let isLarge = isLarge {
                             if isLarge {

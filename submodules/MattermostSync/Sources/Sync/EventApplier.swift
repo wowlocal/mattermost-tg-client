@@ -26,7 +26,11 @@ extension MattermostAccountSync {
             }
         case .ephemeralMessage:
             if let post = event.decodeEmbedded(Post.self, key: "post") {
-                self.applyEphemeral(post)
+                await self.applyEphemeral(post)
+            }
+        case .openDialog:
+            if let request = event.openDialog {
+                self.applyOpenDialog(request)
             }
         case .reactionAdded, .reactionRemoved:
             if let reaction = event.reaction {
@@ -64,11 +68,18 @@ extension MattermostAccountSync {
                 await self.refreshChannel(event.broadcast.channelId)
             } else if !event.broadcast.channelId.isEmpty {
                 await self.refreshMemberCounts([event.broadcast.channelId])
+                if let userId = event.data["user_id"]?.stringValue {
+                    await self.announceMemberAdded(channelId: event.broadcast.channelId, userId: userId)
+                }
             }
         case .userRemoved:
             let channelId = event.data["channel_id"]?.stringValue ?? event.broadcast.channelId
-            if !channelId.isEmpty, event.data["user_id"]?.stringValue != self.ownUserId {
+            let userId = event.data["user_id"]?.stringValue ?? event.broadcast.userId
+            if !channelId.isEmpty, userId != self.ownUserId {
                 await self.refreshMemberCounts([channelId])
+                self.announceMemberRemoved(channelId: channelId, userId: userId)
+            } else if !channelId.isEmpty {
+                await self.applyOwnRemoval(channelId: channelId)
             }
         case .sidebarCategoryCreated, .sidebarCategoryUpdated, .sidebarCategoryDeleted, .sidebarCategoryOrderUpdated:
             await self.refreshFavorites()

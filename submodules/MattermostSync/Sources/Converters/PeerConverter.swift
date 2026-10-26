@@ -32,7 +32,8 @@ enum PeerConverter {
             username: user.username,
             phone: nil,
             photo: photo,
-            botInfo: user.isBot ? BotUserInfo(flags: [], inlinePlaceholder: nil) : nil,
+            // Mattermost bots read their channels: member lists say "has access to messages" (Phase 3D).
+            botInfo: user.isBot ? BotUserInfo(flags: [.hasAccessToChatHistory], inlinePlaceholder: nil) : nil,
             restrictionInfo: nil,
             flags: [],
             emojiStatus: nil,
@@ -49,12 +50,14 @@ enum PeerConverter {
 
     /// Public/private channels and group messages are all supergroups (`TelegramChannel` with `.group`
     /// info): basic groups never get a `threadId` on replies.
-    static func channel(_ channel: Channel, title: String, peerId: PeerId) -> TelegramChannel {
+    /// `username` is only set on the composer's `~` suggestions (the channel name to insert); stored channel
+    /// peers have none.
+    static func channel(_ channel: Channel, title: String, peerId: PeerId, username: String? = nil) -> TelegramChannel {
         return TelegramChannel(
             id: peerId,
             accessHash: .personal(0),
             title: title,
-            username: nil,
+            username: username,
             photo: [],
             creationDate: mmSeconds(channel.createAt),
             version: 0,
