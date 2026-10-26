@@ -42,6 +42,20 @@ tools/relay-release-audit.sh bazel-bin/Telegram/Telegram.ipa
 - **App Transport Security**: release builds allow no plain HTTP for the app's own connections (the login refuses `http://` servers: "Relay only connects to servers over HTTPS."); only web content in the in-app browser may be `http://`. Debug builds add `NSAllowsLocalNetworking` (`http://localhost:8065`, LAN). ATS's defaults don't block `localhost`, so an account a debug build created on `http://localhost:8065` keeps working if a release build is installed over it. To try a release build against the dev server, put a TLS proxy in front of it and trust its CA on the simulator (`xcrun simctl keychain <udid> add-root-cert ca.pem`), then log in to `https://localhost:<port>`.
 - **Version**: `versions.json` `"app"` (`0.1.0`) is `CFBundleShortVersionString`; `--buildNumber` is `CFBundleVersion` (release builds: `git rev-list --count HEAD` on main).
 
+## Device builds (your own team)
+
+```sh
+RELAY_TEAM_ID=<team id> tools/relay-device-build.sh build            # debug_arm64; or: build release_arm64
+tools/relay-device-build.sh install <udid or name>                   # xcrun devicectl list devices
+```
+
+- **Once, in the Apple Developer portal** (Certificates, Identifiers & Profiles): the App Group `group.org.relaychat.Relay`; explicit App IDs `org.relaychat.Relay` (Push Notifications, App Groups, Communication Notifications), `.NotificationService` (App Groups, Communication Notifications), `.NotificationContent` and `.Share` (App Groups), each with the group assigned (App Groups → Configure); one **iOS App Development** profile per App ID with your Apple Development certificate and your devices. Put the four `.mobileprovision` files in `~/.relay-secrets/profiles/` (or `RELAY_PROFILES_DIR`). Xcode's automatic signing can't make these here: `Make.py` signs with explicit profiles (`--codesigningInformationPath`).
+- The script writes the team id only into git-ignored `build-input/` (`relay-device-configuration.json`, `relay-device-team-id`); the committed configurations keep the placeholder. Device extensions take their entitlements from their profiles, the app from `TelegramEntitlements` (checked against its profile), so a missing capability fails the build rather than the app at run time.
+- **Run the device build in its own checkout** (e.g. `git worktree add --detach .claude/worktrees/device main`, then the submodules from the main checkout: `git config submodule.<name>.url <main checkout>/<path>` and `git -c protocol.file.allow=always submodule update`, plus `build-input/bazel-*` copied over) when simulator work is going on: a device build repoints `bazel-bin` and rewrites `build-input/configuration-repository`.
+- **Signing needs the GUI login session.** `codesign` (run by Bazel's sign actions) uses the developer key in the login keychain, which a background session cannot unlock or ask about: there the build compiles everything and then fails every sign action with `errSecInternalComponent` (`launchctl managername` prints `Background`; `security show-keychain-info` says "User interaction is not allowed"). Run the build from a terminal in the logged-in desktop session, and shut down that checkout's Bazel server first so it restarts there (`build-input/bazel-* shutdown`): the sign actions run inside the server's session. A re-run after such a failure only re-signs (~30 s).
+- `debug_arm64` keeps `NSAllowsLocalNetworking`, so it can log in to a dev server on the LAN over `http://`; `release_arm64` only accepts HTTPS servers. The dev server listens on `127.0.0.1` only, so a device needs it exposed (for example on a Tailscale or LAN address) before it can log in there.
+- Real pushes need the APNs key in the push proxy ([infra/push-proxy](../infra/push-proxy/README.md) "Production / a real APNs key"); a development build registers as `relay_apple_sandbox`.
+
 ## Run on the simulator
 
 A dedicated simulator, "Relay iPhone 17 Pro" (iOS 26.5), is used so other projects' simulators aren't touched. Its UDID is in `build-input/relay-sim-udid`.
