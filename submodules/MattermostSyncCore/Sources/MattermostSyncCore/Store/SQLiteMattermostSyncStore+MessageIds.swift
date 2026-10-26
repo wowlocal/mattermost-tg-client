@@ -26,6 +26,7 @@ enum MessageIdSQL {
     /// Without ANALYZE statistics SQLite assumes `channel_key = ?` matches ~10 rows and would scan
     /// the channel instead, so the index is named.
     static let threadReplies = "SELECT \(entryColumns) FROM posts INDEXED BY posts_by_thread_root WHERE channel_key = ?1 AND thread_root_id = ?2 ORDER BY create_at_ms, post_id"
+    static let threadRootOfPost = "SELECT thread_root_id FROM posts WHERE channel_key = ?1 AND post_id = ?2 AND thread_root_id IS NOT NULL"
 }
 
 /// The message id map on the `posts`, `post_tombstones` and `islands` tables. Semantics match
@@ -265,6 +266,18 @@ extension SQLiteMattermostSyncStore: MessageIdStore {
             }
         }
         return result
+    }
+
+    /// The thread root recorded for a mapped post (or part), or nil for a root post and unknown posts.
+    public func threadRootId(postId: String, channelId: String) throws -> String? {
+        guard let channel = try existingChannelKey(channelId) else {
+            return nil
+        }
+        var rootId: String?
+        try connection.query(MessageIdSQL.threadRootOfPost, [.integer(channel), .text(postId)]) { row in
+            rootId = row.optionalString(0)
+        }
+        return rootId.flatMap { $0.isEmpty ? nil : $0 }
     }
 
     // MARK: Maintenance and inspection

@@ -118,6 +118,14 @@ extension MattermostClient {
         return try await send(APIRequest(.get, apiPath("users", userId, "teams", teamId, "threads"), query: query.items))
     }
 
+    /// `GET /users/{user_id}/teams/{team_id}/threads/{thread_id}`: one followed thread (e.g. after
+    /// `thread_follow_changed`).
+    public func userThread(teamId: String, threadId: String, extended: Bool = false, userId: String = MattermostClient.currentUser) async throws -> UserThread {
+        var query = QueryBuilder()
+        query.addFlag("extended", extended)
+        return try await send(APIRequest(.get, apiPath("users", userId, "teams", teamId, "threads", threadId), query: query.items))
+    }
+
     /// `PUT /users/{user_id}/teams/{team_id}/threads/{thread_id}/read/{timestamp}`.
     /// - Parameter timestamp: The new `last_viewed_at` (ms).
     public func markThreadRead(teamId: String, threadId: String, timestamp: Int64, userId: String = MattermostClient.currentUser) async throws {

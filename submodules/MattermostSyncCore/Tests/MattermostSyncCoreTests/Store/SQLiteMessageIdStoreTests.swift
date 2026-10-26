@@ -371,6 +371,13 @@ final class SQLiteMessageIdStoreTests: XCTestCase {
         let replies = try XCTUnwrap(try store.threadReplies(rootPostIds: [root], channelId: channel)[root])
         XCTAssertEqual(replies.map { $0.localId }, [reply.localId + 3, store.entries(channelId: channel, postIds: [posts[30].postId])[posts[30].postId]!.localId])
         XCTAssertEqual(try store.threadReplies(rootPostIds: [root], channelId: "unknown"), [:])
+
+        // The root of a single post (collapsed reply threads: a reply opens in its thread).
+        XCTAssertEqual(try store.threadRootId(postId: posts[31].postId, channelId: channel), posts[30].postId)
+        XCTAssertEqual(try store.threadRootId(postId: posts[11].postId, channelId: channel), root)
+        XCTAssertNil(try store.threadRootId(postId: root, channelId: channel))
+        XCTAssertNil(try store.threadRootId(postId: "unmapped", channelId: channel))
+        XCTAssertNil(try store.threadRootId(postId: posts[11].postId, channelId: "unknown"))
     }
 
     func testQueryFailuresAreRecordedAndBlockWrites() throws {
