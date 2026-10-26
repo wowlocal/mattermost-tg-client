@@ -1154,6 +1154,15 @@ public func themeSettingsController(context: AccountContext, focusOnItemTag: The
         
         var chatThemes = cloudThemes.filter { $0.emoticon != nil }
         chatThemes.insert(.builtin(.dayClassic), at: 0)
+        // MATTERMOST: no server themes; the carousel offers the built-in themes (and a custom current one).
+        if !MattermostFeatures.chatThemes {
+            chatThemes = availableThemes.filter { theme in
+                if case .cloud = theme {
+                    return false
+                }
+                return true
+            }
+        }
         
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(presentationData.strings.Appearance_Title), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: themeSettingsControllerEntries(presentationData: presentationData, presentationThemeSettings: settings, chatSettings: chatSettings, mediaSettings: mediaSettings, themeReference: themeReference, availableThemes: availableThemes, availableAppIcons: availableAppIcons, currentAppIconName: currentAppIconName, isPremium: isPremium, chatThemes: chatThemes, animatedEmojiStickers: animatedEmojiStickers, accountPeer: accountPeer, nameColors: context.peerNameColors), style: .blocks, ensureVisibleItemTag: focusOnItemTag, animateChanges: false)

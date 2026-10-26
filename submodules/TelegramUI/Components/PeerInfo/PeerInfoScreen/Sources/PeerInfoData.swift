@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import Postbox
 import TelegramCore
+import MattermostSync
 import SwiftSignalKit
 import AccountContext
 import PeerPresenceStatusManager
@@ -2660,6 +2661,10 @@ func peerInfoHeaderActionButtons(peer: EnginePeer?, isSecretChat: Bool, isContac
 func peerInfoHeaderButtons(peer: EnginePeer?, cachedData: CachedPeerData?, isOpenedFromChat: Bool, isExpanded: Bool, videoCallsEnabled: Bool, isSecretChat: Bool, isContact: Bool, threadInfo: EngineMessageHistoryThread.Info?) -> [PeerInfoHeaderButtonKey] {
     var result: [PeerInfoHeaderButtonKey] = []
     if case let .user(user) = peer {
+        // MATTERMOST: a webhook's name override (a synthetic bot) has no chat: no Message, Mute, Stop or More.
+        if MattermostPostAuthors.isOverride(peer) {
+            return []
+        }
         if !isOpenedFromChat {
             result.append(.message)
         }

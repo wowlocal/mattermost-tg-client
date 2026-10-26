@@ -113,3 +113,16 @@ extension MattermostAccountSync {
         return result
     }
 }
+
+/// UI checks for the synthetic authors of `override_username` posts.
+public enum MattermostPostAuthors {
+    /// A webhook or bot name override shown as its own bot user: it has no chat, so the UI must not offer to
+    /// message it. These are the only users MattermostSync writes without a username (every Mattermost user
+    /// and bot account has one).
+    public static func isOverride(_ peer: EnginePeer?) -> Bool {
+        guard case let .user(user) = peer else {
+            return false
+        }
+        return user.botInfo != nil && (user.username ?? "").isEmpty
+    }
+}

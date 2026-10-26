@@ -254,9 +254,12 @@ private func reactionNotificationSettingsEntries(
     }
     
     entries.append(.messages(title: presentationData.strings.Notifications_Reactions_ItemMessages, text: messagesText, value: messagesValue))
-    entries.append(.stories(title: presentationData.strings.Notifications_Reactions_ItemStories, text: storiesText, value: storiesValue))
+    // MATTERMOST: no stories.
+    if MattermostFeatures.stories {
+        entries.append(.stories(title: presentationData.strings.Notifications_Reactions_ItemStories, text: storiesText, value: storiesValue))
+    }
     
-    if messagesValue || storiesValue {
+    if messagesValue || (storiesValue && MattermostFeatures.stories) {
         entries.append(.optionsHeader(presentationData.strings.Notifications_Options.uppercased()))
         
         entries.append(.previews(presentationData.strings.Notifications_Stories_DisplayName, globalSettings.reactionSettings.hideSender != .hide))

@@ -5,6 +5,7 @@ import SwiftSignalKit
 import Display
 import AsyncDisplayKit
 import TelegramCore
+import MattermostSync
 import SafariServices
 import UniformTypeIdentifiers
 import Intents
@@ -4764,13 +4765,17 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                         self?.openPeer(peer: peer, navigation: .info(nil), fromMessage: nil)
                     }))
                 ]
+                // MATTERMOST: a webhook's name override (a synthetic bot) has no chat to open or mention.
+                let isPostAuthorOverride = MattermostPostAuthors.isOverride(peer)
+                if !isPostAuthorOverride {
                 items.append(.action(ContextMenuActionItem(text: isChannel ? strongSelf.presentationData.strings.Conversation_ContextMenuOpenChannel : strongSelf.presentationData.strings.Conversation_ContextMenuSendMessage, icon: { theme in
                     return generateTintedImage(image: UIImage(bundleImageName: isChannel ? "Chat/Context Menu/Channels" : "Chat/Context Menu/Message"), color: theme.actionSheet.primaryTextColor)
                 }, action: { _, f in
                     f(.dismissWithoutContent)
                     self?.openPeer(peer: peer, navigation: .chat(textInputState: nil, subject: nil, peekData: nil), fromMessage: nil)
                 })))
-                if !isChannel && canSendMessagesToChat(strongSelf.presentationInterfaceState) {
+                }
+                if !isChannel && !isPostAuthorOverride && canSendMessagesToChat(strongSelf.presentationInterfaceState) {
                     items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.Conversation_ContextMenuMention, icon: { theme in
                         return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Mention"), color: theme.actionSheet.primaryTextColor)
                     }, action: { _, f in

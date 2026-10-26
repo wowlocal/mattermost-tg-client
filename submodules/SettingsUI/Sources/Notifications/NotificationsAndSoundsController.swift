@@ -596,11 +596,13 @@ private func notificationsAndSoundsEntries(authorizationStatus: AccessType, warn
     case .nobody:
         break
     default:
+        if MattermostFeatures.stories { // MATTERMOST: no stories
         if !reactionsValue.isEmpty {
             reactionsValue.append(", ")
         }
         hasReactionNotifications = true
         reactionsValue.append(presentationData.strings.Notifications_Reactions_SubtitleStories)
+        }
     }
     entries.append(.reactions(presentationData.theme, presentationData.strings.Notifications_Reactions, reactionsValue, hasReactionNotifications ? presentationData.strings.Notifications_On : presentationData.strings.Notifications_Off))
     
