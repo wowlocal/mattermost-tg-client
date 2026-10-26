@@ -371,6 +371,9 @@ public final class MattermostLoginController: NavigationController {
 
     private func finish(login: LoginResult, loginId: String?, server: MattermostServerDescription, step: MattermostLoginStep) {
         step.inProgress = true
+        for controller in self.viewControllers {
+            (controller as? MattermostAuthScreen)?.clearDebugFilledPasswords()
+        }
         switch self.mode {
         case let .authorization(account):
             // Before the auth record goes away: the AppDelegate then waits for the new account's UI.

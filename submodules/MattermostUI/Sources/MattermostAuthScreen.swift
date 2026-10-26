@@ -157,12 +157,26 @@ final class MattermostAuthScreen: ViewController, MattermostDebugDrivable {
 
     // MARK: MattermostDebugDrivable
 
+    private var debugFilledPasswordFields = Set<String>()
+
     func debugFill(field: String, text: String) -> Bool {
-        guard self.content.fields.contains(where: { $0.id == field }) else {
+        guard let fieldDescription = self.content.fields.first(where: { $0.id == field }) else {
             return false
+        }
+        if case .password = fieldDescription.kind {
+            self.debugFilledPasswordFields.insert(field)
         }
         self.setText(text, field: field)
         return true
+    }
+
+    /// After a successful login: empties password fields the debug remote filled, so iOS doesn't offer to
+    /// save the password (that sheet would cover scripted screenshots). Typed passwords stay untouched.
+    func clearDebugFilledPasswords() {
+        for field in self.debugFilledPasswordFields {
+            self.setText("", field: field)
+        }
+        self.debugFilledPasswordFields.removeAll()
     }
 
     func debugPress(button: String) -> Bool {

@@ -28,7 +28,11 @@ protocol MattermostDebugDrivable: AnyObject {
 /// - `switch` (`username` or `accountId`): the account switcher;
 /// - `logout` (`username` or `accountId`, default: the current account): Settings → Log Out → OK
 ///   (`logoutFromAccount`);
-/// - `relogin`: "Log In" on the session-expired alert.
+/// - `relogin`: "Log In" on the session-expired alert;
+/// - `dismiss-alerts`: "OK" on visible in-app alerts.
+///
+/// Passwords filled by the remote are cleared once the login succeeds, so iOS doesn't offer to save them
+/// (its "Save Password?" sheet would cover the next screenshots).
 final class MattermostDebugRemote {
     static let shared = MattermostDebugRemote()
     static let notificationName = "org.relaychat.Relay.debug"
@@ -108,6 +112,19 @@ final class MattermostDebugRemote {
         case "relogin":
             let ok = MattermostSessionExpiryPresenter.shared.debugOpenLogin()
             self.writeResult(id: id, ok: ok, error: ok ? nil : "no expired session")
+        case "dismiss-alerts":
+            // "OK" on in-app alerts (error alerts of the login screens).
+            var alerts: [ViewController] = []
+            self.sharedContext?.mainWindow?.forEachViewController({ controller in
+                if let controller = controller as? ViewController, String(describing: type(of: controller)).contains("Alert") {
+                    alerts.append(controller)
+                }
+                return true
+            })
+            for alert in alerts {
+                alert.dismiss()
+            }
+            self.writeResult(id: id, ok: true, error: alerts.isEmpty ? "no alert" : nil)
         default:
             self.writeResult(id: id, ok: false, error: "unknown action \(action)")
         }

@@ -130,6 +130,8 @@ public enum MattermostAccountSetup {
 
     /// Checks a server address: normalizes it, `GET /system/ping`, the client config (site name, version,
     /// login options) and the license (best effort).
+    /// Without a scheme, `https://` is tried; when insecure local servers are allowed (debug builds) and a
+    /// local host can't be reached over HTTPS, `http://` is tried too (the dev server is plain HTTP).
     public static func probe(address: String, allowInsecureLocal: Bool) async throws -> MattermostServerDescription {
         let url: URL
         do {
@@ -137,6 +139,20 @@ public enum MattermostAccountSetup {
         } catch let error as ServerAddress.NormalizationError {
             throw MattermostServerProbeError.invalidAddress(error)
         }
+        let hasScheme = address.contains("://")
+        do {
+            return try await self.probe(url: url)
+        } catch MattermostServerProbeError.unreachable(let host, let reason) {
+            let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !hasScheme, allowInsecureLocal, let urlHost = url.host, ServerAddress.isLocalHost(urlHost), let insecureURL = try? ServerAddress.normalize("http://" + trimmed, allowInsecureLocal: true) else {
+                throw MattermostServerProbeError.unreachable(host: host, reason: reason)
+            }
+            MMLog.log("probe \(url): unreachable over HTTPS; trying \(insecureURL)")
+            return try await self.probe(url: insecureURL)
+        }
+    }
+
+    private static func probe(url: URL) async throws -> MattermostServerDescription {
         let host = url.host.map { host in url.port.map { "\(host):\($0)" } ?? host } ?? url.absoluteString
         var configuration = MattermostClient.Configuration(serverURL: url, userAgent: self.userAgent)
         configuration.timeoutInterval = 15
