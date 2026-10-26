@@ -114,6 +114,8 @@ extension MattermostAccountSync {
         }
         self.state.with { $0.favoritesByTeam = favoritesByTeam }
         await self.postbox.mmTransaction { transaction in
+            // Chat list rows follow root posts with collapsed reply threads (4F).
+            self.applyChatListOrder(transaction: transaction)
             self.writeUsers(users, transaction: transaction)
             self.writePresences(statuses, transaction: transaction)
             for item in included {

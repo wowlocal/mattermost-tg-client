@@ -291,7 +291,18 @@ extension MattermostAccountSync {
                     muted = false
                 }
                 let group = transaction.getPeerChatListIndex(channelState.peerId).map { $0.0 == .root ? "root" : "archive" } ?? "none"
+                // The row's order and preview (4F: root posts under collapsed reply threads).
+                var top: [String: Any] = [:]
+                if let (_, index) = transaction.getPeerChatListIndex(channelState.peerId) {
+                    top["sortTimestamp"] = Int(index.messageIndex.timestamp)
+                    if let message = transaction.getMessage(index.messageIndex.id) {
+                        top["id"] = Int(message.id.id)
+                        top["text"] = String(message.text.prefix(60))
+                        top["isRoot"] = message.tags.contains(.mattermostRootPost)
+                    }
+                }
                 chats.append([
+                    "top": top,
                     "channelId": channelState.channel.id,
                     "name": channelState.channel.displayName.isEmpty ? channelState.channel.name : channelState.channel.displayName,
                     "type": channelState.channel.type.rawValue,
