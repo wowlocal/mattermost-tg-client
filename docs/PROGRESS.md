@@ -68,7 +68,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | # | Workstream | Status |
 |---|---|---|
 | 3A | Push notifications: push proxy infra, device registration, Notification Service Extension rewrite, reply/mark-read actions, open-on-tap | Done; merged into main by the 2D agent (`10298703`); screenshots `docs/research/phase3a-*.png`. **Real APNs needs the user's key** (steps in `infra/push-proxy/README.md`) |
-| 3B | Collapsed reply threads: channel history without replies, thread view, Threads list per team, follow/unfollow, thread read state, `_root` unread counts | Done on branch `worktree-agent-ae90daca6d833ecff` (main merged in at `fe3c3764`); design: mattermost-sync.md "Collapsed reply threads (3B)"; screenshots `docs/research/phase3b-*.png` |
+| 3B | Collapsed reply threads: channel history without replies, thread view, Threads list per team, follow/unfollow, thread read state, `_root` unread counts | Done; merged into main at `1df8fec4` (branch deleted); design: mattermost-sync.md "Collapsed reply threads (3B)"; screenshots `docs/research/phase3b-*.png` |
 | 3C | Search (posts, people, channels), recent mentions, saved posts, pin/unpin, files search | Agent working (own worktree; merges 3B first) |
 | 3D-1 | Member lists, composer autocomplete (@ ~ :), slash commands, interactive dialogs | Done (main checkout, 3B merged in at `1df8fec4`); screenshots `docs/research/phase3d1-*.png` |
 | 3D-2 | Directory & membership: browse/join/create channels, DM/GM creation from compose, channel info edit/archive/leave, add/remove members | Agent working (main checkout) |
