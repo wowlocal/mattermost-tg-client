@@ -154,15 +154,19 @@ Each consumer observes the same Postbox source the Telegram one does (`KeyedOper
 
 `MattermostFileResource(fileId, variant)`, `MattermostAvatarResource(userId, lastPictureUpdate)`, `MattermostEmojiResource(emojiId)`, all `TelegramMediaResource` + `PostboxCoding`, registered in `mattermostDeclareEncodables()` (app and every extension; R§6). Type names are part of the storage format: never rename them. Fetched through the auxiliary `fetchResource` hook with a `URLSession` that adds the bearer token and supports byte ranges.
 
-## Login (Phase 2)
+## Login (Phase 2B, implemented)
 
-Option (b) from R§1.4: at the "no primary account" branch show the MattermostUI login (server URL → credentials/SSO). On success:
-1. Create the account postbox with `AuthorizedAccountState(peerId: ownUserPeerId)` and the own user.
-2. Create the `MattermostSyncStore`, store the token in the Keychain.
-3. Create the account record (`updateRecord`, `setCurrentId`).
-4. Bootstrap runs when the account loads.
+Option (a) from R§1.4 / ui-inventory §4.3: Telegram's auth record stays; `UnauthorizedApplicationContext` shows `MattermostLoginController` (MattermostUI) instead of `AuthorizationSequenceController`, and `UnauthorizedAccount.init` skips the MTProto key prefetch and backup-address discovery. Screens: server address (ping, client config, license; minimum version `ServerCompatibility.minimumVersion`, 11.7) → credentials (login id + password as the config allows, SSO buttons) → MFA code. On success `MattermostAccountSetup.createAccount` (shared with the env-var debug login):
+1. Creates the `MattermostSyncStore` (server info, capabilities, own-user peer id = hash of server URL + user id) and stores the token in the Keychain (key: account record id).
+2. Writes `AuthorizedAccountState(peerId: ownUserPeerId)` and the own user into the auth record's postbox (the debug login uses a new record and postbox).
+3. Repeats `switchToAuthorizedAccount`: `updateRecord` (environment + sort order), `setCurrentId`, `removeAuth`.
+4. Bootstrap runs when the account loads. The same user can't be added twice (it would collide on the own peer id).
 
-Logout: `POST /users/logout`, then remove the record directly (Telegram's `managedCleanupAccounts` waits for an MTProto answer that never comes, R§1.4).
+"Add Account" (Settings, logout options, account switcher) is Telegram's `beginNewAuth` unchanged; cancel removes the auth record.
+
+**Logout:** Telegram marks the record `.loggedOut`; its `managedCleanupAccounts` is skipped while `MattermostBackend.isEnabled` (it waits for an MTProto answer that never comes). `MattermostSync.startLifecycle` watches the records instead: stop the sync, `POST /users/logout` (best effort), remove the Keychain token, remove the record, delete `<root>/account-<id>`. Keychain tokens of records that no longer exist (they survive reinstalls) are removed at launch.
+
+**Session expiry:** a 401 to a request sent with the token (MattermostKit `Configuration.onUnauthorized`, confirmed with `GET /users/me`) or a rejected WebSocket stops the sync and marks the session expired (flag in the sync store, kept across launches). MattermostUI asks "Session Expired → Log In" (again whenever the app becomes active). Re-login as the same user stores the new token and restarts the sync on the existing data; as a different user, the old account is logged out (data deleted) and a new account created, because ids, read state and caches belong to the old user.
 
 ## Spike D scope (read‑only)
 

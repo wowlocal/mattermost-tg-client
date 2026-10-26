@@ -200,6 +200,9 @@ public class UnauthorizedAccount {
         // ahead (by the engine, over whatever route works); MtProtoKit's temporary keys would only add
         // TCP connections on a network that blocks it.
         let prefetchedSelector: MTDatacenterAuthInfoSelector = network.engineKind == .rust ? .persistent : .ephemeralMain
+        // MATTERMOST: the login is Mattermost's (MattermostUI): no Telegram auth keys and no backup-address
+        // discovery for the auth record.
+        if !MattermostBackend.isEnabled {
         network.context.performBatchUpdates({
             var datacenterIds: [Int] = [1, 2]
             if testingEnvironment {
@@ -214,7 +217,8 @@ public class UnauthorizedAccount {
             }
             network.context.beginExplicitBackupAddressDiscovery()
         })
-        
+        }
+
         // Nothing is authorized yet, so a permanent key the server no longer knows is replaced rather than
         // logging anything out. Only with the Rust engine, whose logout check reaches the server over any
         // route; MtProtoKit keeps its behaviour.
