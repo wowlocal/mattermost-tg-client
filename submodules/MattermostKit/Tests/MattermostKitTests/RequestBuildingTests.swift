@@ -209,6 +209,14 @@ final class RequestBuildingTests: StubbedClientTestCase {
         await check({ _ = try await $0.user(id: "u1") }, response: Fixtures.user, method: "GET", path: "/api/v4/users/u1")
     }
 
+    func testMembersRolesAndAutocomplete() async {
+        await check({ _ = try await $0.channelMembers(channelId: "c1", page: 2, perPage: 64) }, response: "[]", method: "GET", path: "/api/v4/channels/c1/members", query: ["page": "2", "per_page": "64"])
+        await check({ _ = try await $0.channelMembers(channelId: "c1", userIds: ["u1", "u2"]) }, response: "[]", method: "POST", path: "/api/v4/channels/c1/members/ids", body: ["u1", "u2"])
+        await check({ _ = try await $0.autocompleteChannels(teamId: "t1", name: "rel") }, response: "[]", method: "GET", path: "/api/v4/teams/t1/channels/autocomplete", query: ["name": "rel"])
+        await check({ _ = try await $0.roles(names: ["system_user", "channel_user"]) }, response: "[]", method: "POST", path: "/api/v4/roles/names", body: ["system_user", "channel_user"])
+        await check({ _ = try await $0.autocompleteCustomEmoji(name: "par") }, response: "[]", method: "GET", path: "/api/v4/emoji/autocomplete", query: ["name": "par"])
+    }
+
     func testEmoji() async {
         await check({ _ = try await $0.customEmojis(page: 0, perPage: 200, sort: "name") }, response: "[]", method: "GET", path: "/api/v4/emoji", query: ["page": "0", "per_page": "200", "sort": "name"])
         await check({ _ = try await $0.customEmoji(name: "party_parrot") }, response: #"{"id":"e1","name":"party_parrot"}"#, method: "GET", path: "/api/v4/emoji/name/party_parrot")
