@@ -115,15 +115,26 @@ Failed writes the UI can't show (a refused delete, an unsendable message) appear
 
 If `simctl install` doesn't pick up a rebuilt binary (same build number), replace the installed bundle in place as described in the root `CLAUDE.md` ("Updating the running simulator after a rebuild").
 
+### Push notifications on the simulator (Phase 3A)
+
+Simulator builds (`--disableProvisioningProfiles`) get `aps-environment: development`, communication notifications and, for the notification service extension, the app group (`TelegramSimulatorEntitlements` / `NotificationServiceSimulatorEntitlements` in `Telegram/BUILD`). On Apple silicon the simulator then gets a real APNs **sandbox** token; the app logs it (`[Relay] push: APNs sandbox token …`) and every account attaches it to its session as `relay_apple_sandbox:<token>` (check with `infra/push-proxy/configure-dev-server.py --sessions alice`).
+
+- **Permission**: Relay asks after login (Telegram's permission flow), never on the login screens. Nothing can answer the system prompt in scripted runs, and `xcrun simctl privacy` has no notifications service, so allow it on the shut-down simulator: `xcrun simctl shutdown $UDID && tools/sim-allow-notifications.py $UDID && xcrun simctl boot $UDID`. Combine with `RELAY_DEBUG_NO_PERMISSION_PROMPTS=1` to skip Telegram's own prompt.
+- **`xcrun simctl push` never starts the notification service extension** (CoreSimulatorBridge hands the request straight to SpringBoard; only APNs delivery runs extensions), and a content-available-only payload (`clear`) only triggers a background fetch without its payload. So a `simctl push` shows the server's text as is. To see what the extension makes of a push, debug builds run the same code in the app: `tools/relay-remote.py $UDID simulate-push file=<payload.apns> delay=3` (the result is scheduled as a local notification `delay` seconds later, so it is also delivered after the app was put in the background, locked or terminated). Payloads: `submodules/MattermostPush/Tests/MattermostPushTests/Fixtures/`.
+- **Real server pushes**: `infra/push-proxy/sim-bridge.py --udid $UDID --deliver app` with the dev server pointed at it (`infra/push-proxy/README.md`).
+- **Taps and actions** (debug remote, the AppDelegate's own handler): `notification-open which=latest` (tap), `notification-reply which=0 "text=…"`, `notification-read which=0`, `notifications` (the delivered list); the result's `state.visibleChat` shows the chat on top. A tap that launches the app: `SIMCTL_CHILD_RELAY_DEBUG_OPEN_NOTIFICATION=latest xcrun simctl launch $UDID org.relaychat.Relay`.
+- **Real taps** work with AXe (bundled in XcodeBuildMCP's npm package, `bundled/axe`): `axe touch -x … -y … --down --up --delay 0.15 --udid $UDID` (a plain `tap` doesn't reach SpringBoard's notification platters), `axe button lock`, and `axe swipe … --delta 20` to unlock or open Notification Center from the lock screen. Edge gestures (home, Notification Center from the top) don't work; `xcrun simctl launch $UDID com.apple.Preferences` puts Relay in the background.
+
 ## Pure Swift packages
 
-`submodules/MattermostKit` and `submodules/MattermostSyncCore` are SwiftPM packages with no Telegram dependencies:
+`submodules/MattermostKit`, `submodules/MattermostSyncCore` and `submodules/MattermostPush` are SwiftPM packages with no Telegram dependencies:
 
 ```sh
 cd submodules/MattermostKit && swift test
 cd submodules/MattermostSyncCore && swift test
+cd submodules/MattermostPush && swift test
 ```
 
 ## Local Mattermost server
 
-See `infra/dev-server/README.md`.
+See `infra/dev-server/README.md`; its push proxy: `infra/push-proxy/README.md`.

@@ -207,7 +207,9 @@ public final class MattermostPushServiceHandler: @unchecked Sendable {
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: rootPath) else {
             return []
         }
-        let tokenAccountIds = Set(MattermostSessionKeychain.accountIdsWithTokens())
+        // Every account directory with a server counts, with or without a readable token (an app-only token of
+        // an earlier build is moved to the shared group only when the app runs). A logged-out account's
+        // directory is deleted right after its session ended, so the server no longer pushes for it.
         var result: [MattermostDeviceAccount] = []
         for name in names where name.hasPrefix("account-") {
             guard let unsigned = UInt64(name.dropFirst("account-".count)) else {
@@ -219,12 +221,10 @@ public final class MattermostPushServiceHandler: @unchecked Sendable {
             guard FileManager.default.fileExists(atPath: storePath) else {
                 continue
             }
-            guard let store = try? SQLiteMattermostSyncStore(path: storePath), let server = (try? store.serverInfo()) ?? nil else {
+            guard let store = try? SQLiteMattermostSyncStore(path: storePath) else {
                 continue
             }
-            // A logged-out account loses its token first, then its directory. (No tokens at all: the Keychain
-            // group is not readable here, so every account counts.)
-            if !tokenAccountIds.isEmpty && !tokenAccountIds.contains(accountId) {
+            guard let server = (try? store.serverInfo()) ?? nil else {
                 store.close()
                 continue
             }
