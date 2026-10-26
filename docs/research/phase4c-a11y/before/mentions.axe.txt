@@ -1,0 +1,22 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  Button @27,62 39x44
+  Heading "Recent Mentions" @134,74 134x20
+  GenericElement "4B 0111 Data" [Message\nFrom: Dan Abbott\nUnread 3 in 4B 0111 Data @alice please take a look] @0,114 402x76
+  GenericElement "4B 0431 Zones" [Message\nFrom: Ben Abbott\nUnread 1 in 4B 0431 Zones @alice please take a look] @0,190 402x76
+  GenericElement "4B 0273 Data" [Message\nFrom: Eve Abbott\nUnread 4 in 4B 0273 Data @alice please take a look] @0,266 402x76
+  GenericElement "4B 0207 Search" [Message\nFrom: Dan Abbott\nUnread 3 in 4B 0207 Search @alice please take a look] @0,342 402x76
+  GenericElement "4B 0151 Quality" [Message\nFrom: Dan Abbott\nUnread 3 in 4B 0151 Quality @alice please take a look] @0,418 402x76
+  GenericElement "4B 0383 Frontend" [Message\nFrom: Dan Abbott\nUnread 3 in 4B 0383 Frontend @alice please take a look] @0,494 402x76
+  GenericElement "4B 0241 Yearly" [Message\nFrom: Ben Abbott\nUnread 1 in 4B 0241 Yearly @alice please take a look] @0,570 402x76
+  GenericElement "4B 0143 Infra" [Message\nFrom: Eve Abbott\nUnread 4 in 4B 0143 Infra @alice please take a look] @0,646 402x76
+  GenericElement "4B 0157 Ux" [Message\nFrom: Cleo Abbott\nUnread 2 in 4B 0157 Ux @alice please take a look] @0,722 402x76
+  GenericElement "4B 0461 Checkout" [Message\nFrom: Ben Abbott\nUnread 1 in 4B 0461 Checkout @alice please take a look] @0,798 402x76
+  GenericElement "4B 0105 Web" [Message\nFrom: Cleo Abbott\nUnread 2 in 4B 0105 Web @alice please take a look] @0,874 402x76
+  GenericElement "4B 0129 Tooling" [Message\nFrom: Ben Abbott\nUnread 1 in 4B 0129 Tooling @alice please take a look] @0,950 402x76
+  GenericElement "4B 0436 Edge" [Message\nFrom: Dan Abbott\nUnread 3 in 4B 0436 Edge @alice please take a look] @0,1026 402x76
+  GenericElement "4B 0485 Zones" [Message\nFrom: Eve Abbott\nUnread 4 in 4B 0485 Zones @alice please take a look] @0,1102 402x76
+  GenericElement "4B 0484 Yearly" [Message\nFrom: Ben Abbott\nUnread 1 in 4B 0484 Yearly @alice please take a look] @0,1178 402x76
+  GenericElement "4B 0233 Release" [Message\nFrom: Ben Abbott\nUnread 1 in 4B 0233 Release @alice please take a look] @0,1254 402x76
+  GenericElement "4B 0052 Yearly" [Message\nFrom: Dan Abbott\nUnread 3 in 4B 0052 Yearly @alice please take a look] @0,1330 402x76

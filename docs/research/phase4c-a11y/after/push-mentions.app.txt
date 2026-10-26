@@ -1,0 +1,17 @@
+{header,text} "SEND PUSH NOTIFICATIONS FOR" @16,138 370x29
+{button} "All Activity" @16,167 370x52
+{button,selected} "Mentions, Direct and Group Messages" @16,219 370x52
+{button} "Nothing" @16,271 370x52
+{header,text} "SEND THEM WHEN I'M" @16,351 370x29
+{button,selected} "Online, Away or Offline" @16,380 370x52
+{button} "Away or Offline" @16,432 370x52
+{button} "Offline" @16,484 370x52
+{header,text} "THREADS" @16,564 370x29
+{} "All Replies to Threads I Follow" [On] (Double Tap To Toggle) @16,593 370x52
+{text} "Off: only replies that mention you." @16,645 370x30
+{header,text} "ALSO NOTIFY ME FOR" @16,703 370x29
+{} "My First Name (Alice)" [Off] (Double Tap To Toggle) @16,732 370x52
+{} "@channel, @all and @here" [On] (Double Tap To Toggle) @16,784 370x52
+{header,text} "KEYWORDS" @16,864 370x29
+{button} "Back" @16,64 44x44
+{header} "Push and Mentions" @125,76 152x20

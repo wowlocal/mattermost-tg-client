@@ -1,0 +1,24 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  Heading "Push and Mentions" @125,76 152x20
+  Heading "SEND PUSH NOTIFICATIONS FOR" @16,138 370x29
+  Button "All Activity" @16,167 370x52
+  Button "Mentions, Direct and Group Messages" @16,219 370x52
+  Button "Nothing" @16,271 370x52
+  Heading "SEND THEM WHEN I'M" @16,351 370x29
+  Button "Online, Away or Offline" @16,380 370x52
+  Button "Away or Offline" @16,432 370x52
+  Button "Offline" @16,484 370x52
+  Heading "THREADS" @16,564 370x29
+  GenericElement "All Replies to Threads I Follow" [On] (Double Tap To Toggle) @16,593 370x52
+  CheckBox [1] @308,605 63x28
+  StaticText "Off: only replies that mention you." @16,645 370x30
+  Heading "ALSO NOTIFY ME FOR" @16,703 370x29
+  GenericElement "My First Name (Alice)" [Off] (Double Tap To Toggle) @16,732 370x52
+  CheckBox [0] @308,744 63x28
+  GenericElement "@channel, @all and @here" [On] (Double Tap To Toggle) @16,784 370x52
+  CheckBox [1] @308,796 63x28
+  Heading "KEYWORDS" @16,864 370x29
+  TextField [Keywords, separated by commas] (Keywords, separated by commas) @32,893 306x50
+  StaticText "@alice always mentions you. Keywords aren't case-sensitive." @16,945 370x46

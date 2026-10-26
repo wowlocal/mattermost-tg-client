@@ -1,0 +1,16 @@
+{} "" [Search people] (Search people) @32,138 306x50
+{text} "Choose 2 to 7 people. A group message keeps the members it starts with." @16,225 370x45
+{header,text} "PEOPLE" @16,299 370x29
+{button} "Bob Brennan" [@bob · Backend Lead] @0,328 402x60
+{button} "Build Bot" [@buildbot · bot] @0,388 402x60
+{button} "Calls" [@calls · bot] @0,448 402x60
+{button,selected} "Carol Núñez" [@carol · Product Designer] @0,508 402x60
+{button} "Dave Okafor-Lindqvist" [@dave · Site Reliability Engineer] @0,568 402x60
+{button} "Ben Abbott" [@l4b0001 · SRE] @0,628 402x60
+{button} "Cleo Abbott" [@l4b0002] @0,688 402x60
+{button} "Dan Abbott" [@l4b0003 · Engineer] @0,748 402x60
+{button} "Eve Abbott" [@l4b0004 · Support] @0,808 402x60
+{button} "Finn Abbott" [@l4b0005 · Engineer] @0,868 402x60
+{button} "Back" @16,64 44x44
+{button} "Create" @320,64 54x44
+{header} "New Group Message" @118,76 165x20

@@ -1,0 +1,28 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  Heading "Devices" @169,76 63x20
+  Heading "THIS DEVICE" @16,138 370x29
+  Button "Relay · iOS" [This device, active now] @16,167 370x68
+  Button "Terminate All Other Sessions" @16,235 370x52
+  StaticText "Logs out every other device and browser where you're logged in to this server." @16,287 370x46
+  Heading "ACTIVE SESSIONS" @16,361 370x29
+  Button "Relay · iOS" [last active Today at 6:10 PM] @16,390 370x68
+  Button "Unknown client" [last active Today at 6:04 PM] @16,458 370x68
+  Button "Relay · iOS" [last active Today at 5:55 PM] @16,526 370x68
+  Button "Relay · iOS" [last active Today at 5:55 PM] @16,594 370x68
+  Button "Relay · iOS" [last active Today at 5:54 PM] @16,662 370x68
+  Button "Unknown client" [last active Today at 5:27 PM] @16,730 370x68
+  Button "Unknown client" [last active Today at 5:27 PM] @16,798 370x68
+  Button "Unknown client" [last active Today at 5:25 PM] @16,866 370x68
+  Button "Unknown client" [last active Today at 4:51 PM] @16,934 370x68
+  Button "Unknown client" [last active Today at 4:04 PM] @16,1002 370x68
+  Button "Unknown client" [last active Today at 3:01 PM] @16,1070 370x68
+  Button "Unknown client" [last active Today at 3:00 PM] @16,1138 370x68
+  Button "Unknown client" [last active Today at 1:49 PM] @16,1206 370x68
+  Button "Unknown client" [last active Today at 1:38 PM] @16,1274 370x68
+  Button "Relay · iOS" [last active Today at 1:34 PM] @16,1342 370x68
+  Button "Relay · iOS" [last active Today at 1:17 PM] @16,1410 370x68
+  Button "Relay · iOS" [last active Today at 12:17 PM] @16,1478 370x68
+  Button "Desktop App" [last active Today at 11:15 AM] @16,1546 370x68
+  Button "Desktop App" [last active Today at 11:00 AM] @16,1614 370x68

@@ -1,0 +1,21 @@
+{} "admin" @285,675 63x33
+{button} "2 Replies" @47,750 300x42
+{} "Bob Brennan" [Thread root for 4C: who reviews the VoiceOver labels?\nOct 26, 2026 at 6:28 PM] +Reply|Open message menu @41,676 306x116
+{button} "Approve" @47,585 130x42
+{button} "Reject" @179,585 130x42
+{button} "Environment" (Opens a list of options) @47,629 263x42
+{} "Bob Brennan" [A deploy needs approval\n\nDeploy api 4.2.0\nRolls out to staging first.\nEnvironment: staging\nOwner: @bob\nrelay-4c\nOct 26, 2026 at 6:28 PM] +Reply|Open message menu @41,420 269x164
+{} "Bob Brennan" [Release checklist\n\nStep, Owner, Done\nBuild, bob, yes\nNotes, alice, no\nOct 26, 2026 at 6:28 PM] +Reply|Open message menu @41,256 257x164
+{} "Bob Brennan" [שלום לכולם — בדיקת טקסט מימין לשמאל.\nOct 26, 2026 at 6:28 PM] +Reply|Open message menu @41,184 270x72
+{} "admin" @291,90 63x33
+{} "Bob Brennan" [مرحبا بالجميع! هذا اختبار للنص من اليمين إلى اليسار في Relay.\nOct 26, 2026 at 6:28 PM] +Reply|Open message menu @41,91 312x93
+{} "Bob Brennan" [Alice Anderson was added to the channel by Bob Brennan.\nOct 26, 2026 at 6:28 PM] +Open message menu @53,50 295x36
+{} "Bob Brennan" [Bob Brennan joined the channel.\nOct 26, 2026 at 6:28 PM] +Open message menu @90,25 221x20
+{button} "Back" @16,64 44x44
+{button} "Info" @342,64 44x44
+{} "" (Message) @84,811 235x31
+{button} "Stickers" @294,806 32x40
+{button} "Send media" @26,806 40x40
+{button} "Send" @323,825 0x0
+{button} "Send" @336,806 46x40
+{text} "ABC" @0,62 0x0

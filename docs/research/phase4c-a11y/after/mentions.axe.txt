@@ -1,0 +1,23 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  Button "Back" @27,62 39x44
+  Button @8,73 13x22
+  Heading "Recent Mentions" @134,74 134x20
+  GenericElement "4C Accessibility" [Message\nFrom: Bob Brennan\nRelease checklist\n\nStep  | Owner | Done\n------+-------+-----\nBuild | bob   | yes\nNotes | alice |  no] @0,114 402x76
+  GenericElement "3E Public" [Message\nFrom: Bob Brennan\nA post in a channel alice hasn't joined] @0,190 402x76
+  GenericElement "3E Links" [Message\nFrom: Bob Brennan\nOpen the root, ~off-topic, http://localhost:8065/engineering/channels/town-square, http://localhost:8065/engineering/messages/@alice and relay://localhost:8065/engineering/pl/bpczw493nbb1ir5a946cn4o9ry] @0,266 402x76
+  GenericElement "3E Links" [Message\nFrom: Bob Brennan\nNarrow table:\nName | Qty\n-----+----\ntea  |   2\nmilk |  10\n\nWide table:\napi\nOwner: @alice\nStatus: ✅ up\nNotes: see runbook\n\nworker\nOwner: @bob\nStatus: down\nNotes: restarting] @0,342 402x76
+  GenericElement "Code Review" [Message\nFrom: Bob Brennan\n3B live: @alice SwiftLint is now enforced in CI] @0,418 402x76
+  GenericElement "Releases" [Message\nFrom: Bob Brennan\n3B live: bob replies while alice has the thread open] @0,494 402x76
+  GenericElement "Sandbox" [Outgoing Message\n3A merge smoke test from alice] @0,570 402x76
+  GenericElement "Sandbox" [Message\nFrom: Bob Brennan\nFixture: a reply in alice's thread] @0,646 402x76
+  GenericElement "Code Review" [Message\nFrom: Bob Brennan\n@alice fixture: a channel mention] @0,722 402x76
+  GenericElement "Sandbox" [Outgoing Message\n📎 2D files tab: two notes from alice] @0,798 402x76
+  GenericElement "Sandbox" [Outgoing Message\n🖼 2D media tab: three photos from alice] @0,874 402x76
+  GenericElement "Sandbox" [Message\nFrom: Bob Brennan\n2D check: @alice ping in a channel] @0,950 402x76
+  GenericElement "alice, bob, carol" [Message\nFrom: Bob Brennan\n2D check: @alice in the group message] @0,1026 402x76
+  GenericElement "Bob Brennan" [Message\nFrom: Bob Brennan\n2D check: hey @alice, DM mention] @0,1102 402x76
+  GenericElement "Bob Brennan" [Message\nFrom: Bob Brennan\nbob → alice DM (bob is also signed in here)] @0,1178 402x76
+  GenericElement "Dave Okafor-Lindqvist" [Message\nFrom: Dave Okafor-Lindqvist\nHi Alice, dave here (for alice)] @0,1254 402x76
+  GenericElement "Off-Topic" [Message\nFrom: Bob Brennan\n@alice coffee in 10?] @0,1330 402x76

@@ -1,0 +1,25 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  Heading "New Group Message" @118,76 165x20
+  TextField [Search people] (Search people) @32,138 306x50
+  StaticText "Choose 2 to 7 people. A group message keeps the members it starts with." @16,225 370x45
+  Heading "PEOPLE" @16,299 370x29
+  GenericElement "Bob Brennan" [@bob · Backend Lead] @0,328 402x60
+  GenericElement "Build Bot" [@buildbot · bot] @0,388 402x60
+  GenericElement "Calls" [@calls · bot] @0,448 402x60
+  GenericElement "Carol Núñez" [@carol · Product Designer] @0,508 402x60
+  GenericElement "Dave Okafor-Lindqvist" [@dave · Site Reliability Engineer] @0,568 402x60
+  GenericElement "Ben Abbott" [@l4b0001 · SRE] @0,628 402x60
+  GenericElement "Cleo Abbott" [@l4b0002] @0,688 402x60
+  GenericElement "Dan Abbott" [@l4b0003 · Engineer] @0,748 402x60
+  GenericElement "Eve Abbott" [@l4b0004 · Support] @0,808 402x60
+  GenericElement "Finn Abbott" [@l4b0005 · Engineer] @0,868 402x60
+  GenericElement "Gus Abbott" [@l4b0006 · PM] @0,928 402x60
+  GenericElement "Hana Abbott" [@l4b0007 · Support] @0,988 402x59
+  GenericElement "Ivo Abbott" [@l4b0008 · Designer] @0,1048 402x60
+  GenericElement "Jun Abbott" [@l4b0009 · SRE] @0,1108 402x60
+  GenericElement "Kai Abbott" [@l4b0010 · Engineer] @0,1168 402x60
+  GenericElement "Lea Abbott" [@l4b0011] @0,1228 402x60
+  GenericElement "Mo Abbott" [@l4b0012 · Designer] @0,1288 402x60
+  GenericElement "Nia Abbott" [@l4b0013 · Support] @0,1348 402x60

@@ -1,0 +1,16 @@
+{button} "Open form" @57,749 336x42
+{} "Your message" [Deployment request\n\nOpen the form to deploy a service.\nOct 26, 2026 at 1:30 PM\n] +Reply|Open message menu @57,659 342x89
+{} "Build Bot" [Deploy form submitted (relay-deploy, state relay-state-42): count=2, email=oncall@example.com, env=staging, name=api, notes=Roll out after 6pm, notify=True, reviewer=y3cc5wou3inxddiqj6b3fow4ic, strategy=rolling\nOct 26, 2026 at 1:30 PM] +Reply|Open message menu @41,464 319x191
+{} "deploy-bot" [2D: deploy finished (webhook name override; its profile has no Send Message)\nOct 26, 2026 at 12:29 PM] +Reply|Open message menu @41,359 305x100
+{} "Build Bot" [Release 3.0.2: Track → phased\n\nRelease 3.0.2\nStatus: Track → phased\nrelay-2c responder\nOct 26, 2026 at 11:20 AM] +Reply|Open message menu @41,194 263x160
+{} "backup-cron" [Second backup run finished (same override as the seed post)\nOct 26, 2026 at 11:18 AM] +Reply|Open message menu @41,113 297x77
+{} "deploy-bot" [Deploy finished 🚀 (webhook override test)\nOct 26, 2026 at 11:17 AM] +Reply|Open message menu @41,31 257x77
+{} "Build Bot" [Release 3.0.1: Track by @alice\n\nRelease 3.0.1\nStatus: Track by @alice\nrelay-2c responder\nOct 26, 2026 at 11:06 AM] +Reply|Open message menu @41,-114 258x141
+{button} "Back" @16,64 44x44
+{button} "Info" @342,64 44x44
+{} "" (Message) @84,811 235x31
+{button} "Stickers" @294,806 32x40
+{button} "Send media" @26,806 40x40
+{button} "Send" @323,825 0x0
+{button} "Send" @336,806 46x40
+{text} "ABC" @0,62 0x0

@@ -1,0 +1,26 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  ScrollArea @0,0 402x874
+    Heading "Custom Status" @142,94 118x20
+    Heading "STATUS" @16,156 370x29
+    TextField [What's your status?] (What's your status?) @32,237 306x50
+    StaticText "Your status shows next to your name in chats and on your profile." @16,289 370x46
+    Heading "CLEAR AFTER" @16,363 370x29
+    GenericElement "Don't Clear" @16,392 370x52
+    GenericElement "30 Minutes" @16,444 370x52
+    GenericElement "1 Hour" @16,496 370x52
+    GenericElement "4 Hours" @16,548 370x52
+    GenericElement "Today" [Selected] @16,600 370x52
+    GenericElement "This Week" @16,652 370x52
+    GenericElement "Choose Date and Time" @16,704 370x52
+    Heading "RECENT" @16,784 370x29
+    Button "Working on Relay 3F" [Today] @16,813 370x52
+    Button "Out for lunch" [30 Minutes] @16,865 370x52
+    Button "Back in a minute" @16,917 370x52
+    Button "Shipping 3F" [1 Hour] @16,969 370x52
+    Heading "SUGGESTIONS" @16,1049 370x29
+    Button "In a meeting" [1 Hour] @16,1078 370x52
+    Button "Out sick" [Today] @16,1130 370x52
+    Button "Working from home" [Today] @16,1182 370x52
+    Button "On a vacation" [This Week] @16,1234 370x52

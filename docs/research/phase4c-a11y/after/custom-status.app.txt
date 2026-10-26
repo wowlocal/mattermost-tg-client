@@ -1,0 +1,18 @@
+{button} "Out for lunch" [30 Minutes] @16,865 370x52
+{button} "Working on Relay 3F" [Today] @16,813 370x52
+{header,text} "RECENT" @16,784 370x29
+{header,text} "STATUS" @16,156 370x29
+{button} "Emoji" @16,185 370x52
+{} "" [What's your status?] (What's your status?) @32,237 306x50
+{text} "Your status shows next to your name in chats and on your profile." @16,289 370x46
+{header,text} "CLEAR AFTER" @16,363 370x29
+{button} "Don't Clear" @16,392 370x52
+{button} "30 Minutes" @16,444 370x52
+{button} "1 Hour" @16,496 370x52
+{button} "4 Hours" @16,548 370x52
+{button,selected} "Today" @16,600 370x52
+{button} "This Week" @16,652 370x52
+{button} "Choose Date and Time" @16,704 370x52
+{button} "Cancel" @28,82 54x44
+{button} "Set" @347,82 27x44
+{header} "Custom Status" @142,94 118x20

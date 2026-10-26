@@ -1,0 +1,43 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  Group "Integrations" [5 members] @112,56 178x60
+  Image @0,0 402x874
+  Image @40,-275 294x162
+  GenericElement @56,-270 65x23
+  GenericElement "Build Bot" [Release 3.0.0: Approved by @alice\n\nRelease 3.0.0\nStatus: Approved by @alice\nrelay-2c responder\nOct 26, 2026 at 10:58 AM] @41,-274 292x160 +actions:Reply|Open message menu
+  Image @40,-115 260x143
+  GenericElement "Build Bot" [Release 3.0.1: Track by @alice\n\nRelease 3.0.1\nStatus: Track by @alice\nrelay-2c responder\nOct 26, 2026 at 11:06 AM] @41,-114 258x141 +actions:Reply|Open message menu
+  Image @40,30 259x79
+  GenericElement @56,35 79x23
+  GenericElement "deploy-bot" [Deploy finished 🚀 (webhook override test)\nOct 26, 2026 at 11:17 AM] @41,31 257x77 +actions:Reply|Open message menu
+  Image @40,112 299x79
+  GenericElement @56,117 91x23
+  GenericElement "backup-cron" [Second backup run finished (same override as the seed post)\nOct 26, 2026 at 11:18 AM] @41,113 297x77 +actions:Reply|Open message menu
+  GenericElement @56,198 65x23
+  Image @40,193 265x162
+  GenericElement "Build Bot" [Release 3.0.2: Track → phased\n\nRelease 3.0.2\nStatus: Track → phased\nrelay-2c responder\nOct 26, 2026 at 11:20 AM] @41,194 263x160 +actions:Reply|Open message menu
+  GenericElement @56,363 79x23
+  Image @40,358 307x102
+  GenericElement "deploy-bot" [2D: deploy finished (webhook name override; its profile has no Send Message)\nOct 26, 2026 at 12:29 PM] @41,359 305x100 +actions:Reply|Open message menu
+  Image @40,463 321x193
+  GenericElement @56,468 65x23
+  GenericElement "Build Bot" [Deploy form submitted (relay-deploy, state relay-state-42): count=2, email=oncall@example.com, env=staging, name=api, notes=Roll out after 6pm, notify=True, reviewer=y3cc5wou3inxddiqj6b3fow4ic, strategy=rolling\nOct 26, 2026 at 1:30 PM] @41,464 319x191 +actions:Reply|Open message menu
+  Image @56,658 344x91
+  GenericElement "Your message" [Deployment request\n\nOpen the form to deploy a service.\nOct 26, 2026 at 1:30 PM\n] @57,659 342x89 +actions:Reply|Open message menu
+  Button "Open form" @57,749 336x42
+  Button @57,749 336x42
+  Image @57,749 336x42
+  TextArea (Message) @84,811 235x31
+  Image @91,825 0x0
+  Button @284,806 46x40
+  Image @300,819 14x14
+  Button "Stickers" @294,806 32x40
+  Group "Menu" @45,825 0x0
+  Button "Send media" @26,806 40x40
+  Image @26,806 40x40
+  GenericElement @26,806 40x40
+  Button "Start " @18,812 366x50
+  Button "Send" @323,825 0x0
+  Button "Send" @336,806 46x40
+  GenericElement @379,806 0x0

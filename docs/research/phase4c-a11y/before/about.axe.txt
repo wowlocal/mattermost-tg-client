@@ -1,0 +1,7 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  Heading "About Relay" @153,76 96x20
+  Button "Version" [13.0.1 (1)] @16,138 370x52
+  Button "Source Code" [example.com] @16,225 370x51
+  StaticText "Relay is built from the open-source Telegram-iOS project. Its complete source code, including Relay's changes, is published at the address above.\n\nRelay is an independent app. It is not affiliated with or endorsed by Telegram or Mattermost." @16,277 370x110
