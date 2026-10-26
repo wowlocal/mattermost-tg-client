@@ -401,7 +401,10 @@ public func stringWithAppliedEntities(_ text: String, entities: [MessageTextEnti
                 if let codeBlockTitleColor, let codeBlockAccentColor, let codeBlockBackgroundColor {
                     var title: NSAttributedString?
                     if let language, !language.isEmpty {
-                        title = NSAttributedString(string: language.capitalized, font: boldFont.withSize(round(boldFont.pointSize * 0.8235294117647058)), textColor: codeBlockTitleColor)
+                        // MATTERMOST: a Mattermost table's grid is a code block named "table" (MattermostSyncCore);
+                        // its title is the word in the app's language.
+                        let titleText = MattermostBackend.isEnabled && language == "table" ? (strings?.Relay_Markdown_Table ?? language.capitalized) : language.capitalized
+                        title = NSAttributedString(string: titleText, font: boldFont.withSize(round(boldFont.pointSize * 0.8235294117647058)), textColor: codeBlockTitleColor)
                     }
                     string.addAttribute(NSAttributedString.Key(rawValue: "Attribute__Blockquote"), value: TextNodeBlockQuoteData(kind: .code(language: language), title: title, color: codeBlockAccentColor, secondaryColor: nil, tertiaryColor: nil, backgroundColor: codeBlockBackgroundColor, isCollapsible: false), range: range)
                 }

@@ -1,6 +1,7 @@
 import Foundation
 import TelegramPresentationData
 import MattermostKit
+import MattermostSyncCore
 import MattermostSync
 
 /// User-facing texts for MattermostSync's errors, from the presentation strings (`Relay.strings`). MattermostSync
@@ -63,6 +64,66 @@ extension PresentationStrings {
             return self.Relay_Login_Error_RateLimited
         default:
             return error.errorDescription ?? self.Relay_Login_Error_Failed
+        }
+    }
+
+    /// One of Mattermost's suggested custom statuses (`CustomStatusSuggestion.defaults`, English) in the app's language.
+    func relayCustomStatusSuggestion(_ suggestion: CustomStatusSuggestion) -> String {
+        switch suggestion.emoji {
+        case "calendar":
+            return self.Relay_CustomStatus_Suggestion_Meeting
+        case "hamburger":
+            return self.Relay_CustomStatus_Suggestion_Lunch
+        case "sneezing_face":
+            return self.Relay_CustomStatus_Suggestion_Sick
+        case "house":
+            return self.Relay_CustomStatus_Suggestion_Home
+        case "palm_tree":
+            return self.Relay_CustomStatus_Suggestion_Vacation
+        default:
+            return suggestion.text
+        }
+    }
+
+    /// A MattermostSync toast (a write that failed) in the app's language.
+    func relayNotice(_ notice: MattermostNotice) -> String {
+        switch notice {
+        case let .uploadFailed(detail):
+            return self.Relay_Notice_UploadFailed(detail).string
+        case .sendChatMissing:
+            return self.Relay_Notice_SendChatMissing
+        case let .sendFailed(detail):
+            return self.Relay_Notice_SendFailed(detail).string
+        case .editTooEarly:
+            return self.Relay_Notice_EditTooEarly
+        case let .editFailed(detail):
+            return self.Relay_Notice_EditFailed(detail).string
+        case .reactionFailed:
+            return self.Relay_Notice_ReactionFailed
+        case .deleteForbidden:
+            return self.Relay_Notice_DeleteForbidden
+        case let .deleteFailed(detail):
+            return self.Relay_Notice_DeleteFailed(detail).string
+        case let .notificationsFailed(detail):
+            return self.Relay_Notice_NotificationsFailed(detail).string
+        case let .favoritesFailed(detail):
+            return self.Relay_Notice_FavoritesFailed(detail).string
+        case let .leaveFailed(detail):
+            return self.Relay_Notice_LeaveFailed(detail).string
+        case .pinFailed:
+            return self.Relay_Notice_PinFailed
+        case .unpinFailed:
+            return self.Relay_Notice_UnpinFailed
+        case .unpinAllFailed:
+            return self.Relay_Notice_UnpinAllFailed
+        case .saveFailed:
+            return self.Relay_Notice_SaveFailed
+        case .unsaveFailed:
+            return self.Relay_Notice_UnsaveFailed
+        case let .followFailed(detail):
+            return self.Relay_Notice_FollowFailed(detail).string
+        case let .unfollowFailed(detail):
+            return self.Relay_Notice_UnfollowFailed(detail).string
         }
     }
 

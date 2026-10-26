@@ -415,7 +415,7 @@ extension MattermostAccountSync {
     /// Nil on success.
     func editPost(messageId: MessageId, text: String, entities: [MessageTextEntity]) async -> RequestEditMessageError? {
         guard let reference = self.postReference(for: messageId) else {
-            self.notice("This message can't be edited yet.")
+            self.notice(.editTooEarly)
             return .generic
         }
         let markdown = await self.postbox.mmTransaction { transaction in
@@ -436,7 +436,7 @@ extension MattermostAccountSync {
             return nil
         } catch {
             MMLog.log("edit: \(messageId) (post \(reference.postId)) failed: \(error)")
-            self.notice("Couldn't edit the message: \(describeError(error))")
+            self.notice(.editFailed(detail: describeError(error)))
             if let error = error as? MattermostError, case .forbidden = error {
                 return .restricted
             }

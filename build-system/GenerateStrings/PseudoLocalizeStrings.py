@@ -48,7 +48,8 @@ def _pseudo_text(text):
 def pseudo_value(key, value):
     if not value or not re.search(r'[A-Za-z]', _protected.sub('', value)):
         return value
-    if key.endswith('URL') or key.endswith('Url') or re.fullmatch(r'\s*[A-Za-z][A-Za-z0-9+.-]*:\S*\s*', value):
+    # A value that is only a link (Telegram's FAQ and support URLs) stays usable.
+    if re.fullmatch(r'\s*[A-Za-z][A-Za-z0-9+.-]*://\S*\s*|\s*(mailto|tel):\S+\s*', value):
         return value
     pieces = []
     position = 0

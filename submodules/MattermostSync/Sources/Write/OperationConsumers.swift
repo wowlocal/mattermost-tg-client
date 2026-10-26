@@ -248,7 +248,7 @@ extension MattermostAccountSync {
         }
         if !failures.isEmpty {
             MMLog.log("reactions: \(messageId) failed: \(failures.joined(separator: "; "))")
-            self.notice("Couldn't update the reaction.")
+            self.notice(.reactionFailed)
         }
         return true
     }
@@ -298,13 +298,13 @@ extension MattermostAccountSync {
                         MMLog.log("delete: post \(reference.postId) failed (\(error.statusCode.map(String.init) ?? "-")): \(describeError(error)); restoring it")
                         await self.restorePost(reference)
                         if case .forbidden = error {
-                            self.notice("You can't delete this message.")
+                            self.notice(.deleteForbidden)
                         } else {
-                            self.notice("Couldn't delete the message: \(describeError(error))")
+                            self.notice(.deleteFailed(detail: describeError(error)))
                         }
                     } catch {
                         await self.restorePost(reference)
-                        self.notice("Couldn't delete the message: \(describeError(error))")
+                        self.notice(.deleteFailed(detail: describeError(error)))
                     }
                 }
             } else {
@@ -396,7 +396,7 @@ extension MattermostAccountSync {
             await self.postbox.mmTransaction { transaction in
                 transaction.updatePendingPeerNotificationSettings(peerId: peerId, settings: nil)
             }
-            self.notice("Couldn't change notifications: \(describeError(error))")
+            self.notice(.notificationsFailed(detail: describeError(error)))
         }
         return true
     }
@@ -445,7 +445,7 @@ extension MattermostAccountSync {
                 } catch let error as MattermostError where error.isTransient {
                     return false
                 } catch {
-                    self.notice("Couldn't update favorites: \(describeError(error))")
+                    self.notice(.favoritesFailed(detail: describeError(error)))
                 }
             }
         }
@@ -625,7 +625,7 @@ extension MattermostAccountSync {
                         }
                         MMLog.log("favorites: team \(change.teamId) folder +\(added) -\(removed)")
                     } catch {
-                        self.notice("Couldn't update favorites: \(describeError(error))")
+                        self.notice(.favoritesFailed(detail: describeError(error)))
                     }
                 }
             }

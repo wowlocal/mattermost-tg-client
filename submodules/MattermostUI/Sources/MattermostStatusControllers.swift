@@ -827,13 +827,15 @@ public func mattermostCustomStatusController(context: AccountContext, pickEmoji:
                 entries.append(.recent(index: index, status: status, label: duration.map { MattermostStatusAppearance.customStatusDurationTitle($0, strings: strings) } ?? ""))
             }
         }
+        // Mattermost's clients show (and set) the suggestions in the user's language (4C).
         let suggestions = CustomStatusSuggestion.defaults.filter { suggestion in
-            !recent.contains(where: { $0.emojiName == suggestion.emoji && $0.text == suggestion.text })
+            let text = strings.relayCustomStatusSuggestion(suggestion)
+            return !recent.contains(where: { $0.emojiName == suggestion.emoji && ($0.text == text || $0.text == suggestion.text) })
         }
         if !suggestions.isEmpty {
             entries.append(.header(section: 3, text: strings.Relay_CustomStatus_Suggestions))
             for (index, suggestion) in suggestions.enumerated() {
-                let status = MattermostCustomStatus(emojiName: suggestion.emoji, text: suggestion.text, duration: suggestion.duration.apiValue, expiresAt: nil)
+                let status = MattermostCustomStatus(emojiName: suggestion.emoji, text: strings.relayCustomStatusSuggestion(suggestion), duration: suggestion.duration.apiValue, expiresAt: nil)
                 entries.append(.suggestion(index: index, status: status, duration: suggestion.duration, label: MattermostStatusAppearance.customStatusDurationTitle(suggestion.duration, strings: strings)))
             }
         }

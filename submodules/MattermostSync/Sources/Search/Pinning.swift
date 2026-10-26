@@ -24,7 +24,7 @@ extension MattermostAccountSync {
         } catch {
             MMLog.log("pin: \(pinned ? "pin" : "unpin") \(reference.postId) failed: \(error)")
             if !(await MattermostSync.isSessionRejected(error, sync: self)) {
-                self.notice(pinned ? "The message couldn't be pinned." : "The message couldn't be unpinned.")
+                self.notice(pinned ? MattermostNotice.pinFailed : MattermostNotice.unpinFailed)
             }
             return false
         }
@@ -55,7 +55,7 @@ extension MattermostAccountSync {
             return true
         } catch {
             MMLog.log("pin: unpinning all of \(channelId) failed: \(error)")
-            self.notice("The messages couldn't be unpinned.")
+            self.notice(.unpinAllFailed)
             return false
         }
     }

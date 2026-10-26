@@ -19,6 +19,11 @@ public enum MattermostAppHooks {
         MattermostUIHooks.makeNotificationPreferencesController = { context in
             return mattermostNotificationPreferencesController(context: context)
         }
+        // Phase 4C: MattermostSync's toasts in the app's language.
+        MattermostSync.noticeText = { [weak sharedContext] notice in
+            let strings = sharedContext?.currentPresentationData.with({ $0 }).strings ?? defaultPresentationStrings
+            return strings.relayNotice(notice)
+        }
         #if DEBUG
         MattermostDebugRemote.shared.start(sharedContext: sharedContext)
         #endif
