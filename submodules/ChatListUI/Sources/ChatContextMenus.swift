@@ -178,7 +178,7 @@ func chatContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, promoI
                         let isSavedMessages = peerId == context.account.peerId
                         
                         if !isSavedMessages, case let .user(peer) = peer, !peer.flags.contains(.isSupport), peer.botInfo == nil && !peer.isDeleted {
-                            if !isContact {
+                            if !isContact && MattermostFeatures.contacts { // MATTERMOST: no phone contacts
                                 items.append(.action(ContextMenuActionItem(text: strings.ChatList_Context_AddToContacts, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/AddUser"), color: theme.contextMenu.primaryColor) }, action: { _, f in
                                     context.sharedContext.openAddPersonContact(context: context, peerId: peerId, pushController: { controller in
                                         if let navigationController = chatListController?.navigationController as? NavigationController {
