@@ -1342,12 +1342,10 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                         print("Application: context took \(readyTime) to become ready")
                     }
                     print("Launch to ready took \((CFAbsoluteTimeGetCurrent() - launchStartTime) * 1000.0) ms")
-                    // MATTERMOST: cold start to chat list (Phase 4B performance checks), debug builds.
-                    #if DEBUG
+                    // MATTERMOST: cold start to chat list (Phase 4B performance checks; every build since 4E).
                     if firstTime {
-                        NSLog("[Relay] perf: chat list ready %.0f ms after didFinishLaunching, %.0f ms after process start", (CFAbsoluteTimeGetCurrent() - launchStartTime) * 1000.0, relayDebugProcessAge() * 1000.0)
+                        relayLogChatListReady(launchStartTime: launchStartTime)
                     }
-                    #endif
 
                     self.mainWindow.debugAction = nil
                     self.mainWindow.viewController = context.rootController
