@@ -21,6 +21,8 @@ private final class PendingUpdateMessageManagerImpl {
     let mediaReferenceRevalidationContext: MediaReferenceRevalidationContext
     
     var transformOutgoingMessageMedia: TransformOutgoingMessageMedia?
+    // MATTERMOST: edits go to the Mattermost server while `MattermostBackend.isEnabled`.
+    var mattermostSender: MattermostMessageSender?
     
     private var updatingMessageMediaValue: [MessageId: ChatUpdatingMessageMedia] = [:] {
         didSet {
@@ -81,7 +83,18 @@ private final class PendingUpdateMessageManagerImpl {
         self.updateValues()
 
         let queue = self.queue
-        disposable.set((requestEditMessage(accountPeerId: self.stateManager.accountPeerId, postbox: self.postbox, network: self.network, stateManager: self.stateManager, transformOutgoingMessageMedia: self.transformOutgoingMessageMedia, messageMediaPreuploadManager: self.messageMediaPreuploadManager, mediaReferenceRevalidationContext: self.mediaReferenceRevalidationContext, messageId: messageId, text: text, media: media, entities: entities, richText: richText, inlineStickers: inlineStickers, webpagePreviewAttribute: webpagePreviewAttribute, disableUrlPreview: disableUrlPreview, scheduleInfoAttribute: nil, invertMediaAttribute: invertMediaAttribute)
+        let editSignal: Signal<RequestEditMessageResult, RequestEditMessageError>
+        // MATTERMOST: `PUT /posts/{id}/patch` through MattermostSync; only the text of a post can change.
+        if MattermostBackend.isEnabled {
+            if let mattermostSender = self.mattermostSender, case .keep = media, richText == nil {
+                editSignal = mattermostSender.editMessage(messageId: messageId, text: text, entities: entities)
+            } else {
+                editSignal = .fail(.generic)
+            }
+        } else {
+            editSignal = requestEditMessage(accountPeerId: self.stateManager.accountPeerId, postbox: self.postbox, network: self.network, stateManager: self.stateManager, transformOutgoingMessageMedia: self.transformOutgoingMessageMedia, messageMediaPreuploadManager: self.messageMediaPreuploadManager, mediaReferenceRevalidationContext: self.mediaReferenceRevalidationContext, messageId: messageId, text: text, media: media, entities: entities, richText: richText, inlineStickers: inlineStickers, webpagePreviewAttribute: webpagePreviewAttribute, disableUrlPreview: disableUrlPreview, scheduleInfoAttribute: nil, invertMediaAttribute: invertMediaAttribute)
+        }
+        disposable.set((editSignal
         |> deliverOn(self.queue)).start(next: { [weak self, weak context] value in
             queue.async {
                 guard let strongSelf = self, let initialContext = context else {
@@ -135,6 +148,13 @@ public final class PendingUpdateMessageManager {
             self.impl.with { impl in
                 impl.transformOutgoingMessageMedia = transformOutgoingMessageMedia
             }
+        }
+    }
+    
+    // MATTERMOST: see `PendingUpdateMessageManagerImpl.mattermostSender`.
+    func mattermostSetSender(_ sender: MattermostMessageSender?) {
+        self.impl.with { impl in
+            impl.mattermostSender = sender
         }
     }
     

@@ -6,6 +6,7 @@ import TelegramCore
 import AccountContext
 import PeerInfoScreen
 import SettingsUI
+import ChatMessageItemView
 
 // MATTERMOST: debug only. Opens a screen at launch so screenshots can be taken without UI automation:
 //
@@ -15,7 +16,8 @@ import SettingsUI
 // - `privacy`, `data`, `notifications`, `appearance`, `about`: Settings sub-screens;
 // - `compose`: the New Message screen;
 // - `peerinfo`, `attach`: the profile of / the attach menu in the chat that the Spike A hook opened
-//   (combine with `SIMCTL_CHILD_RELAY_DEBUG_OPEN_CHAT=dm|ios-team|…`).
+//   (combine with `SIMCTL_CHILD_RELAY_DEBUG_OPEN_CHAT=dm|ios-team|…`);
+// - `reactions`: the context menu with the reaction picker of the newest message in that chat.
 // Further screens can be added below; Release builds compile none of this.
 extension TelegramRootController {
     func relayDebugOpenScreenIfRequested() {
@@ -81,9 +83,38 @@ extension TelegramRootController {
                     self.pushViewController(controller)
                 })
             })
+        case "reactions":
+            // MATTERMOST: the message context menu (reaction picker) of the newest message in the chat that
+            // `RELAY_DEBUG_OPEN_CHAT` opened, as a long press would open it.
+            self.relayDebugOpenNewestMessageMenu(attempt: 0)
         default:
             break
         }
+    }
+
+    private func relayDebugOpenNewestMessageMenu(attempt: Int) {
+        Queue.mainQueue().after(1.0, { [weak self] in
+            guard let self else {
+                return
+            }
+            var newest: ChatMessageItemView?
+            if let chatController = self.viewControllers.last as? ChatControllerImpl {
+                chatController.chatDisplayNode.historyNode.forEachItemNode { node in
+                    guard let itemNode = node as? ChatMessageItemView, let item = itemNode.item else {
+                        return
+                    }
+                    if let current = newest?.item, current.message.index > item.message.index {
+                        return
+                    }
+                    newest = itemNode
+                }
+            }
+            if let newest {
+                newest.openMessageContextMenu()
+            } else if attempt < 20 {
+                self.relayDebugOpenNewestMessageMenu(attempt: attempt + 1)
+            }
+        })
     }
     #endif
 }

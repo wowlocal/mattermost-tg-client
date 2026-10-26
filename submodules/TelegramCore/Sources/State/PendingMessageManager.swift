@@ -252,7 +252,10 @@ public final class PendingMessageManager {
     var transformOutgoingMessageMedia: TransformOutgoingMessageMedia?
     
     private let correlationIdToSentMessageId: Atomic<CorrelationIdToSentMessageId> = Atomic(value: CorrelationIdToSentMessageId())
-    
+
+    // MATTERMOST: the network part of sending while `MattermostBackend.isEnabled` (MattermostMessageSender.swift).
+    private let mattermostSender = Promise<MattermostMessageSender?>(nil)
+
     init(network: Network, postbox: Postbox, accountPeerId: PeerId, auxiliaryMethods: AccountAuxiliaryMethods, stateManager: AccountStateManager, localInputActivityManager: PeerInputActivityManager, messageMediaPreuploadManager: MessageMediaPreuploadManager, revalidationContext: MediaReferenceRevalidationContext) {
         Logger.shared.log("PendingMessageManager", "create instance")
         self.network = network
@@ -765,7 +768,13 @@ public final class PendingMessageManager {
                 }) {
                     if case let .collectingInfo(message) = messageContext.state {
                         let passFetchProgress = shouldPassFetchProgressForMessage(message)
-                        let contentToUpload = messageContentToUpload(accountPeerId: strongSelf.accountPeerId, network: strongSelf.network, postbox: strongSelf.postbox, auxiliaryMethods: strongSelf.auxiliaryMethods, transformOutgoingMessageMedia: strongSelf.transformOutgoingMessageMedia, messageMediaPreuploadManager: strongSelf.messageMediaPreuploadManager, revalidationContext: strongSelf.revalidationContext, forceReupload: messageContext.forcedReuploadOnce, isGrouped: message.groupingKey != nil, passFetchProgress: passFetchProgress, message: message)
+                        let contentToUpload: MessageContentToUpload
+                        // MATTERMOST: media is uploaded to the Mattermost server instead of MTProto.
+                        if MattermostBackend.isEnabled {
+                            contentToUpload = strongSelf.mattermostContentToUpload(message: message)
+                        } else {
+                            contentToUpload = messageContentToUpload(accountPeerId: strongSelf.accountPeerId, network: strongSelf.network, postbox: strongSelf.postbox, auxiliaryMethods: strongSelf.auxiliaryMethods, transformOutgoingMessageMedia: strongSelf.transformOutgoingMessageMedia, messageMediaPreuploadManager: strongSelf.messageMediaPreuploadManager, revalidationContext: strongSelf.revalidationContext, forceReupload: messageContext.forcedReuploadOnce, isGrouped: message.groupingKey != nil, passFetchProgress: passFetchProgress, message: message)
+                        }
                         messageContext.contentType = contentToUpload.type
                         switch contentToUpload {
                         case let .immediate(result, type):
@@ -1181,6 +1190,10 @@ public final class PendingMessageManager {
     }
     
     private func sendGroupMessagesContent(network: Network, postbox: Postbox, stateManager: AccountStateManager, accountPeerId: PeerId, group: [(messageId: MessageId, content: PendingMessageUploadedContentAndReuploadInfo)]) -> Signal<Void, NoError> {
+        // MATTERMOST: one post per message, in order (albums as one multi-file post come later).
+        if MattermostBackend.isEnabled {
+            return self.mattermostSendMessages(group.map { $0.messageId })
+        }
         let queue = self.queue
         return postbox.transaction { [weak self] transaction -> Signal<Void, NoError> in
             if group.isEmpty {
@@ -1722,6 +1735,10 @@ public final class PendingMessageManager {
     }
     
     private func sendMessageContent(network: Network, postbox: Postbox, stateManager: AccountStateManager, accountPeerId: PeerId, messageId: MessageId, content: PendingMessageUploadedContentAndReuploadInfo) -> Signal<Void, NoError> {
+        // MATTERMOST: the post is created on the Mattermost server.
+        if MattermostBackend.isEnabled {
+            return self.mattermostSendMessages([messageId])
+        }
         let queue = self.queue
         return postbox.transaction { [weak self] transaction -> Signal<Void, NoError> in
             guard let message = transaction.getMessage(messageId) else {
@@ -2537,5 +2554,77 @@ public final class PendingMessageManager {
     
     public func synchronouslyLookupCorrelationId(correlationId: Int64) -> MessageId? {
         return self.correlationIdToSentMessageId.with { $0.mapping[correlationId] }
+    }
+}
+
+// MATTERMOST: the Mattermost network part of sending (MattermostMessageSender.swift). Everything else
+// (contexts, status, progress, delivered events, failing) stays Telegram's.
+extension PendingMessageManager {
+    func mattermostSetSender(_ sender: MattermostMessageSender?) {
+        self.mattermostSender.set(.single(sender))
+    }
+    
+    private var mattermostInstalledSender: Signal<MattermostMessageSender, NoError> {
+        return self.mattermostSender.get()
+        |> filter { $0 != nil }
+        |> take(1)
+        |> map { $0! }
+    }
+    
+    fileprivate func mattermostContentToUpload(message: Message) -> MessageContentToUpload {
+        let content = PendingMessageUploadedContentAndReuploadInfo(content: .text(message.text), reuploadInfo: nil, cacheReferenceKey: nil)
+        if !message.media.contains(where: { $0 is TelegramMediaImage || $0 is TelegramMediaFile }) {
+            return .immediate(.content(content), .text)
+        }
+        let postbox = self.postbox
+        let messageId = message.id
+        let upload: Signal<PendingMessageUploadedContentResult, MattermostSendError> = self.mattermostInstalledSender
+        |> castError(MattermostSendError.self)
+        |> mapToSignal { sender -> Signal<PendingMessageUploadedContentResult, MattermostSendError> in
+            return sender.uploadMedia(messageId: messageId)
+            |> map { progress -> PendingMessageUploadedContentResult in
+                return .progress(PendingMessageUploadedContentProgress(progress: progress))
+            }
+        }
+        // A failed upload fails the message here: the queued-upload path does not handle upload errors.
+        let result: Signal<PendingMessageUploadedContentResult, PendingMessageUploadError> = (upload
+        |> then(Signal<PendingMessageUploadedContentResult, MattermostSendError>.single(.content(content)))
+        |> `catch` { _ -> Signal<PendingMessageUploadedContentResult, NoError> in
+            return failMessages(postbox: postbox, ids: [messageId])
+            |> mapToSignal { _ -> Signal<PendingMessageUploadedContentResult, NoError> in
+                return .complete()
+            }
+        })
+        |> castError(PendingMessageUploadError.self)
+        return .signal(result, .media)
+    }
+    
+    /// Sends the messages one after another; each delivered message is reported to `deliveredMessageEvents`.
+    fileprivate func mattermostSendMessages(_ ids: [MessageId]) -> Signal<Void, NoError> {
+        let queue = self.queue
+        let postbox = self.postbox
+        let sender = self.mattermostInstalledSender
+        var result: Signal<Void, NoError> = .complete()
+        for id in ids {
+            let send: Signal<Void, NoError> = sender
+            |> castError(MattermostSendError.self)
+            |> mapToSignal { sender -> Signal<MessageId, MattermostSendError> in
+                return sender.sendMessage(messageId: id)
+            }
+            |> deliverOn(queue)
+            |> map { [weak self] deliveredId -> Void in
+                guard let self, let context = self.peerSummaryContexts[id.peerId] else {
+                    return
+                }
+                for subscriber in context.messageDeliveredSubscribers.copyItems() {
+                    subscriber([PeerPendingMessageDelivered(id: deliveredId, isSilent: false, isPendingProcessing: false)])
+                }
+            }
+            |> `catch` { _ -> Signal<Void, NoError> in
+                return failMessages(postbox: postbox, ids: [id])
+            }
+            result = result |> then(send)
+        }
+        return result
     }
 }

@@ -38,7 +38,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | Spike A: null network engine + seeded account | TelegramCore, `submodules/MattermostSync` | Done (commit `f0820341`); screenshots in `docs/research/spike-a-*.png` |
 | Spike D: real data as alice (bootstrap, holes, live events) | `submodules/MattermostSync` | Done (commit `030401d2`); screenshots `docs/research/spike-d-*.png` |
 | UI inventory for Phase 1 hiding, tabs, settings, login reuse, rebrand | [ui-inventory.md](research/ui-inventory.md) | Done |
-| Phase 1 steps 2–12 (feature flags, tabs, settings, chat/peer-info gates, services, rebrand, About) | branch `worktree-agent-a8ee3495c11158817` | Done (19 commits, screenshots `docs/research/phase1-*.png`); Phase 2A agent merging into main |
+| Phase 1 steps 2–12 (feature flags, tabs, settings, chat/peer-info gates, services, rebrand, About) | merged into main (`4bc94bf0`) | Done; screenshots `docs/research/phase1-*.png` |
 
 ## Phase 0 checklist
 
@@ -58,9 +58,9 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 
 | # | Workstream | Status |
 |---|---|---|
-| 2A | Write path: send (text, replies, files) via PendingMessageManager seam, edit, delete, reactions (+ reaction list), typing out, mute/favorite consumers, synthetic AppConfiguration (Phase 1 step 1) | Agent working (main checkout, owns its Bazel) |
-| 2B | Login UI (server URL → password/SSO → MFA), root swap (Phase 1 step 13), Add server, logout | Waits for Phase 1 merge |
-| 2C | Rendering gaps: multi-file posts (grouped messages), bot attachments bubble, webhook name/icon overrides, Mattermost service-message type, custom emoji, channel member counts | Later |
+| 2A | Write path: send (text, replies, files) via PendingMessageManager seam, edit, delete, reactions (+ reaction list), typing out, mute/favorite consumers, synthetic AppConfiguration (Phase 1 step 1) | Done (2026‑10‑26); screenshots `docs/research/phase2a-*.png` |
+| 2B | Login UI (server URL → password/SSO → MFA), root swap (Phase 1 step 13), Add server, logout, session expiry | Agent working (own worktree + simulator) |
+| 2C | Rendering gaps: multi-file posts (grouped messages), Slack-style attachments + interactive buttons/menus, webhook name/icon overrides, Mattermost service messages, custom emoji, channel member counts | Agent working (main checkout) |
 | 2D | Media tabs via file search, notification extension encodables, skip Telegram special user ids, ATS local-networking only, DM mention-badge decision; Devices → Mattermost sessions; remove "Auto-Login via Telegram"; Notifications/Reactions subtitle; theme carousel | Later |
 
 ## Log
@@ -109,3 +109,10 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 - **Phase 1 steps 2–12 done** on branch `worktree-agent-a8ee3495c11158817`: `MattermostFeatures` flags (follow `MattermostBackend.isEnabled`), Chats+Settings tabs, settings trimmed (two-row Privacy screen, Language hidden), chat-screen/chat-list/peer-info gates, link/share/quick-action filters, no StoreKit/CallKit/VoIP/Siri/widget/broadcast extensions, Relay rebrand (strings overlay `Telegram-iOS/Relay.strings`, placeholder icon from `tools/relay-icon/`), About Relay (source URL TODO). Debug hook `RELAY_DEBUG_OPEN_SCREEN=settings|compose|peerinfo|attach|privacy|data|notifications|appearance|about`.
   - Open: Devices still opens Telegram's sessions screen; "Auto-Login via Telegram" in Open Links In; Notifications → Reactions subtitle says "Stories"; theme carousel shows one theme. Moved to 2D.
   - Builds: string-key or TelegramCore changes ≈15 min near-full rebuild; other incremental builds a few minutes.
+- Phase 1 merged into main (`4bc94bf0`, by the 2A agent); its worktree removed and Bazel output expunged (12 GB). 2B started in a new worktree.
+- **Phase 2A done** (write path, main checkout). TelegramCore seam `MattermostMessageSender` (PendingMessageManager keeps its bookkeeping; PendingUpdateMessageManager hands over edits); MattermostSync `Write/`: sender, consumers for reactions, deletes, mute, favorites, typing; synthetic AppConfiguration + reaction list with on-device emoji images. Debug hook `RELAY_DEBUG_WRITE` (engine calls, see BUILD.md), `RELAY_DEBUG_NO_PERMISSION_PROMPTS=1`, `RELAY_DEBUG_OPEN_SCREEN=reactions`.
+  - Verified against the dev server (REST as alice/bob, bob's WebSocket): text with markdown, thread reply (`root_id`), image (1200×800 JPEG), text file, reactions add/remove incl. custom `:partyblob:` and two own reactions on one post, edit (`edit_at`), own delete (404 after), deleting bob's DM post → 403, restored + toast, offline (server stopped): 3 messages pending then sent in order on reconnect, rejected post → failed state → resend, typing (`parent_id` in threads, throttled to the server's 5 s), mute/unmute and favorites both directions incl. team-folder pins, no duplicates after WebSocket echoes, only `127.0.0.1:8065` sockets.
+  - Findings: on 11.7 the server does not move a channel out of its previous sidebar category when it is added to Favorites (the client PUTs both); DM favorites are per team; `channel_member_updated` carries the member as a JSON string with an empty broadcast channel; Telegram's context-menu reaction bar reads the `CloudTopReactions` list (not `AvailableReactions`) when all reactions are allowed; the notifications prompt persists across app launches until answered (reboot the simulator).
+  - Gaps: albums go out as one post per item (multi-file posts are 2C); no timed mute on Mattermost (any mute is indefinite); favorites order not pushed; upload file ids live in memory (restart between upload and post re-uploads); `pending_post_id` dedupe across restarts relies on the server's short pending-post cache; "delete for me" is local only; admins can't delete others' posts from the UI yet (no admin rights on peers); forwards are re-posted without attribution; only text typing is sent.
+
+- 2B asked to merge main (with 2A) into its branch before final checks. 2C started on main.

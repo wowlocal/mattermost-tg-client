@@ -65,7 +65,8 @@ public func updateMessageReactionsInteractively(account: Account, messageIds: [M
         let isPremium = (transaction.getPeer(account.peerId) as? TelegramUser)?.isPremium ?? false
         let appConfiguration = transaction.getPreferencesEntry(key: PreferencesKeys.appConfiguration)?.get(AppConfiguration.self) ?? .defaultValue
         let maxCount: Int
-        if isPremium {
+        // MATTERMOST: several reactions per user, up to the app configuration's `reactions_user_max_default`.
+        if isPremium || MattermostBackend.isEnabled {
             let limitsConfiguration = UserLimitsConfiguration(appConfiguration: appConfiguration, isPremium: isPremium)
             maxCount = Int(limitsConfiguration.maxReactionsPerMessage)
         } else {

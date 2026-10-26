@@ -222,6 +222,20 @@ final class MarkdownTests: XCTestCase {
         }
     }
 
+    func testEmojiNamesForUnicode() {
+        XCTAssertEqual(EmojiTable.name(forUnicode: "👍"), "+1")
+        XCTAssertEqual(EmojiTable.name(forUnicode: "\u{2764}\u{FE0F}"), "heart")
+        XCTAssertEqual(EmojiTable.name(forUnicode: "\u{2764}"), "heart")
+        XCTAssertEqual(EmojiTable.name(forUnicode: "🤔"), "thinking")
+        XCTAssertNil(EmojiTable.name(forUnicode: "x"))
+        // Every emoji maps back to a name that maps to the same emoji.
+        for (name, emoji) in EmojiTable.allEmoji {
+            XCTAssertEqual(EmojiTable.name(forUnicode: emoji), name)
+            XCTAssertEqual(EmojiTable.unicode(forName: name), emoji)
+        }
+        XCTAssertEqual(Set(EmojiTable.allEmoji.map { $0.emoji }).count, EmojiTable.allEmoji.count)
+    }
+
     // MARK: Blocks
 
     func testBlockQuotes() {

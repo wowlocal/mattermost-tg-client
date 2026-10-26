@@ -1433,6 +1433,16 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                         })
                     }
                     #endif
+                    // MATTERMOST: failed writes that the chat UI can't show itself (a delete the server refused,
+                    // a message that could not be sent, …) as toasts.
+                    if firstTime {
+                        let accountContext = context.context
+                        let _ = (MattermostSync.notices(accountId: accountContext.account.id)
+                        |> deliverOnMainQueue).start(next: { text in
+                            let presentationData = accountContext.sharedContext.currentPresentationData.with { $0 }
+                            accountContext.sharedContext.presentGlobalController(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: text, timeout: nil, customUndoText: nil), action: { _ in return false }), nil)
+                        })
+                    }
                 }))
             } else {
                 self.mainWindow.viewController = nil

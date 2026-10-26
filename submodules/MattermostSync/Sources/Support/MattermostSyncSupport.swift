@@ -19,6 +19,7 @@ extension Postbox {
     /// Runs `f` in a Postbox transaction and returns its result. Postbox transactions run one at a time on
     /// Postbox's queue; MattermostSync also does all of its ID-map work inside them, which serializes every
     /// "ID map, then Postbox" unit of work without a lock of its own (see `MattermostAccountSync`).
+    @discardableResult
     func mmTransaction<T>(_ f: @escaping (Transaction) -> T) async -> T {
         return await withCheckedContinuation { (continuation: CheckedContinuation<T, Never>) in
             let _ = self.transaction({ transaction -> T in

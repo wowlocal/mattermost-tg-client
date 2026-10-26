@@ -81,6 +81,34 @@ tools/relay-remote.py "$UDID" relogin                                      # "Lo
 
 Use users nobody else is using for these (carol for MFA, dave for revocation): other agents and scripts log in as alice and bob.
 
+#### Write-path hook (Phase 2A, debug builds only)
+
+`RELAY_DEBUG_WRITE='<action>;<action>;…'` runs actions after the bootstrap, through the same engine calls the composer, context menus and chat list use (never MattermostKit directly). Fields are separated by `|`; `<chat>` is as for `RELAY_DEBUG_OPEN_CHAT`; `<msg>` is `last`, `mine`, `other` or a post id. Combine with `RELAY_DEBUG_OPEN_CHAT` to watch it happen. Every action logs `debug-write: … → result` to the `[Relay]` stream.
+
+| Action | Engine call |
+|---|---|
+| `send\|<chat>\|<text>` (`**b**`, `_i_`, `` `c` `` become composer entities) | `enqueueMessages` |
+| `reply\|<chat>\|<msg>\|<text>` | `enqueueMessages` with a reply subject |
+| `senduser\|<username>\|<text>` (a new chat; creates the DM channel) | `enqueueMessages` to the user's peer |
+| `image\|<chat>\|<caption>` / `file\|<chat>\|<name>\|<content>` | `enqueueMessages` with local media, as the media picker |
+| `react\|<chat>\|<msg>\|<emoji>` / `unreact\|…` | `updateMessageReactionsInteractively` |
+| `edit\|<chat>\|<msg>\|<text>` | `account.pendingUpdateMessageManager.add` |
+| `delete\|<chat>\|<msg>` | `deleteMessagesInteractively(.forEveryone)` |
+| `resend\|<chat>` | `resendMessages` on the chat's failed messages |
+| `typing\|<chat>[\|<msg in thread>]` | `account.updateLocalInputActivity(.typingText)` |
+| `mute\|<chat>`, `unmute\|<chat>` | `engine.peers.updatePeerMuteSetting` |
+| `pin\|<chat>`, `unpin\|<chat>` | `engine.peers.toggleItemPinned(.group(.root))` (all chats) |
+| `folderpin\|<chat>\|<team>`, `folderunpin\|…` | `engine.peers.toggleItemPinned(.filter(…))` (a team folder tab) |
+| `wait\|<s>`, `waitfor\|offline`, `waitfor\|online` | pauses (e.g. stop the server while `waitfor\|offline` waits) |
+
+```sh
+SIMCTL_CHILD_RELAY_DEBUG_OPEN_CHAT=sandbox \
+SIMCTL_CHILD_RELAY_DEBUG_WRITE='send|sandbox|Hello **world**;reply|sandbox|last|in a thread;react|sandbox|last|👍' \
+  xcrun simctl launch "$UDID" org.relaychat.Relay
+```
+
+Failed writes the UI can't show (a refused delete, an unsendable message) appear as toasts (`MattermostSync.notices`).
+
 If `simctl install` doesn't pick up a rebuilt binary (same build number), replace the installed bundle in place as described in the root `CLAUDE.md` ("Updating the running simulator after a rebuild").
 
 ## Pure Swift packages

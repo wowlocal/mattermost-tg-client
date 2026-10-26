@@ -127,4 +127,24 @@ extension MattermostClient {
     public func removeChannelMember(channelId: String, userId: String = MattermostClient.currentUser) async throws {
         try await sendIgnoringResponse(APIRequest(.delete, apiPath("channels", channelId, "members", userId)))
     }
+
+    /// `PUT /channels/{channel_id}/members/{user_id}/notify_props`: merges the
+    /// given props into the member's notify props (keys not listed are kept).
+    /// Muting is `mark_unread: "mention"`, unmuting `mark_unread: "all"`.
+    public func updateChannelNotifyProps(channelId: String, props: [String: String], userId: String = MattermostClient.currentUser) async throws {
+        try await sendIgnoringResponse(APIRequest.json(.put, apiPath("channels", channelId, "members", userId, "notify_props"), body: props))
+    }
+}
+
+// MARK: - Sidebar categories
+
+extension MattermostClient {
+    /// `PUT /users/{user_id}/teams/{team_id}/channels/categories`: updates
+    /// several categories at once. A channel added to one category is removed
+    /// from its previous one; channels removed from Favorites go back to their
+    /// default category. Returns the updated categories.
+    @discardableResult
+    public func updateSidebarCategories(_ categories: [SidebarCategory], teamId: String, userId: String = MattermostClient.currentUser) async throws -> [SidebarCategory] {
+        try await send(APIRequest.json(.put, apiPath("users", userId, "teams", teamId, "channels", "categories"), body: categories))
+    }
 }

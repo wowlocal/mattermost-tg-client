@@ -22,6 +22,7 @@ public struct MattermostDebugTarget {
 ///   chat screen does while scrolling): down to the first post, then up to the newest one, starting at
 ///   `RELAY_DEBUG_OPEN_POST` when set. Then it checks the result and writes
 ///   `Documents/relay-debug/<channel id>.json` (local ids, post ids, holes) for comparison with the server.
+/// - `RELAY_DEBUG_WRITE=<actions>` drives the write path through the engine (see `MattermostDebugWriter`).
 public enum MattermostDebug {
     public static func chatToOpen(account: Account) -> Signal<MattermostDebugTarget?, NoError> {
         #if DEBUG
@@ -30,7 +31,8 @@ public enum MattermostDebug {
         let postId = environment["RELAY_DEBUG_OPEN_POST"].flatMap { $0.isEmpty ? nil : $0 }
         let pageChat = environment["RELAY_DEBUG_PAGE"].flatMap { $0.isEmpty ? nil : $0 }
         let dumpChatList = environment["RELAY_DEBUG_DUMP_CHATLIST"] == "1"
-        if chat == nil && postId == nil && pageChat == nil && !dumpChatList {
+        let writeScript = environment["RELAY_DEBUG_WRITE"].flatMap { $0.isEmpty ? nil : $0 }
+        if chat == nil && postId == nil && pageChat == nil && !dumpChatList && writeScript == nil {
             return .single(nil)
         }
         return Signal { subscriber in
@@ -74,6 +76,11 @@ public enum MattermostDebug {
                 }
                 if let pageChat = pageChat, let channelId = sync.debugFindChannel(pageChat) {
                     await sync.debugPageThroughHistory(channelId: channelId, startMessageId: startMessageId)
+                }
+                if let writeScript = writeScript {
+                    // After the chat (if any) has opened.
+                    try? await Task.sleep(nanoseconds: 2_500_000_000)
+                    await MattermostDebugWriter.run(script: writeScript, sync: sync)
                 }
             }
             return ActionDisposable {
