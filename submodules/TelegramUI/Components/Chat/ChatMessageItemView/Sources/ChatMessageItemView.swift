@@ -114,7 +114,11 @@ public final class ChatMessageAccessibilityData {
                 let (_, _, messageText, _, _, _, _) = chatListItemStrings(strings: item.presentationData.strings, nameDisplayOrder: item.presentationData.nameDisplayOrder, dateTimeFormat: item.presentationData.dateTimeFormat, contentSettings: item.context.currentContentSettings.with { $0 }, messages: [EngineMessage(message)], chatPeer: EngineRenderedPeer(peer: EnginePeer(chatPeer)), accountPeerId: item.context.account.peerId)
                 
                 var text = messageText
-                
+                // MATTERMOST: a markdown table drawn as a text grid (MattermostSyncCore) read as "dash dash plus…".
+                if MattermostBackend.isEnabled {
+                    text = mattermostAccessibilityTableText(text)
+                }
+
                 loop: for media in message.media {
                     if let _ = media as? TelegramMediaImage {
                         traits.insert(.image)

@@ -1,0 +1,64 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  Button @59,57 235x44
+  Image @181,76 47x20
+  GenericElement "Search" @16,118 370x44
+  Image @124,183 18x18
+  Image @129,184 8x15
+  Image @226,183 24x18
+  Image @231,184 14x15
+  Image @349,183 32x18
+  Image @354,184 22x15
+  ScrollArea @19,175 364x34
+    Image @124,183 18x18
+    Image @129,184 8x15
+    Image @226,183 24x18
+    Image @231,184 14x15
+    Image @349,183 32x18
+    Image @354,184 22x15
+  GenericElement "Backend" [Message\nFrom: Bob Brennan\nHere's the limiter we use server-side:\nlimiter := rate.NewLimiter(rate.Every(100*time.Millisecond), 20)\nif !limiter.Allow() {\n    return c.Err(http.StatusTooManyRequests)\n}] @0,215 402x76 +actions:Unread|Unpin|Mute|Delete|Archive
+  GenericElement "Bob Brennan" [Message\nFrom: Bob Brennan\n4B fg test 1793033573 (DM)] @0,291 402x76 +actions:Unread|Unpin|Mute|Delete|Archive
+  GenericElement "4C Accessibility" [Message\nFrom: Bob Brennan\nمراجعة الشاشات العربية] @0,367 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Town Square" [Outgoing Message\n4B offline 3 182354] @0,443 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Sandbox" [Outgoing Message\n4B smoke after 4A merge 180423 https://example.com/4b] @0,519 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Media & Files" [Message\nFrom: Release Check\nPhase 4A plain-http link: http://example.com/] @0,595 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "alice, l4b0026, l4b0171" [Outgoing Message\nGM 4 hello] @0,671 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "alice, l4b0004, l4b0047" [Outgoing Message\nGM 5 hello] @0,747 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "alice, l4b0081, l4b0089" [Outgoing Message\nGM 2 hello] @0,823 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "alice, l4b0055, l4b0059" [Outgoing Message\nGM 1 hello] @0,899 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "alice, l4b0149, l4b0164" [Outgoing Message\nGM 3 hello] @0,975 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Lea Costa" [Outgoing Message\nDM 2 with l4b0063] @0,1051 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Uma Costa" [Outgoing Message\nDM 2 with l4b0072] @0,1127 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Rae Costa" [Outgoing Message\nDM 7 with l4b0069] @0,1203 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Vic Engel" [Outgoing Message\nDM 6 with l4b0125] @0,1279 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Yuri Brandt" [Outgoing Message\nDM 6 with l4b0050] @0,1355 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Oz Abbott" [Outgoing Message\nDM 2 with l4b0014] @0,1431 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Oz Garcia" [Outgoing Message\nDM 5 with l4b0170] @0,1507 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Finn Abbott\n1 unread message" [Message\nFrom: Finn Abbott\nDM 6 with l4b0005] @0,1583 402x76 +actions:Read|Pin|Mute|Delete|Archive
+  GenericElement "Xia Garcia" [Outgoing Message\nDM 4 with l4b0179] @0,1659 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Hana Garcia" [Outgoing Message\nDM 3 with l4b0163] @0,1735 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Bob Brennan" [Message\nFrom: Bob Brennan\n4B fg test 1793033573 (DM)] @402,215 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "alice, l4b0026, l4b0171" [Outgoing Message\nGM 4 hello] @402,291 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "alice, l4b0004, l4b0047" [Outgoing Message\nGM 5 hello] @402,367 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "alice, l4b0081, l4b0089" [Outgoing Message\nGM 2 hello] @402,443 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "alice, l4b0055, l4b0059" [Outgoing Message\nGM 1 hello] @402,519 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "alice, l4b0149, l4b0164" [Outgoing Message\nGM 3 hello] @402,595 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Lea Costa" [Outgoing Message\nDM 2 with l4b0063] @402,671 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Uma Costa" [Outgoing Message\nDM 2 with l4b0072] @402,747 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Rae Costa" [Outgoing Message\nDM 7 with l4b0069] @402,823 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Vic Engel" [Outgoing Message\nDM 6 with l4b0125] @402,899 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Yuri Brandt" [Outgoing Message\nDM 6 with l4b0050] @402,975 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Oz Abbott" [Outgoing Message\nDM 2 with l4b0014] @402,1051 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Oz Garcia" [Outgoing Message\nDM 5 with l4b0170] @402,1127 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Finn Abbott\n1 unread message" [Message\nFrom: Finn Abbott\nDM 6 with l4b0005] @402,1203 402x76 +actions:Read|Pin|Mute|Delete|Archive
+  GenericElement "Xia Garcia" [Outgoing Message\nDM 4 with l4b0179] @402,1279 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  GenericElement "Hana Garcia" [Outgoing Message\nDM 3 with l4b0163] @402,1355 402x76 +actions:Unread|Pin|Mute|Delete|Archive
+  Image @88,790 48x48
+  Image @103,799 33x17
+  Image @108,799 23x16
+  Image @265,790 48x48
+  Image @88,790 48x48
+  Image @103,799 33x17
+  Image @108,799 23x16
+  Image @265,790 48x48

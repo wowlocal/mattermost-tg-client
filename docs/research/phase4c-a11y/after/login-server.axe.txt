@@ -1,0 +1,12 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  ScrollArea @0,0 402x874
+    Image "Relay" @163,122 76x76
+    Heading "Add Account" @118,218 165x33
+    GenericElement "Enter the address of a Mattermost server. You can switch between your accounts at any time." @31,261 339x40
+    TextField "Server address" [chat.example.com] @40,329 322x52
+    Button "Connect" @24,401 354x50
+    GenericElement "Works with Mattermost 11.7 and newer." @83,475 236x15
+  GenericElement @0,583 402x291

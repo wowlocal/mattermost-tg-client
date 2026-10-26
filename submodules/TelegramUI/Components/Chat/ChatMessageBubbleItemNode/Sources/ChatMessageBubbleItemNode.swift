@@ -4245,6 +4245,10 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                     }
                 }
                 nameButtonNode.addTarget(strongSelf, action: #selector(strongSelf.nameButtonPressed), forControlEvents: .touchUpInside)
+                // MATTERMOST: an unnamed extra stop for VoiceOver; the message's own element reads the author.
+                if MattermostBackend.isEnabled {
+                    nameButtonNode.isAccessibilityElement = false
+                }
                 strongSelf.clippingNode.addSubnode(nameButtonNode)
                 strongSelf.nameButtonNode = nameButtonNode
             }
@@ -4530,6 +4534,10 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                     strongSelf.rankButtonNode = rankButtonNode
                 }
                 rankButtonNode.frame = rankBackgroundFrame.insetBy(dx: -8.0, dy: -8.0)
+                // MATTERMOST: the badge ("admin") read as an unnamed element; it reads its text.
+                if MattermostBackend.isEnabled {
+                    rankButtonNode.accessibilityLabel = rankBadgeNode.cachedLayout?.attributedString?.string.trimmingCharacters(in: .whitespaces)
+                }
             } else {
                 strongSelf.rankBadgeNode?.removeFromSupernode()
                 strongSelf.rankBadgeNode = nil

@@ -1,0 +1,8 @@
+{image} "Relay" @163,122 76x76
+{header} "Add Account" @118,218 165x33
+{} "Enter the address of a Mattermost server. You can switch between your accounts at any time." @31,261 339x40
+{} "Server address" [chat.example.com] @40,329 322x52
+{button} "Connect" @24,401 354x50
+{} "Works with Mattermost 11.7 and newer." @83,475 236x15
+{button} "Cancel" @28,64 54x44
+{text} "ABC" @0,62 0x0

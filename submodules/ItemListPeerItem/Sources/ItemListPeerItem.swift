@@ -1337,7 +1337,29 @@ public class ItemListPeerItemNode: ItemListRevealOptionsItemNode, ItemListItemNo
                     }
                     
                     strongSelf.accessibilityValue = combinedValueString
-                    
+
+                    // MATTERMOST: VoiceOver says a tappable row is a button and whether a row of a selection list
+                    // (New Group Message, Add Members) is checked; upstream announced neither.
+                    var accessibilityTraits: UIAccessibilityTraits = []
+                    if item.selectable && item.action != nil {
+                        accessibilityTraits.insert(.button)
+                    }
+                    if let switchValue = item.switchValue {
+                        switch switchValue.style {
+                        case .check, .leftCheck:
+                            accessibilityTraits.insert(.button)
+                            if switchValue.value {
+                                accessibilityTraits.insert(.selected)
+                            }
+                        case .standard:
+                            break
+                        }
+                    }
+                    if !item.enabled {
+                        accessibilityTraits.insert(.notEnabled)
+                    }
+                    strongSelf.accessibilityTraits = accessibilityTraits
+
                     if let updateArrowImage = updateArrowImage {
                         strongSelf.labelArrowNode?.image = updateArrowImage
                     }

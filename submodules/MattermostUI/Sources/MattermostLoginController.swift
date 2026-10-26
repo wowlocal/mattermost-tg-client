@@ -228,7 +228,7 @@ public final class MattermostLoginController: NavigationController {
             text = self.strings.Relay_Login_CredentialsText(host).string
         }
         if server.allowsPasswordLogin {
-            fields.append(MattermostAuthField(id: "login", kind: .loginId, placeholder: server.loginIdPlaceholder, text: prefilledLoginId))
+            fields.append(MattermostAuthField(id: "login", kind: .loginId, placeholder: self.strings.relayLoginIdPlaceholder(server), text: prefilledLoginId))
             fields.append(MattermostAuthField(id: "password", kind: .password, placeholder: self.strings.Relay_Login_Password, text: ""))
         } else if server.ssoProviders.isEmpty {
             text = self.strings.Relay_Login_NoSupportedLogin
@@ -240,7 +240,7 @@ public final class MattermostLoginController: NavigationController {
             fields: fields,
             primaryTitle: server.allowsPasswordLogin ? self.strings.Relay_Login_LogIn : nil,
             alternatives: server.ssoProviders.map { (id: $0.rawValue, title: self.strings.relaySSOTitle($0, config: server.config)) },
-            footer: "\(host) · Mattermost \(server.version)"
+            footer: self.strings.Relay_Login_ServerFooter(host, "\(server.version)").string
         )
         let screen = MattermostAuthScreen(debugScreenName: "credentials", sharedContext: self.sharedContext, presentationData: self.presentationData, content: content)
         screen.primaryAction = { [weak self, weak screen] in

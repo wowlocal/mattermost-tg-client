@@ -41,11 +41,13 @@ private final class ThreadsArguments {
     let context: AccountContext
     let open: (MattermostThreadListItem) -> Void
     let longTap: (MattermostThreadListItem) -> Void
+    let unfollow: (MattermostThreadListItem) -> Void
 
-    init(context: AccountContext, open: @escaping (MattermostThreadListItem) -> Void, longTap: @escaping (MattermostThreadListItem) -> Void) {
+    init(context: AccountContext, open: @escaping (MattermostThreadListItem) -> Void, longTap: @escaping (MattermostThreadListItem) -> Void, unfollow: @escaping (MattermostThreadListItem) -> Void) {
         self.context = context
         self.open = open
         self.longTap = longTap
+        self.unfollow = unfollow
     }
 }
 
@@ -99,12 +101,15 @@ private enum ThreadsEntry: ItemListNodeEntry {
         let arguments = arguments as! ThreadsArguments
         switch self {
         case let .header(text):
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
+            // Wraps at large text sizes instead of cutting off the counts.
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, multiline: true, sectionId: self.section)
         case let .thread(_, item, _):
             return MattermostThreadItem(presentationData: presentationData, context: arguments.context, thread: item, sectionId: self.section, action: {
                 arguments.open(item)
             }, longTapAction: {
                 arguments.longTap(item)
+            }, unfollowAction: {
+                arguments.unfollow(item)
             })
         case let .info(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
@@ -173,8 +178,15 @@ public func mattermostThreadsController(context: AccountContext, teamId: String)
         })
     }
 
-    let arguments = ThreadsArguments(context: context, open: openThread, longTap: { item in
+    let unfollowThread: (MattermostThreadListItem) -> Void = { item in
         guard let threadId = item.threadId else {
+            return
+        }
+        let _ = MattermostSync.setFollowingThread(accountId: accountId, peerId: item.peerId, threadId: threadId, following: false).startStandalone()
+    }
+
+    let arguments = ThreadsArguments(context: context, open: openThread, longTap: { item in
+        guard item.threadId != nil else {
             return
         }
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
@@ -182,7 +194,7 @@ public func mattermostThreadsController(context: AccountContext, teamId: String)
         var items: [ActionSheetItem] = [ActionSheetTextItem(title: item.rootText)]
         items.append(ActionSheetButtonItem(title: presentationData.strings.Relay_Threads_Unfollow, color: .destructive, action: { [weak actionSheet] in
             actionSheet?.dismissAnimated()
-            let _ = MattermostSync.setFollowingThread(accountId: accountId, peerId: item.peerId, threadId: threadId, following: false).startStandalone()
+            unfollowThread(item)
         }))
         actionSheet.setItemGroups([
             ActionSheetItemGroup(items: items),
@@ -193,7 +205,7 @@ public func mattermostThreadsController(context: AccountContext, teamId: String)
             ])
         ])
         presentControllerImpl?(actionSheet)
-    })
+    }, unfollow: unfollowThread)
 
     let list = selectedTeam.get()
     |> mapToSignal { teamId -> Signal<MattermostThreadList?, NoError> in
@@ -265,14 +277,16 @@ private final class MattermostThreadItem: ListViewItem, ItemListItem {
     let sectionId: ItemListSectionId
     let action: () -> Void
     let longTapAction: () -> Void
+    let unfollowAction: () -> Void
 
-    init(presentationData: ItemListPresentationData, context: AccountContext, thread: MattermostThreadListItem, sectionId: ItemListSectionId, action: @escaping () -> Void, longTapAction: @escaping () -> Void) {
+    init(presentationData: ItemListPresentationData, context: AccountContext, thread: MattermostThreadListItem, sectionId: ItemListSectionId, action: @escaping () -> Void, longTapAction: @escaping () -> Void, unfollowAction: @escaping () -> Void) {
         self.presentationData = presentationData
         self.context = context
         self.thread = thread
         self.sectionId = sectionId
         self.action = action
         self.longTapAction = longTapAction
+        self.unfollowAction = unfollowAction
     }
 
     func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, neighbors: ListViewItemNeighbors, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
@@ -351,6 +365,9 @@ private final class MattermostThreadItemNode: ListViewItemNode, ItemListItemNode
             node.contentsScale = UIScreen.main.scale
         }
         super.init(layerBacked: false)
+        // VoiceOver reads a row as one button (author; channel, text, counts, time) with Unfollow as an action.
+        self.isAccessibilityElement = true
+        self.accessibilityTraits = .button
         self.addSubnode(self.separatorNode)
         self.addSubnode(self.avatarNode)
         self.addSubnode(self.authorNode)
@@ -373,31 +390,53 @@ private final class MattermostThreadItemNode: ListViewItemNode, ItemListItemNode
             let strings = item.presentationData.strings
             let thread = item.thread
             let isUnread = thread.unreadReplies > 0
+            // Follows Settings → Appearance → Text Size like Telegram's list rows (17 pt is the default).
+            let textScale = item.presentationData.fontSize.itemListBaseFontSize / 17.0
+            func fontSize(_ base: CGFloat) -> CGFloat {
+                return floor(base * textScale)
+            }
             let leftInset: CGFloat = params.leftInset + 16.0 + 44.0 + 12.0
             let rightInset: CGFloat = params.rightInset + 16.0
             let width = params.width - leftInset - rightInset
 
             let dateText = stringForThreadDate(thread.lastReplyAt)
-            let (dateLayout, dateApply) = makeDate(TextNodeLayoutArguments(attributedString: NSAttributedString(string: dateText, font: Font.regular(14.0), textColor: isUnread ? theme.list.itemAccentColor : theme.list.itemSecondaryTextColor), maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: width, height: 100.0)))
+            let (dateLayout, dateApply) = makeDate(TextNodeLayoutArguments(attributedString: NSAttributedString(string: dateText, font: Font.regular(fontSize(14.0)), textColor: isUnread ? theme.list.itemAccentColor : theme.list.itemSecondaryTextColor), maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: width, height: 100.0)))
             let authorName = thread.author.map { EnginePeer($0).displayTitle(strings: strings, displayOrder: item.presentationData.nameDisplayOrder) } ?? ""
-            let (authorLayout, authorApply) = makeAuthor(TextNodeLayoutArguments(attributedString: NSAttributedString(string: authorName, font: Font.semibold(16.0), textColor: theme.list.itemPrimaryTextColor), maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: width - dateLayout.size.width - 8.0, height: 100.0)))
-            let (channelLayout, channelApply) = makeChannel(TextNodeLayoutArguments(attributedString: NSAttributedString(string: thread.channelTitle, font: Font.regular(13.0), textColor: theme.list.itemSecondaryTextColor), maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: width, height: 100.0)))
-            let (textLayout, textApply) = makeText(TextNodeLayoutArguments(attributedString: NSAttributedString(string: thread.rootText, font: Font.regular(15.0), textColor: theme.list.itemPrimaryTextColor), maximumNumberOfLines: 2, truncationType: .end, constrainedSize: CGSize(width: width, height: 100.0)))
+            let (authorLayout, authorApply) = makeAuthor(TextNodeLayoutArguments(attributedString: NSAttributedString(string: authorName, font: Font.semibold(fontSize(16.0)), textColor: theme.list.itemPrimaryTextColor), maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: width - dateLayout.size.width - 8.0, height: 100.0)))
+            let (channelLayout, channelApply) = makeChannel(TextNodeLayoutArguments(attributedString: NSAttributedString(string: thread.channelTitle, font: Font.regular(fontSize(13.0)), textColor: theme.list.itemSecondaryTextColor), maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: width, height: 100.0)))
+            let (textLayout, textApply) = makeText(TextNodeLayoutArguments(attributedString: NSAttributedString(string: thread.rootText, font: Font.regular(fontSize(15.0)), textColor: theme.list.itemPrimaryTextColor), maximumNumberOfLines: 2, truncationType: .end, constrainedSize: CGSize(width: width, height: 100.0)))
 
-            let footer = NSMutableAttributedString(string: strings.Relay_Threads_Replies(Int32(thread.replyCount)), font: Font.regular(13.0), textColor: theme.list.itemSecondaryTextColor)
+            let footer = NSMutableAttributedString(string: strings.Relay_Threads_Replies(Int32(thread.replyCount)), font: Font.regular(fontSize(13.0)), textColor: theme.list.itemSecondaryTextColor)
             if thread.unreadReplies > 0 {
-                footer.append(NSAttributedString(string: " · " + strings.Relay_Threads_NewReplies(Int32(thread.unreadReplies)), font: Font.semibold(13.0), textColor: theme.list.itemAccentColor))
+                footer.append(NSAttributedString(string: " · " + strings.Relay_Threads_NewReplies(Int32(thread.unreadReplies)), font: Font.semibold(fontSize(13.0)), textColor: theme.list.itemAccentColor))
             }
             if thread.unreadMentions > 0 {
-                footer.append(NSAttributedString(string: " · @" + strings.Relay_Threads_Mentions(Int32(thread.unreadMentions)), font: Font.semibold(13.0), textColor: theme.list.itemAccentColor))
+                footer.append(NSAttributedString(string: " · @" + strings.Relay_Threads_Mentions(Int32(thread.unreadMentions)), font: Font.semibold(fontSize(13.0)), textColor: theme.list.itemAccentColor))
             }
+            var accessibilityParts: [String] = []
+            if isUnread || thread.unreadMentions > 0 {
+                accessibilityParts.append(strings.Relay_Threads_UnreadState)
+            }
+            accessibilityParts.append(thread.channelTitle)
+            accessibilityParts.append(thread.rootText)
+            accessibilityParts.append(strings.Relay_Threads_Replies(Int32(thread.replyCount)))
+            if thread.unreadReplies > 0 {
+                accessibilityParts.append(strings.Relay_Threads_NewReplies(Int32(thread.unreadReplies)))
+            }
+            if thread.unreadMentions > 0 {
+                accessibilityParts.append(strings.Relay_Threads_Mentions(Int32(thread.unreadMentions)))
+            }
+            accessibilityParts.append(strings.Relay_Threads_LastReply(dateText).string)
+            let accessibilityValue = accessibilityParts.filter { !$0.isEmpty }.joined(separator: ", ")
             let participantCount = min(3, thread.participants.count)
             let participantsWidth: CGFloat = participantCount == 0 ? 0.0 : 20.0 + CGFloat(participantCount - 1) * 14.0 + 6.0
-            let (footerLayout, footerApply) = makeFooter(TextNodeLayoutArguments(attributedString: footer, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: width - participantsWidth, height: 100.0)))
+            // Two lines rather than a cut-off count at large text sizes.
+            let (footerLayout, footerApply) = makeFooter(TextNodeLayoutArguments(attributedString: footer, maximumNumberOfLines: 2, truncationType: .end, constrainedSize: CGSize(width: width - participantsWidth, height: 200.0)))
 
             let topInset: CGFloat = 10.0
             var height = topInset + authorLayout.size.height + 1.0 + channelLayout.size.height + 3.0
             height += textLayout.size.height + 6.0 + max(20.0, footerLayout.size.height) + 10.0
+            height = max(height, topInset + 2.0 + 44.0 + 10.0)
             let layout = ListViewItemNodeLayout(contentSize: CGSize(width: params.width, height: height), insets: itemListNeighborsPlainInsets(neighbors))
 
             return (layout, { [weak self] in
@@ -405,6 +444,12 @@ private final class MattermostThreadItemNode: ListViewItemNode, ItemListItemNode
                     return
                 }
                 self.item = item
+                self.accessibilityLabel = authorName
+                self.accessibilityValue = accessibilityValue
+                self.view.accessibilityCustomActions = thread.threadId == nil ? nil : [UIAccessibilityCustomAction(name: strings.Relay_Threads_Unfollow, actionHandler: { [weak self] _ in
+                    self?.item?.unfollowAction()
+                    return true
+                })]
                 self.separatorNode.backgroundColor = theme.list.itemPlainSeparatorColor
                 self.highlightedBackgroundNode.backgroundColor = theme.list.itemHighlightedBackgroundColor
                 let _ = authorApply()
@@ -439,7 +484,7 @@ private final class MattermostThreadItemNode: ListViewItemNode, ItemListItemNode
                         node.isHidden = true
                     }
                 }
-                self.footerNode.frame = CGRect(origin: CGPoint(x: leftInset + participantsWidth, y: y + floor((20.0 - footerLayout.size.height) / 2.0)), size: footerLayout.size)
+                self.footerNode.frame = CGRect(origin: CGPoint(x: leftInset + participantsWidth, y: y + max(0.0, floor((20.0 - footerLayout.size.height) / 2.0))), size: footerLayout.size)
 
                 if isUnread || thread.unreadMentions > 0 {
                     self.unreadDotNode.image = generateFilledCircleImage(diameter: 8.0, color: theme.list.itemAccentColor)

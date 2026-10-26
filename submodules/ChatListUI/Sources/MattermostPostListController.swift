@@ -362,8 +362,10 @@ private final class MattermostPostListControllerNode: ASDisplayNode {
                 text = strings.Relay_PostList_Loading
             }
         }
-        self.emptyTitleNode.attributedText = NSAttributedString(string: title, font: Font.semibold(17.0), textColor: theme.list.freeTextColor)
-        self.emptyTextNode.attributedText = NSAttributedString(string: text, font: Font.regular(15.0), textColor: theme.list.freeTextColor)
+        // Follows the app's text size like the result rows (17 pt is the default).
+        let textScale = self.presentationData.listsFontSize.baseDisplaySize / 17.0
+        self.emptyTitleNode.attributedText = NSAttributedString(string: title, font: Font.semibold(floor(17.0 * textScale)), textColor: theme.list.freeTextColor)
+        self.emptyTextNode.attributedText = NSAttributedString(string: text, font: Font.regular(floor(15.0 * textScale)), textColor: theme.list.freeTextColor)
         if let (layout, navigationBarHeight) = self.validLayout {
             self.layoutEmptyState(layout: layout, navigationBarHeight: navigationBarHeight)
         }

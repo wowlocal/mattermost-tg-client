@@ -110,7 +110,7 @@ extension MattermostAccountSync {
             self.state.with { $0.savedPostIds = previous }
             self.savedPostsChanged()
             if !(await MattermostSync.isSessionRejected(error, sync: self)) {
-                self.notice(saved ? "The message couldn't be saved." : "The message couldn't be removed from Saved.")
+                self.notice(saved ? MattermostNotice.saveFailed : MattermostNotice.unsaveFailed)
             }
             return false
         }

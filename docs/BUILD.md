@@ -330,6 +330,24 @@ tools/mm-large-server.py purge       # delete the team and the load users perman
 - `RELAY_DEBUG_DEVICES_ACTION=terminate-first|terminate-others` (with `RELAY_DEBUG_OPEN_SCREEN=devices`): runs the confirmed "Terminate Session" of the first other session, or "Terminate All Other Sessions", three seconds after the list loaded. Use dave (or sessions you created): it ends real sessions.
 - Media tabs: `RELAY_DEBUG_OPEN_CHAT=<channel>` + `RELAY_DEBUG_OPEN_SCREEN=peerinfo`; the file search logs `holes: files of <channel>`. The chat itself pages the history behind the profile, so test with files more than a few pages back.
 
+#### Phase 4C: accessibility, text size, appearance, languages
+
+- **VoiceOver tree from inside the app** (debug builds): `tools/relay-remote.py "$UDID" ax-tree` lists the accessibility
+  elements of the screen (label, value, hint, traits, frame, custom actions; `extra.elements`), walked the way UIKit
+  exposes them (MattermostUI `MattermostAccessibilityDebug.swift`). It sees elements that AXe misses (Telegram's
+  ASDisplayNode-based bars and lists hand out plain objects AXe skips). VoiceOver orders them by position.
+- **From outside**: AXe (bundled in XcodeBuildMCP's npm package, `bundled/axe`; `npm pack xcodebuildmcp@2.7.0` and
+  unpack it) `axe describe-ui --udid "$UDID"` (whole tree) and `--point x,y` (what touch exploration finds there).
+  Its `touch -x … -y … --down --up --delay 0.15` reaches Relay's windows on this setup too (4C).
+- **Text size**: `xcrun simctl ui "$UDID" content_size accessibility-extra-extra-extra-large` (then relaunch);
+  Telegram follows it while Appearance → Text Size → "Use System Text Size" is on (the default). Back:
+  `content_size large`.
+- **Dark mode**: `xcrun simctl ui "$UDID" appearance dark` (Telegram's automatic night theme follows the system).
+- **Right-to-left**: `xcrun simctl launch "$UDID" org.relaychat.Relay -AppleLanguages "(ar)" -AppleLocale ar_SA`.
+- **Pseudo-language** (debug builds bundle `en-XA`, docs/design/localization.md):
+  `xcrun simctl launch "$UDID" org.relaychat.Relay -AppleLanguages "(en-XA)"`. Plain English on screen is
+  hard-coded or server text.
+
 If `simctl install` doesn't pick up a rebuilt binary (same build number), replace the installed bundle in place as described in the root `CLAUDE.md` ("Updating the running simulator after a rebuild"). This happened in 2D after a 30-second incremental build: compare the md5 of `Frameworks/TelegramUIFramework.framework/TelegramUIFramework` in the `.ipa` and in the installed app when a change seems missing.
 
 ### Push notifications on the simulator (Phase 3A)

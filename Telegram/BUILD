@@ -210,13 +210,75 @@ empty_languages = [
     "uz",
 ]
 
+# MATTERMOST: bundled translations (docs/design/localization.md). A language ships strings of its own when
+# Telegram-iOS/<lang>.lproj/ has Relay.strings (Relay's texts and branded overrides, translated) and/or a full
+# Localizable.strings (a translation of upstream's English file). They are merged like English and checked against
+# it (MergeStrings.py); keys a language lacks fall back to English at runtime. The app picks the user's preferred
+# bundled language (`relayBundledPresentationStrings`, TelegramPresentationData).
+relay_translated_languages = sorted({
+    path.split("/")[1][:-len(".lproj")]: True
+    for path in glob([
+        "Telegram-iOS/*.lproj/Relay.strings",
+        "Telegram-iOS/*.lproj/Localizable.strings",
+    ], allow_empty = True)
+    if not path.startswith("Telegram-iOS/en.lproj/")
+}.keys())
+
 [
     genrule(
         name = "Localizable_{}.strings".format(language),
         outs = ["{}.lproj/Localizable.strings".format(language)],
         cmd = "touch $(OUTS)",
-    ) for language in empty_languages
+    ) for language in empty_languages if language not in relay_translated_languages # MATTERMOST: translated ones below
 ]
+
+# MATTERMOST: one merge per translated language: its base translation (if any) + its Relay.strings (if any).
+[
+    genrule(
+        name = "RelayLocalizableStrings_{}".format(language),
+        srcs = [
+            "//build-system:GenerateStrings/GenerateStrings.py",
+            "//build-system:GenerateStrings/MergeStrings.py",
+            ":RelayLocalizableStrings",
+            "Telegram-iOS/Relay.strings",
+        ] + glob([
+            "Telegram-iOS/{}.lproj/Localizable.strings".format(language),
+            "Telegram-iOS/{}.lproj/Relay.strings".format(language),
+        ], allow_empty = True),
+        cmd = " ".join([
+            "python3 $(location //build-system:GenerateStrings/MergeStrings.py)",
+            "--language={}".format(language),
+            "--english=$(location :RelayLocalizableStrings)",
+            "--english-overlay=$(location Telegram-iOS/Relay.strings)",
+            "--output=$(location {}.lproj/Localizable.strings)".format(language),
+        ] + [
+            "--base=$(location {})".format(path)
+            for path in glob(["Telegram-iOS/{}.lproj/Localizable.strings".format(language)], allow_empty = True)
+        ] + [
+            "--overlay=$(location {})".format(path)
+            for path in glob(["Telegram-iOS/{}.lproj/Relay.strings".format(language)], allow_empty = True)
+        ]),
+        outs = ["{}.lproj/Localizable.strings".format(language)],
+    ) for language in relay_translated_languages
+]
+
+# MATTERMOST: a pseudo-language for debug builds (docs/design/localization.md): every English string accented,
+# ~35% longer and bracketed, so hard-coded English and clipped labels stand out. Launch with
+# `-AppleLanguages "(en-XA)"`. Release builds don't ship it (`AppStringResources`).
+genrule(
+    name = "RelayPseudoLocalizableStrings",
+    srcs = [
+        "//build-system:GenerateStrings/GenerateStrings.py",
+        "//build-system:GenerateStrings/PseudoLocalizeStrings.py",
+        ":RelayLocalizableStrings",
+    ],
+    cmd = '''
+        python3 $(location //build-system:GenerateStrings/PseudoLocalizeStrings.py) \\
+            --source=$(location :RelayLocalizableStrings) \\
+            --output=$(location en-XA.lproj/Localizable.strings)
+    ''',
+    outs = ["en-XA.lproj/Localizable.strings"],
+)
 
 objc_library(
     name = "PresentationStrings",
@@ -296,7 +358,14 @@ filegroup(
         ":RelayLocalizableStrings", # MATTERMOST: was Telegram-iOS/en.lproj/Localizable.strings
     ] + [
         "{}.lproj/Localizable.strings".format(language) for language in empty_languages
-    ],
+    ] + [
+        # MATTERMOST: translated languages that aren't among upstream's empty ones (docs/design/localization.md).
+        "{}.lproj/Localizable.strings".format(language) for language in relay_translated_languages if language not in empty_languages
+    ] + select({
+        # MATTERMOST: the en-XA pseudo-language, debug builds only.
+        ":debug": [":RelayPseudoLocalizableStrings"],
+        "//conditions:default": [],
+    }),
 )
 
 filegroup(

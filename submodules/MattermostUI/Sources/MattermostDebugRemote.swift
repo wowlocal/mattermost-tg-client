@@ -267,6 +267,11 @@ final class MattermostDebugRemote {
                     self.writeResult(id: id, ok: true, error: nil)
                 })
             })
+        case "ax-tree":
+            // Phase 4C: the accessibility elements VoiceOver reaches on screen, in reading order (label, value,
+            // hint, traits, frame, custom actions).
+            self.lastExtra = ["elements": MattermostAccessibilityDebug.elements()]
+            self.writeResult(id: id, ok: true, error: nil)
         case "runtime":
             // Phase 4B: requests parked by the null network engine per Telegram function (total, still live,
             // `stacks=1`: where the first one started) and the app's memory footprint.

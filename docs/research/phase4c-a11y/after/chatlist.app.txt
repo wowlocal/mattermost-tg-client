@@ -1,0 +1,23 @@
+{} "Backend" [Message\nFrom: Bob Brennan\nHere's the limiter we use server-side:\nlimiter := rate.NewLimiter(rate.Every(100*time.Millisecond), 20)\nif !limiter.Allow() {\n    return c.Err(http.StatusTooManyRequests)\n}] +Unread|Unpin|Mute|Delete|Archive @0,215 402x76
+{} "Bob Brennan" [Message\nFrom: Bob Brennan\n4B fg test 1793033573 (DM)] +Unread|Unpin|Mute|Delete|Archive @0,291 402x76
+{} "4C Accessibility" [Message\nFrom: Bob Brennan\nمراجعة الشاشات العربية] +Unread|Pin|Mute|Delete|Archive @0,367 402x76
+{} "Town Square" [Outgoing Message\n4B offline 3 182354] +Unread|Pin|Mute|Delete|Archive @0,443 402x76
+{} "Sandbox" [Outgoing Message\n4B smoke after 4A merge 180423 https://example.com/4b] +Unread|Pin|Mute|Delete|Archive @0,519 402x76
+{} "Media & Files" [Message\nFrom: Release Check\nPhase 4A plain-http link: http://example.com/] +Unread|Pin|Mute|Delete|Archive @0,595 402x76
+{} "alice, l4b0026, l4b0171" [Outgoing Message\nGM 4 hello] +Unread|Pin|Mute|Delete|Archive @0,671 402x76
+{} "alice, l4b0004, l4b0047" [Outgoing Message\nGM 5 hello] +Unread|Pin|Mute|Delete|Archive @0,747 402x76
+{} "alice, l4b0081, l4b0089" [Outgoing Message\nGM 2 hello] +Unread|Pin|Mute|Delete|Archive @0,823 402x76
+{} "Bob Brennan" [Message\nFrom: Bob Brennan\n4B fg test 1793033573 (DM)] +Unread|Pin|Mute|Delete|Archive @402,215 402x76
+{} "alice, l4b0026, l4b0171" [Outgoing Message\nGM 4 hello] +Unread|Pin|Mute|Delete|Archive @402,291 402x76
+{} "alice, l4b0004, l4b0047" [Outgoing Message\nGM 5 hello] +Unread|Pin|Mute|Delete|Archive @402,367 402x76
+{} "alice, l4b0081, l4b0089" [Outgoing Message\nGM 2 hello] +Unread|Pin|Mute|Delete|Archive @402,443 402x76
+{} "alice, l4b0055, l4b0059" [Outgoing Message\nGM 1 hello] +Unread|Pin|Mute|Delete|Archive @402,519 402x76
+{} "alice, l4b0149, l4b0164" [Outgoing Message\nGM 3 hello] +Unread|Pin|Mute|Delete|Archive @402,595 402x76
+{} "Lea Costa" [Outgoing Message\nDM 2 with l4b0063] +Unread|Pin|Mute|Delete|Archive @402,671 402x76
+{} "Uma Costa" [Outgoing Message\nDM 2 with l4b0072] +Unread|Pin|Mute|Delete|Archive @402,747 402x76
+{} "Rae Costa" [Outgoing Message\nDM 7 with l4b0069] +Unread|Pin|Mute|Delete|Archive @402,823 402x76
+{search} "Search" @16,118 370x44
+{button} "" @59,57 235x44
+{button} "Edit" @16,64 55x44
+{button} "New Message" @342,64 44x44
+{button} "Threads" [3 unread threads, with mentions] @298,64 44x44

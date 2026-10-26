@@ -1,0 +1,10 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  Heading "Status" @175,76 52x20
+  GenericElement "Online" [Selected] @16,138 370x52
+  GenericElement "Away" @16,190 370x52
+  GenericElement "Do Not Disturb" @16,242 370x52
+  GenericElement "Offline" @16,294 370x52
+  StaticText "Relay shows you as away when you're inactive and online when you're back, unless you choose a status here." @16,346 370x62
+  Button "Custom Status" [Set a Status] @16,424 370x52

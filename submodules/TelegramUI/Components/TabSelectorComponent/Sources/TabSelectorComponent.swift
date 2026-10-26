@@ -288,6 +288,12 @@ public final class TabSelectorComponent: Component {
             }
         }
         
+        // MATTERMOST: a double tap with VoiceOver selects the tab, as a tap does.
+        override func accessibilityActivate() -> Bool {
+            self.action()
+            return true
+        }
+        
         private func updateIsShaking(animated: Bool) {
             if self.isReordering {
                 if self.containerButton.layer.animation(forKey: "shaking_position") == nil {
@@ -724,6 +730,13 @@ public final class TabSelectorComponent: Component {
                     }
                     
                     itemView.update(theme: component.theme, size: itemBackgroundRect.size, item: item, isReordering: item.isReorderable && component.reorderItem != nil, transition: itemTransition)
+                    // MATTERMOST: VoiceOver reads each tab as a button with its title and whether it is selected
+                    // (upstream's tabs had no accessibility; Relay's team tabs use them).
+                    itemView.isAccessibilityElement = true
+                    if case let .text(text) = item.content {
+                        itemView.accessibilityLabel = text
+                    }
+                    itemView.accessibilityTraits = item.id == component.selectedId ? [.button, .selected] : [.button]
                     
                     itemTransition.setPosition(view: itemTitleView, position: CGPoint(x: itemTitleFrame.minX, y: itemTitleFrame.minY))
                     itemTransition.setBounds(view: itemTitleView, bounds: CGRect(origin: CGPoint(), size: itemTitleFrame.size))

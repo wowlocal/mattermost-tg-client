@@ -1,0 +1,11 @@
+{header,text} "ENGINEERING · 3 UNREAD · 2 MENTIONS" @16,192 370x29
+{button} "Alice Anderson" [3F Share, Look at these\n\nShared from another app (3F)\n\nhttps://mattermost.com/blog/, 1 reply, Last reply 4:39 PM] +Unfollow Thread @0,221 402x125
+{button} "Alice Anderson" [Sandbox, Fixture: a thread root, 4 replies, Last reply 1:49 PM] +Unfollow Thread @0,346 402x106
+{button} "Bob Brennan" [Sandbox, 3B: a root nobody has replied to yet, 1 reply, Last reply 1:39 PM] +Unfollow Thread @0,452 402x106
+{button} "Bob Brennan" [Bob Brennan, 3B DM thread: which build should I test?, 2 replies, Last reply 1:28 PM] +Unfollow Thread @0,558 402x106
+{button} "Alice Anderson" [Unread, Code Review, Should we enforce SwiftLint in CI? 🧵, 4 replies, 1 new reply, 1 mention, Last reply 1:21 PM] +Unfollow Thread @0,664 402x106
+{button} "Dave Okafor-Lindqvist" [Releases, 2.3.1 retro: what went wrong with the push delay? 🧵, 8 replies, Last reply 1:20 PM] +Unfollow Thread @0,770 402x125
+{button} "Back" @16,64 44x44
+{header} "Threads" @168,76 66x20
+{button,selected} "Engineering" @114,130 79x28
+{button} "Design" @241,130 46x28

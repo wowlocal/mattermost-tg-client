@@ -1,0 +1,20 @@
+{header,text} "NAME" @16,192 370x29
+{} "" [Channel name] (Channel name) @32,221 338x50
+{header,text} "URL" @16,301 370x29
+{} "" [channel-url] (channel-url) @32,330 338x50
+{text} "localhost:8065/engineering/channels/" @16,382 370x30
+{header,text} "TYPE" @16,440 370x29
+{button,selected} "Public Channel" @16,469 370x52
+{button} "Private Channel" @16,521 370x52
+{text} "Anyone in the team can find and join a public channel." @16,573 370x30
+{header,text} "PURPOSE" @16,631 370x29
+{} "" (What is this channel for?) @32,675 304x21
+{text} "Shown in the channel's info and in Browse Channels." @16,710 370x30
+{header,text} "HEADER" @16,768 370x29
+{} "" (Links, topics, who to ask) @32,812 304x21
+{text} "Shown at the top of the channel. Markdown works here." @16,847 370x30
+{button} "Back" @16,64 44x44
+{button} "Create" @320,64 54x44
+{header} "New Channel" @148,76 105x20
+{button,selected} "Engineering" @114,130 79x28
+{button} "Design" @241,130 46x28

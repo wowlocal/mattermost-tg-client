@@ -65,6 +65,7 @@ final class MattermostMFAScreen: ViewController {
         MattermostDebugRemote.screenAppeared(self)
         #endif
         self.screenNode.activateInput()
+        self.screenNode.updateCodeAccessibilityFrame()
     }
 
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
@@ -132,6 +133,7 @@ final class MattermostMFAScreenNode: ASDisplayNode {
     private let codeInputView: CodeInputView
     private let errorNode: ImmediateTextNode
     private let activityIndicator: UIActivityIndicatorView
+    private let textScale: MattermostAuthTextScale
 
     var codeEntered: ((String) -> Void)?
     private var layoutArguments: (ContainerViewLayout, CGFloat)?
@@ -151,12 +153,14 @@ final class MattermostMFAScreenNode: ASDisplayNode {
     init(presentationData: PresentationData, subtitle: String) {
         self.presentationData = presentationData
         let theme = presentationData.theme
+        let textScale = MattermostAuthTextScale(presentationData: presentationData)
+        self.textScale = textScale
 
         self.titleNode = ImmediateTextNode()
-        self.titleNode.maximumNumberOfLines = 2
+        self.titleNode.maximumNumberOfLines = 0
         self.titleNode.textAlignment = .center
         let title = presentationData.strings.Relay_Login_MFATitle
-        self.titleNode.attributedText = NSAttributedString(string: title, font: Font.bold(28.0), textColor: theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
+        self.titleNode.attributedText = NSAttributedString(string: title, font: Font.bold(textScale.size(28.0)), textColor: theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
         self.titleNode.isAccessibilityElement = true
         self.titleNode.accessibilityLabel = title
         self.titleNode.accessibilityTraits = .header
@@ -165,7 +169,7 @@ final class MattermostMFAScreenNode: ASDisplayNode {
         self.textNode.maximumNumberOfLines = 0
         self.textNode.textAlignment = .center
         let text = presentationData.strings.Relay_Login_MFAText(subtitle).string
-        self.textNode.attributedText = NSAttributedString(string: text, font: Font.regular(16.0), textColor: theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
+        self.textNode.attributedText = NSAttributedString(string: text, font: Font.regular(textScale.size(16.0)), textColor: theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
         self.textNode.isAccessibilityElement = true
         self.textNode.accessibilityLabel = text
 
@@ -228,10 +232,21 @@ final class MattermostMFAScreenNode: ASDisplayNode {
         self.codeInputView.animateError()
         self.codeInputView.layer.addShakeAnimation(amplitude: -30.0, duration: 0.5, count: 6, decay: true)
         self.setErrorText(text)
+        // The code is cleared and the field shakes: VoiceOver says why.
+        UIAccessibility.post(notification: .announcement, argument: text)
+    }
+
+    /// The code's text field is a 1×1 point that receives the keyboard (CodeInputView draws the digits itself):
+    /// VoiceOver focuses the whole row of digits instead.
+    func updateCodeAccessibilityFrame() {
+        guard self.isNodeLoaded, !self.codeInputView.bounds.isEmpty else {
+            return
+        }
+        self.codeInputView.textField.accessibilityFrame = UIAccessibility.convertToScreenCoordinates(self.codeInputView.bounds, in: self.codeInputView.view)
     }
 
     private func setErrorText(_ text: String?) {
-        self.errorNode.attributedText = text.flatMap { NSAttributedString(string: $0, font: Font.regular(14.0), textColor: self.presentationData.theme.list.itemDestructiveColor, paragraphAlignment: .center) }
+        self.errorNode.attributedText = text.flatMap { NSAttributedString(string: $0, font: Font.regular(self.textScale.size(14.0)), textColor: self.presentationData.theme.list.itemDestructiveColor, paragraphAlignment: .center) }
         self.errorNode.accessibilityLabel = text
         self.errorNode.isAccessibilityElement = text != nil
         if let (layout, navigationHeight) = self.layoutArguments {
@@ -269,6 +284,7 @@ final class MattermostMFAScreenNode: ASDisplayNode {
             compact: size.width <= 375.0
         )
         transition.updateFrame(node: self.codeInputView, frame: CGRect(origin: CGPoint(x: floor((size.width - codeSize.width) / 2.0), y: y), size: codeSize))
+        self.updateCodeAccessibilityFrame()
         y += codeSize.height + 16.0
 
         let errorSize = self.errorNode.updateLayout(CGSize(width: contentWidth, height: .greatestFiniteMagnitude))

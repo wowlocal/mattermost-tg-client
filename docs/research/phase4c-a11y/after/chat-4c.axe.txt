@@ -1,0 +1,43 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  Group "4C Accessibility" [2 members] @112,56 178x60
+  Image @0,0 402x874
+  Image @89,24 223x22
+  GenericElement "Bob Brennan" [Bob Brennan joined the channel.\nOct 26, 2026 at 6:28 PM] @90,25 221x20 +actions:Open message menu
+  Image @52,49 297x38
+  GenericElement "Bob Brennan" [Alice Anderson was added to the channel by Bob Brennan.\nOct 26, 2026 at 6:28 PM] @53,50 295x36 +actions:Open message menu
+  GenericElement "admin" @291,90 63x33
+  Image @40,90 314x95
+  GenericElement "Bob Brennan" [مرحبا بالجميع! هذا اختبار للنص من اليمين إلى اليسار في Relay.\nOct 26, 2026 at 6:28 PM] @41,91 312x93 +actions:Reply|Open message menu
+  Image @40,183 272x74
+  GenericElement "Bob Brennan" [שלום לכולם — בדיקת טקסט מימין לשמאל.\nOct 26, 2026 at 6:28 PM] @41,184 270x72 +actions:Reply|Open message menu
+  Image @40,255 259x166
+  GenericElement "Bob Brennan" [Release checklist\n\nStep, Owner, Done\nBuild, bob, yes\nNotes, alice, no\nOct 26, 2026 at 6:28 PM] @41,256 257x164 +actions:Reply|Open message menu
+  Image @40,419 271x166
+  GenericElement "Bob Brennan" [A deploy needs approval\n\nDeploy api 4.2.0\nRolls out to staging first.\nEnvironment: staging\nOwner: @bob\nrelay-4c\nOct 26, 2026 at 6:28 PM] @41,420 269x164 +actions:Reply|Open message menu
+  Button "Approve" @47,585 130x42
+  Button @47,585 130x42
+  Image @47,585 130x42
+  Button "Reject" @179,585 130x42
+  Button @179,585 130x42
+  Image @179,585 130x42
+  Button "Environment" (Opens a list of options) @47,629 263x42
+  Button @47,629 263x42
+  Image @40,675 308x118
+  GenericElement "admin" @285,675 63x33
+  Button "2 Replies" @47,750 300x42
+  GenericElement "Bob Brennan" [Thread root for 4C: who reviews the VoiceOver labels?\nOct 26, 2026 at 6:28 PM] @41,676 306x116 +actions:Reply|Open message menu
+  TextArea (Message) @84,811 235x31
+  Image @91,825 0x0
+  Button @284,806 46x40
+  Image @300,819 14x14
+  Button "Stickers" @294,806 32x40
+  Group "Menu" @45,825 0x0
+  Button "Send media" @26,806 40x40
+  Image @26,806 40x40
+  GenericElement @26,806 40x40
+  Button "Start " @18,812 366x50
+  Button "Send" @323,825 0x0
+  Button "Send" @336,806 46x40
+  GenericElement @379,806 0x0

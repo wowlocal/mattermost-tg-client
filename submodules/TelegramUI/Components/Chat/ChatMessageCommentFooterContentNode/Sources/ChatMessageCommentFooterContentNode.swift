@@ -267,7 +267,13 @@ public final class ChatMessageCommentFooterContentNode: ChatMessageBubbleContent
                             strongSelf.alternativeCountNode.isHidden = !strongSelf.countNode.isHidden
                             
                             strongSelf.buttonNode.accessibilityLabel = accessibilityLabel
-                            
+                            // MATTERMOST: the "N Replies" button reads as a button and says when the thread has unread
+                            // replies (the dot next to it).
+                            if MattermostBackend.isEnabled {
+                                strongSelf.buttonNode.accessibilityTraits = .button
+                                strongSelf.buttonNode.accessibilityValue = hasUnseenReplies ? item.presentationData.strings.Relay_Accessibility_UnreadReplies : nil
+                            }
+
                             let _ = countApply(animation.isAnimated)
                             let _ = alternativeCountApply(animation.isAnimated)
                             

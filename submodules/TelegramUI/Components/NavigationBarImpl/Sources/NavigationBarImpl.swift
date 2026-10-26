@@ -550,6 +550,12 @@ public final class NavigationBarImpl: ASDisplayNode, NavigationBar {
                 
                 if let backTitle {
                     self.backButtonNodeImpl.updateManualText(backTitle, isBack: true)
+                    // MATTERMOST: a glass bar's back button is the arrow alone (its text is empty and zero wide, so
+                    // VoiceOver found an unnamed button it couldn't focus): the arrow is the "Back" button instead.
+                    // A double tap lands on the arrow, as a finger does.
+                    self.backButtonArrow.isAccessibilityElement = backTitle.isEmpty
+                    self.backButtonArrow.accessibilityLabel = backTitle.isEmpty ? self.presentationData.strings.back : nil
+                    self.backButtonArrow.accessibilityTraits = .button
                     if self.backButtonNodeImpl.supernode == nil {
                         if let leftButtonsBackgroundView = self.leftButtonsBackgroundView {
                             leftButtonsBackgroundView.container.addSubview(self.backButtonNodeImpl.view)

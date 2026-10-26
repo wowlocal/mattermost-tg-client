@@ -455,7 +455,7 @@ extension MattermostAccountSync {
             return true
         } catch {
             MMLog.log("threads: \(following ? "follow" : "unfollow") of \(reference.rootPostId) failed: \(error)")
-            self.notice("Couldn't \(following ? "follow" : "unfollow") the thread: \(describeError(error))")
+            self.notice(following ? MattermostNotice.followFailed(detail: describeError(error)) : MattermostNotice.unfollowFailed(detail: describeError(error)))
             return false
         }
     }

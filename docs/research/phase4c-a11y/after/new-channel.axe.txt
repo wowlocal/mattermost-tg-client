@@ -1,0 +1,23 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  Heading "New Channel" @148,76 105x20
+  ScrollArea @66,130 269x28
+    Button "Engineering" @114,130 79x28
+    Button "Design" @241,130 46x28
+    Image @114,165 79x3
+  Heading "NAME" @16,192 370x29
+  TextField [Channel name] (Channel name) @32,221 338x50
+  Heading "URL" @16,301 370x29
+  TextField [channel-url] (channel-url) @32,330 338x50
+  StaticText "localhost:8065/engineering/channels/" @16,382 370x30
+  Heading "TYPE" @16,440 370x29
+  Button "Public Channel" @16,469 370x52
+  Button "Private Channel" @16,521 370x52
+  StaticText "Anyone in the team can find and join a public channel." @16,573 370x30
+  Heading "PURPOSE" @16,631 370x29
+  TextArea (What is this channel for?) @32,675 304x21
+  StaticText "Shown in the channel's info and in Browse Channels." @16,710 370x30
+  Heading "HEADER" @16,768 370x29
+  TextArea (Links, topics, who to ask) @32,812 304x21
+  StaticText "Shown at the top of the channel. Markdown works here." @16,847 370x30

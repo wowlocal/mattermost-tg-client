@@ -1,0 +1,10 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  Heading "Enter Your Code" @98,138 205x33
+  GenericElement "Multi-factor authentication is on for carol. Enter the 6-digit code from your authenticator app." @29,181 343x38
+  TextField "MFA code" @24,251 1x1
+  Button @4,752 132x54
+  Button "Delete" @269,752 132x54
+  GenericElement @0,583 402x291

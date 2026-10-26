@@ -6827,6 +6827,9 @@ private func chatListHeaderOverflowInfo(strings: PresentationStrings) -> [AnyHas
         "compose": ChatListHeaderComponent.OverflowInfo(title: strings.Compose_NewMessage, iconName: "Chat List/ComposeIcon", priority: 3),
         "proxy": ChatListHeaderComponent.OverflowInfo(title: strings.SocksProxySetup_Title, iconName: "Chat List/ProxyShieldIcon", priority: 2),
         "story": ChatListHeaderComponent.OverflowInfo(title: strings.StoryFeed_AddStory, iconName: "Chat List/AddStoryIcon", priority: 1),
+        // MATTERMOST: the threads button (MattermostThreadsButton.swift) takes the story button's place; the title is
+        // its VoiceOver label (no priority: the side column lays it out as before).
+        "threads": ChatListHeaderComponent.OverflowInfo(title: strings.Relay_Threads_Title, iconName: "Chat/Context Menu/Replies", priority: nil),
         "more": ChatListHeaderComponent.OverflowInfo(title: strings.Common_More, iconName: nil, priority: nil)
     ]
 }

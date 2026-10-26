@@ -1,0 +1,25 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  Heading "New Message" @145,76 111x20
+  TextField [Search people] (Search people) @32,138 306x50
+  Button "New Group Message" @16,225 370x51
+  Button "New Channel" @16,277 370x52
+  Button "Browse Channels" @16,329 370x52
+  Heading "PEOPLE" @16,409 370x29
+  Button "Bob Brennan" [@bob · Backend Lead] @0,438 402x60
+  Button "Build Bot" [@buildbot · bot] @0,498 402x60
+  Button "Calls" [@calls · bot] @0,558 402x60
+  Button "Carol Núñez" [@carol · Product Designer] @0,618 402x60
+  Button "Dave Okafor-Lindqvist" [@dave · Site Reliability Engineer] @0,678 402x60
+  Button "Ben Abbott" [@l4b0001 · SRE] @0,738 402x60
+  Button "Cleo Abbott" [@l4b0002] @0,798 402x60
+  Button "Dan Abbott" [@l4b0003 · Engineer] @0,858 402x60
+  Button "Eve Abbott" [@l4b0004 · Support] @0,918 402x60
+  Button "Finn Abbott" [@l4b0005 · Engineer] @0,978 402x59
+  Button "Gus Abbott" [@l4b0006 · PM] @0,1038 402x60
+  Button "Hana Abbott" [@l4b0007 · Support] @0,1098 402x60
+  Button "Ivo Abbott" [@l4b0008 · Designer] @0,1158 402x60
+  Button "Jun Abbott" [@l4b0009 · SRE] @0,1218 402x60
+  Button "Kai Abbott" [@l4b0010 · Engineer] @0,1278 402x60
+  Button "Lea Abbott" [@l4b0011] @0,1338 402x60

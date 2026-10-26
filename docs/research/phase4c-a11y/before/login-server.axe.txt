@@ -1,0 +1,11 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  ScrollArea @0,0 402x874
+    Image "Relay" @163,122 76x76
+    Heading "Relay" @165,218 71x33
+    GenericElement "Chat with your team on Mattermost. Enter the address of your team's server to get started." @35,261 331x40
+    TextField "chat.example.com" [chat.example.com] @40,329 322x52
+    Button "Connect" @24,401 354x50
+    GenericElement "Works with Mattermost 11.7 and newer." @83,475 236x15
+  GenericElement @0,583 402x291

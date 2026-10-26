@@ -1,0 +1,15 @@
+{} "Bob Brennan" [@alice fixture: a channel mention\nOct 26, 2026 at 12:09 PM] +Reply|Open message menu @41,724 279x68
+{} "Bob Brennan" [@alice can you review the release notes before 5?\nOct 26, 2026 at 11:48 AM] +Reply|Open message menu @41,643 289x77
+{button} "4 Replies" @85,596 308x42
+{} "Your message" [Should we enforce SwiftLint in CI? 🧵\nOct 26, 2026 at 9:29 AM\n] +Reply|Open message menu @85,550 314x88
+{} "Bob Brennan" [Math rendering check. Inline: E = mc^2 and a block:\n\n\sum_{i=0}^{n} i = \frac{n(n+1)}{2}\nOct 26, 2026 at 9:29 AM] +Reply|Open message menu @41,366 297x179
+{} "Your message" [URLSession vs NWConnection for the WebSocket? I'd go with URLSessionWebSocketTask; Starscream is overkill. See RFC 6455. #websocket #architecture\nOct 26, 2026 at 9:29 AM\n] (Double tap to open link) +Reply|Open message menu @49,236 350x126
+{} "Dave Okafor-Lindqvist" [Some snippets from today's review:\n\n{"id": "8w5f3nd8xjfm7c3w3o1h1u5eyc", "create_at": 1729936800000, "message": "hello"}\n\ndocker compose -p mmdev logs -f mattermost | grep -i websocket\n\n- let timeout: TimeInterval = 10\n+ let timeout: TimeInterval = 30\n\nfunc (a *App) GetPostsPage(opts model.GetPostsOptions) (*model.PostList, error) {\n    return a.Srv().Store().Post().GetPosts(opts, false, map[string]bool{})\n}\n\nplain fenced block without a language\nOct 26, 2026 at 9:29 AM] +Reply|Open message menu @41,-383 313x615
+{button} "Back" @16,64 44x44
+{button} "Info" @342,64 44x44
+{} "" (Message) @84,811 235x31
+{button} "Stickers" @294,806 32x40
+{button} "Send media" @26,806 40x40
+{button} "Send" @323,825 0x0
+{button} "Send" @336,806 46x40
+{text} "ABC" @0,62 0x0

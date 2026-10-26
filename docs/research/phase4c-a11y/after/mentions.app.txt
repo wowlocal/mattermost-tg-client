@@ -1,0 +1,13 @@
+{} "4C Accessibility" [Message\nFrom: Bob Brennan\nRelease checklist\n\nStep  | Owner | Done\n------+-------+-----\nBuild | bob   | yes\nNotes | alice |  no] @0,114 402x76
+{} "3E Public" [Message\nFrom: Bob Brennan\nA post in a channel alice hasn't joined] @0,190 402x76
+{} "3E Links" [Message\nFrom: Bob Brennan\nOpen the root, ~off-topic, http://localhost:8065/engineering/channels/town-square, http://localhost:8065/engineering/messages/@alice and relay://localhost:8065/engineering/pl/bpczw493nbb1ir5a946cn4o9ry] @0,266 402x76
+{} "3E Links" [Message\nFrom: Bob Brennan\nNarrow table:\nName | Qty\n-----+----\ntea  |   2\nmilk |  10\n\nWide table:\napi\nOwner: @alice\nStatus: ✅ up\nNotes: see runbook\n\nworker\nOwner: @bob\nStatus: down\nNotes: restarting] @0,342 402x76
+{} "Code Review" [Message\nFrom: Bob Brennan\n3B live: @alice SwiftLint is now enforced in CI] @0,418 402x76
+{} "Releases" [Message\nFrom: Bob Brennan\n3B live: bob replies while alice has the thread open] @0,494 402x76
+{} "Sandbox" [Outgoing Message\n3A merge smoke test from alice] @0,570 402x76
+{} "Sandbox" [Message\nFrom: Bob Brennan\nFixture: a reply in alice's thread] @0,646 402x76
+{} "Code Review" [Message\nFrom: Bob Brennan\n@alice fixture: a channel mention] @0,722 402x76
+{} "Sandbox" [Outgoing Message\n📎 2D files tab: two notes from alice] @0,798 402x76
+{} "Sandbox" [Outgoing Message\n🖼 2D media tab: three photos from alice] @0,874 402x76
+{header} "Recent Mentions" @134,74 134x20
+{button} "Back" @27,62 39x44

@@ -1,0 +1,15 @@
+{} "" [Search people] (Search people) @32,138 306x50
+{button} "New Group Message" @16,225 370x51
+{button} "New Channel" @16,277 370x52
+{button} "Browse Channels" @16,329 370x52
+{header,text} "PEOPLE" @16,409 370x29
+{button} "Bob Brennan" [@bob · Backend Lead] @0,438 402x60
+{button} "Build Bot" [@buildbot · bot] @0,498 402x60
+{button} "Calls" [@calls · bot] @0,558 402x60
+{button} "Carol Núñez" [@carol · Product Designer] @0,618 402x60
+{button} "Dave Okafor-Lindqvist" [@dave · Site Reliability Engineer] @0,678 402x60
+{button} "Ben Abbott" [@l4b0001 · SRE] @0,738 402x60
+{button} "Cleo Abbott" [@l4b0002] @0,798 402x60
+{button} "Dan Abbott" [@l4b0003 · Engineer] @0,858 402x60
+{button} "Back" @16,64 44x44
+{header} "New Message" @145,76 111x20

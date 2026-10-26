@@ -1,0 +1,16 @@
+{} "" [Search channels] (Search channels) @32,192 306x50
+{} "Archived Channels" [Off] (Double Tap To Toggle) @16,279 370x52
+{button} "2D Archive" [2 members · Phase 2D: files far back in the history, Joined] @0,331 402x95
+{button} "2D Files" [2 members · Phase 2D: media tabs from file search, Joined] @0,427 402x60
+{button} "2D Library" [2 members · Phase 2D: one file search for all media tabs, Joined] @0,487 402x60
+{button} "3C Search Public" [2 members · Phase 3C: a public channel alice has not joined, Joined] @0,547 402x60
+{button} "3C Search Public Two" [2 members · Phase 3C: second join test, Joined] @0,607 402x60
+{button} "3D Join Test" [1 member · Phase 3D /join and /leave check] @0,667 402x60
+{button} "3D-2 Release Crew (dave)" [3 members · Coordinating the 3D-2 release (renamed)., Joined] @0,727 402x60
+{button} "3E Links" [2 members · Phase 3E test posts, Joined] @0,787 402x60
+{button} "3E Public" [2 members · A public channel alice is not in (3E link test), Joined] @0,847 402x60
+{button} "Back" @16,64 44x44
+{button} "New" @339,64 35x44
+{header} "Browse Channels" @132,76 138x20
+{button,selected} "Engineering" @114,130 79x28
+{button} "Design" @241,130 46x28

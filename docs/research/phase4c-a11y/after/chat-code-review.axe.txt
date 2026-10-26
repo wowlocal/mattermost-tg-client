@@ -1,0 +1,32 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  Group "Code Review" [4 members, 2 online] @112,56 178x60
+  Image @0,0 402x874
+  GenericElement @210,-381 24x26
+  Image @40,-384 315x617
+  GenericElement "Dave Okafor-Lindqvist" [Some snippets from today's review:\n\n{"id": "8w5f3nd8xjfm7c3w3o1h1u5eyc", "create_at": 1729936800000, "message": "hello"}\n\ndocker compose -p mmdev logs -f mattermost | grep -i websocket\n\n- let timeout: TimeInterval = 10\n+ let timeout: TimeInterval = 30\n\nfunc (a *App) GetPostsPage(opts model.GetPostsOptions) (*model.PostList, error) {\n    return a.Srv().Store().Post().GetPosts(opts, false, map[string]bool{})\n}\n\nplain fenced block without a language\nOct 26, 2026 at 9:29 AM] @41,-383 313x615 +actions:Reply|Open message menu
+  Image @48,235 352x128
+  GenericElement "Your message" [URLSession vs NWConnection for the WebSocket? I'd go with URLSessionWebSocketTask; Starscream is overkill. See RFC 6455. #websocket #architecture\nOct 26, 2026 at 9:29 AM\n] (Double tap to open link) @49,236 350x126 +actions:Reply|Open message menu
+  Image @40,365 299x181
+  GenericElement "Bob Brennan" [Math rendering check. Inline: E = mc^2 and a block:\n\n\sum_{i=0}^{n} i = \frac{n(n+1)}{2}\nOct 26, 2026 at 9:29 AM] @41,366 297x179 +actions:Reply|Open message menu
+  Image @84,549 316x90
+  Button "4 Replies" @85,596 308x42
+  GenericElement "Your message" [Should we enforce SwiftLint in CI? 🧵\nOct 26, 2026 at 9:29 AM\n] @85,550 314x88 +actions:Reply|Open message menu
+  Image @40,642 291x79
+  GenericElement "Bob Brennan" [@alice can you review the release notes before 5?\nOct 26, 2026 at 11:48 AM] @41,643 289x77 +actions:Reply|Open message menu
+  Image @40,723 281x70
+  GenericElement "Bob Brennan" [@alice fixture: a channel mention\nOct 26, 2026 at 12:09 PM] @41,724 279x68 +actions:Reply|Open message menu
+  TextArea (Message) @84,811 235x31
+  Image @91,825 0x0
+  Button @284,806 46x40
+  Image @300,819 14x14
+  Button "Stickers" @294,806 32x40
+  Group "Menu" @45,825 0x0
+  Button "Send media" @26,806 40x40
+  Image @26,806 40x40
+  GenericElement @26,806 40x40
+  Button "Start " @18,812 366x50
+  Button "Send" @323,825 0x0
+  Button "Send" @336,806 46x40
+  GenericElement @379,806 0x0

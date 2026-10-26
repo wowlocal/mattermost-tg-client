@@ -1,0 +1,28 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  Heading "Browse Channels" @132,76 138x20
+  ScrollArea @66,130 269x28
+    Button "Engineering" @114,130 79x28
+    Button "Design" @241,130 46x28
+    Image @114,165 79x3
+  TextField [Search channels] (Search channels) @32,192 306x50
+  GenericElement "Archived Channels" [Off] (Double Tap To Toggle) @16,279 370x52
+  CheckBox [0] @308,291 63x28
+  Button "2D Archive" [2 members · Phase 2D: files far back in the history, Joined] @0,331 402x95
+  Button "2D Files" [2 members · Phase 2D: media tabs from file search, Joined] @0,427 402x60
+  Button "2D Library" [2 members · Phase 2D: one file search for all media tabs, Joined] @0,487 402x60
+  Button "3C Search Public" [2 members · Phase 3C: a public channel alice has not joined, Joined] @0,547 402x60
+  Button "3C Search Public Two" [2 members · Phase 3C: second join test, Joined] @0,607 402x60
+  Button "3D Join Test" [1 member · Phase 3D /join and /leave check] @0,667 402x60
+  Button "3D-2 Release Crew (dave)" [3 members · Coordinating the 3D-2 release (renamed)., Joined] @0,727 402x60
+  Button "3E Links" [2 members · Phase 3E test posts, Joined] @0,787 402x60
+  Button "3E Public" [2 members · A public channel alice is not in (3E link test), Joined] @0,847 402x60
+  Button "3F Share" [3 members · Phase 3F checks: sharing, status, notifications, Joined] @0,907 402x60
+  Button "3F Unjoined" [1 member · A public channel alice is not in (3F/3E permalink check)] @0,967 402x60
+  Button "4C Accessibility" [2 members · Phase 4C: VoiceOver, text size, RTL checks, Joined] @0,1027 402x60
+  Button "Android" [3 members, Joined] @0,1087 402x60
+  Button "Architecture" [4 members, Joined] @0,1147 402x60
+  Button "Backend" [4 members · Server-side discussion, Joined] @0,1207 402x60
+  Button "Code Review" [4 members · Markdown rendering test bed, Joined] @0,1267 402x60
+  Button "Firehose" [4 members · 10k+ posts over two years plus a 2013 import. Scrolling, paging and hole-filling tests., Joined] @0,1327 402x60

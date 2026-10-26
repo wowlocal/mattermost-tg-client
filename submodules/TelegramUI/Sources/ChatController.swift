@@ -6434,6 +6434,8 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             }
             
             chatInfoButtonItem = UIBarButtonItem(customDisplayNode: avatarNode)!
+            // MATTERMOST: the avatar button (the chat's profile) read as an unnamed button.
+            chatInfoButtonItem.accessibilityLabel = self.presentationData.strings.Conversation_Info
             self.avatarNode = avatarNode
         case .customChatContents:
             chatInfoButtonItem = UIBarButtonItem(title: "", style: .plain, target: nil, action: nil)

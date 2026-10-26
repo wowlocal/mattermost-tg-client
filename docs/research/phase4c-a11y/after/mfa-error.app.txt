@@ -1,0 +1,5 @@
+{header} "Enter Your Code" @98,138 205x33
+{} "Multi-factor authentication is on for carol. Enter the 6-digit code from your authenticator app." @29,181 343x38
+{} "That code didn't work. Codes change every 30 seconds; enter the current one." @49,318 303x32
+{button} "Back" @16,64 44x44
+{text} "ABC" @0,62 0x0

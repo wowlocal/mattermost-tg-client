@@ -752,7 +752,7 @@ extension MattermostAccountSync {
             } catch {
                 MMLog.log("leave: \(channelId) refused (\(describeError(error))); putting the chat back")
                 await self.refreshChannel(channelId)
-                self.notice("Couldn't leave the channel: \(describeError(error))")
+                self.notice(.leaveFailed(detail: describeError(error)))
             }
         case .directMessage, .groupMessage:
             let isDirect = channelState.channel.type == .directMessage

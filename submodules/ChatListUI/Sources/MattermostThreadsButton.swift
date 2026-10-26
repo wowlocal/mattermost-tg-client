@@ -4,6 +4,7 @@ import Display
 import SwiftSignalKit
 import TelegramCore
 import AccountContext
+import TelegramPresentationData
 import ComponentFlow
 import ChatListHeaderComponent
 import MattermostSync
@@ -58,8 +59,18 @@ final class MattermostThreadsButtonState {
         }
         let context = self.context
         let badgeText: String? = badge.unreadThreads > 0 ? (badge.unreadMentions > 0 ? "@\(badge.unreadThreads)" : "\(badge.unreadThreads)") : nil
+        // VoiceOver: "Threads" (the header's overflow title, ChatListController) and the badge in words.
+        var accessibilityValue: String?
+        if badge.unreadThreads > 0 {
+            let strings = context.sharedContext.currentPresentationData.with { $0 }.strings
+            var value = strings.Relay_Threads_UnreadThreads(Int32(badge.unreadThreads))
+            if badge.unreadMentions > 0 {
+                value += ", " + strings.Relay_Threads_WithMentions
+            }
+            accessibilityValue = value
+        }
         return AnyComponentWithIdentity(id: "threads", component: AnyComponent(NavigationButtonComponent(
-            content: .iconWithBadge(imageName: "Chat/Context Menu/Replies", badge: badgeText),
+            content: .iconWithBadge(imageName: "Chat/Context Menu/Replies", badge: badgeText, accessibilityValue: accessibilityValue),
             pressed: { [weak self] _ in
                 self?.open?(mattermostThreadsController(context: context, teamId: teamId))
             }

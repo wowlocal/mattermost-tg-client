@@ -82,7 +82,7 @@ final class PostSender: MattermostMessageSender {
                             continue
                         }
                         MMLog.log("send: upload of \(messageId) failed: \(error)")
-                        sync.notice("Couldn't upload the attachment: \(describeError(error))")
+                        sync.notice(.uploadFailed(detail: describeError(error)))
                         subscriber.putError(.generic)
                         return
                     }
@@ -232,7 +232,7 @@ final class PostSender: MattermostMessageSender {
         // Files in message order, each message's files in media order (Mattermost keeps `file_ids` order).
         let fileIds = messageIds.flatMap { id in (files[id] ?? []).sorted(by: { $0.mediaIndex < $1.mediaIndex }).map { $0.fileId } }
         guard await sync.ensureChannel(forPeerId: messageId.peerId) != nil, let draft = await sync.outgoingDraft(messageId: messageId, fileIds: fileIds, groupMessageIds: messageIds) else {
-            sync.notice("Couldn't send the message: this chat is not on the server.")
+            sync.notice(.sendChatMissing)
             throw SendFailure.unknownChat
         }
         let pendingPostId = draft.post.pendingPostId
@@ -269,7 +269,7 @@ final class PostSender: MattermostMessageSender {
                 throw error
             }
             if await sync.messageExists(messageId) {
-                sync.notice("Couldn't send the message: \(describeError(error))")
+                sync.notice(.sendFailed(detail: describeError(error)))
                 throw error
             }
         }

@@ -1,0 +1,7 @@
+Application "Relay" @0,0 402x874
+  ScrollArea @0,0 402x54
+  ScrollArea @0,-1 402x1
+  Heading "Threads" @168,76 66x20
+  ScrollArea @12,130 377x28
+    Image @60,165 79x3
+  Heading "ENGINEERING · 3 UNREAD · 2 MENTIONS" @16,192 370x29

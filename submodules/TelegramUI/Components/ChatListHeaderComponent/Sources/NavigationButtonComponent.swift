@@ -29,8 +29,9 @@ public final class NavigationButtonComponent: Component {
         case more
         case icon(imageName: String)
         case proxy(status: ChatTitleProxyStatus)
-        // MATTERMOST: an icon with a count badge (the chat list's threads button).
-        case iconWithBadge(imageName: String, badge: String?)
+        // MATTERMOST: an icon with a count badge (the chat list's threads button); VoiceOver reads
+        // `accessibilityValue` for the badge.
+        case iconWithBadge(imageName: String, badge: String?, accessibilityValue: String?)
     }
     
     public let content: Content
@@ -115,6 +116,7 @@ public final class NavigationButtonComponent: Component {
             var textString: NSAttributedString?
             var imageName: String?
             var badgeText: String?
+            var accessibilityValue: String?
             var proxyStatus: ChatTitleProxyStatus?
             var isMore: Bool = false
             
@@ -124,17 +126,23 @@ public final class NavigationButtonComponent: Component {
                     imageName = "Navigation/Done"
                 } else {
                     textString = NSAttributedString(string: title, font: isBold ? Font.bold(17.0) : Font.medium(17.0), textColor: theme.chat.inputPanel.panelControlColor)
+                    // MATTERMOST: a text button (the chat list's Edit) is named by its text; upstream left it unnamed.
+                    // The header sets a label of its own afterwards where it has one.
+                    self.accessibilityLabel = title
                 }
             case .more:
                 isMore = true
             case let .icon(imageNameValue):
                 imageName = imageNameValue
-            case let .iconWithBadge(imageNameValue, badgeValue):
+            case let .iconWithBadge(imageNameValue, badgeValue, accessibilityValueValue):
                 imageName = imageNameValue
                 badgeText = badgeValue
+                accessibilityValue = accessibilityValueValue
             case let .proxy(status):
                 proxyStatus = status
             }
+            
+            self.accessibilityValue = accessibilityValue
             
             var size = CGSize(width: 0.0, height: availableSize.height)
             
