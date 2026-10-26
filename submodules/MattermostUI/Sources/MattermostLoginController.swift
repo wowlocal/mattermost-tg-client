@@ -37,6 +37,9 @@ public final class MattermostLoginController: NavigationController {
     private let sharedContext: SharedAccountContext
     private let mode: Mode
     private let presentationData: PresentationData
+    private var strings: PresentationStrings {
+        return self.presentationData.strings
+    }
     private let authorizationCompleted: () -> Void
 
     private let _ready = Promise<Bool>()
@@ -152,12 +155,12 @@ public final class MattermostLoginController: NavigationController {
         let minimum = ServerCompatibility.minimumVersion
         let content = MattermostAuthScreenContent(
             showsLogo: true,
-            title: self.hasOtherAccounts ? "Add Account" : RelayBranding.appName,
-            text: self.hasOtherAccounts ? "Enter the address of a Mattermost server. You can switch between your accounts at any time." : "Chat with your team on Mattermost. Enter the address of your team's server to get started.",
-            fields: [MattermostAuthField(id: "url", kind: .serverAddress, placeholder: "chat.example.com", text: "")],
-            primaryTitle: "Connect",
+            title: self.hasOtherAccounts ? self.strings.Relay_Login_AddAccountTitle : RelayBranding.appName,
+            text: self.hasOtherAccounts ? self.strings.Relay_Login_AddAccountText : self.strings.Relay_Login_WelcomeText,
+            fields: [MattermostAuthField(id: "url", kind: .serverAddress, placeholder: self.strings.Relay_Login_ServerPlaceholder, text: "")],
+            primaryTitle: self.strings.Relay_Login_Connect,
             alternatives: [],
-            footer: "Works with Mattermost \(minimum.major).\(minimum.minor) and newer."
+            footer: self.strings.Relay_Login_MinimumVersion("\(minimum.major).\(minimum.minor)").string
         )
         let screen = MattermostAuthScreen(debugScreenName: "server", sharedContext: self.sharedContext, presentationData: self.presentationData, content: content)
         screen.primaryAction = { [weak self, weak screen] in
@@ -187,11 +190,11 @@ public final class MattermostLoginController: NavigationController {
                     self.pushViewController(self.makeCredentialsScreen(server: server), animated: true)
                 }
             } catch {
-                let message = (error as? MattermostServerProbeError)?.message ?? error.localizedDescription
+                let message = self.strings.relayProbeError(error)
                 await MainActor.run {
                     screen.inProgress = false
                     screen.animateError(field: "url")
-                    screen.presentAlert(title: "Can't Connect", text: message)
+                    screen.presentAlert(title: self.strings.Relay_Login_CantConnect, text: message)
                 }
             }
         }
@@ -218,25 +221,25 @@ public final class MattermostLoginController: NavigationController {
         var text: String
         if case let .relogin(session) = self.mode {
             prefilledLoginId = session.loginId ?? ""
-            title = "Log In Again"
-            text = "Your session on \(server.displayName) has ended. Log in again to keep your messages up to date."
+            title = self.strings.Relay_Login_ReloginTitle
+            text = self.strings.Relay_Login_ReloginText(server.displayName).string
         } else {
             title = server.displayName
-            text = "Log in with your account on \(host)."
+            text = self.strings.Relay_Login_CredentialsText(host).string
         }
         if server.allowsPasswordLogin {
             fields.append(MattermostAuthField(id: "login", kind: .loginId, placeholder: server.loginIdPlaceholder, text: prefilledLoginId))
-            fields.append(MattermostAuthField(id: "password", kind: .password, placeholder: "Password", text: ""))
+            fields.append(MattermostAuthField(id: "password", kind: .password, placeholder: self.strings.Relay_Login_Password, text: ""))
         } else if server.ssoProviders.isEmpty {
-            text = "This server doesn't offer a way to log in that Relay supports."
+            text = self.strings.Relay_Login_NoSupportedLogin
         }
         let content = MattermostAuthScreenContent(
             showsLogo: false,
             title: title,
             text: text,
             fields: fields,
-            primaryTitle: server.allowsPasswordLogin ? "Log In" : nil,
-            alternatives: server.ssoProviders.map { (id: $0.rawValue, title: MattermostSSOSession.title(for: $0, config: server.config)) },
+            primaryTitle: server.allowsPasswordLogin ? self.strings.Relay_Login_LogIn : nil,
+            alternatives: server.ssoProviders.map { (id: $0.rawValue, title: self.strings.relaySSOTitle($0, config: server.config)) },
             footer: "\(host) · Mattermost \(server.version)"
         )
         let screen = MattermostAuthScreen(debugScreenName: "credentials", sharedContext: self.sharedContext, presentationData: self.presentationData, content: content)
@@ -288,11 +291,11 @@ public final class MattermostLoginController: NavigationController {
                     self.pushMFAScreen(loginId: loginId, password: password, server: server)
                 }
             } catch {
-                let message = MattermostAccountSetup.loginErrorMessage(error)
+                let message = self.strings.relayLoginError(error)
                 await MainActor.run {
                     screen.inProgress = false
                     screen.animateError(field: "password")
-                    screen.presentAlert(title: "Can't Log In", text: message)
+                    screen.presentAlert(title: self.strings.Relay_Login_CantLogIn, text: message)
                 }
             }
         }
@@ -316,10 +319,10 @@ public final class MattermostLoginController: NavigationController {
                 } catch let error as MattermostError where error.isInvalidMFAToken || error.isMFARequired {
                     await MainActor.run {
                         screen.inProgress = false
-                        screen.reportError("That code didn't work. Codes change every 30 seconds; enter the current one.")
+                        screen.reportError(self.strings.Relay_Login_WrongCode)
                     }
                 } catch {
-                    let message = MattermostAccountSetup.loginErrorMessage(error)
+                    let message = self.strings.relayLoginError(error)
                     await MainActor.run {
                         screen.inProgress = false
                         screen.reportError(message)
@@ -353,17 +356,17 @@ public final class MattermostLoginController: NavigationController {
                             self.finish(login: login, loginId: nil, server: server, step: screen)
                         }
                     } catch {
-                        let message = MattermostAccountSetup.loginErrorMessage(error)
+                        let message = self.strings.relayLoginError(error)
                         await MainActor.run {
                             screen.inProgress = false
-                            screen.presentAlert(title: "Can't Log In", text: message)
+                            screen.presentAlert(title: self.strings.Relay_Login_CantLogIn, text: message)
                         }
                     }
                 }
             case let .failure(error):
                 screen.inProgress = false
-                if let message = error.message {
-                    screen.presentAlert(title: "Can't Log In", text: message)
+                if let message = error.message(strings: self.strings) {
+                    screen.presentAlert(title: self.strings.Relay_Login_CantLogIn, text: message)
                 }
             }
         })
@@ -385,10 +388,10 @@ public final class MattermostLoginController: NavigationController {
                 do {
                     try await MattermostAccountSetup.createAccount(server: server, serverURL: server.url, login: login, loginId: loginId, target: .authorization(account), accountManager: accountManager)
                 } catch {
-                    let message = (error as? MattermostAccountSetupError)?.message ?? error.localizedDescription
+                    let message = self.strings.relayLoginError(error)
                     await MainActor.run {
                         step.inProgress = false
-                        step.presentAlert(title: "Can't Log In", text: message)
+                        step.presentAlert(title: self.strings.Relay_Login_CantLogIn, text: message)
                     }
                 }
             }
@@ -399,7 +402,7 @@ public final class MattermostLoginController: NavigationController {
                     self.dismiss()
                 } catch {
                     step.inProgress = false
-                    step.presentAlert(title: "Can't Log In", text: (error as? MattermostRenewSessionError)?.message ?? error.localizedDescription)
+                    step.presentAlert(title: self.strings.Relay_Login_CantLogIn, text: self.strings.relayLoginError(error))
                 }
             } else {
                 let username = login.user.username
@@ -411,19 +414,20 @@ public final class MattermostLoginController: NavigationController {
                                 self?.dismiss()
                             }
                         } catch {
-                            let message = (error as? MattermostAccountSetupError)?.message ?? (error as? MattermostRenewSessionError)?.message ?? error.localizedDescription
+                            let strings = self?.strings
+                            let message = strings?.relayLoginError(error) ?? error.localizedDescription
                             await MainActor.run {
                                 step.inProgress = false
-                                step.presentAlert(title: "Can't Log In", text: message)
+                                step.presentAlert(title: strings?.Relay_Login_CantLogIn ?? "", text: message)
                             }
                         }
                     }
                 }
-                let alert = textAlertController(sharedContext: self.sharedContext, title: "Log In as \(username)?", text: "This account belonged to a different user. Relay will remove that user's messages and files from this device and add \(username)'s account instead.", actions: [
+                let alert = textAlertController(sharedContext: self.sharedContext, title: self.strings.Relay_Login_ReplaceTitle(username).string, text: self.strings.Relay_Login_ReplaceText(username).string, actions: [
                     TextAlertAction(type: .genericAction, title: self.presentationData.strings.Common_Cancel, action: {
                         step.inProgress = false
                     }),
-                    TextAlertAction(type: .defaultAction, title: "Continue", action: replace)
+                    TextAlertAction(type: .defaultAction, title: self.strings.Relay_Login_Continue, action: replace)
                 ])
                 if let screen = step as? MattermostAuthScreen {
                     screen.presentConfirmation(alert, confirm: replace)
@@ -453,10 +457,10 @@ public final class MattermostLoginController: NavigationController {
                     presented(controller)
                 }
             } catch {
-                let message = (error as? MattermostServerProbeError)?.message ?? error.localizedDescription
+                let message = presentationData.strings.relayProbeError(error)
                 await MainActor.run {
                     status.dismiss()
-                    let alert = textAlertController(sharedContext: sharedContext, title: "Can't Connect", text: message, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})])
+                    let alert = textAlertController(sharedContext: sharedContext, title: presentationData.strings.Relay_Login_CantConnect, text: message, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})])
                     sharedContext.mainWindow?.present(alert, on: .root)
                 }
             }

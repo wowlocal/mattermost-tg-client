@@ -143,7 +143,7 @@ final class MattermostMFAScreenNode: ASDisplayNode {
         self.titleNode = ImmediateTextNode()
         self.titleNode.maximumNumberOfLines = 2
         self.titleNode.textAlignment = .center
-        let title = "Enter Your Code"
+        let title = presentationData.strings.Relay_Login_MFATitle
         self.titleNode.attributedText = NSAttributedString(string: title, font: Font.bold(28.0), textColor: theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
         self.titleNode.isAccessibilityElement = true
         self.titleNode.accessibilityLabel = title
@@ -152,14 +152,14 @@ final class MattermostMFAScreenNode: ASDisplayNode {
         self.textNode = ImmediateTextNode()
         self.textNode.maximumNumberOfLines = 0
         self.textNode.textAlignment = .center
-        let text = "Multi-factor authentication is on for \(subtitle). Enter the 6-digit code from your authenticator app."
+        let text = presentationData.strings.Relay_Login_MFAText(subtitle).string
         self.textNode.attributedText = NSAttributedString(string: text, font: Font.regular(16.0), textColor: theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
         self.textNode.isAccessibilityElement = true
         self.textNode.accessibilityLabel = text
 
         self.codeInputView = CodeInputView()
         self.codeInputView.textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
-        self.codeInputView.textField.accessibilityLabel = "MFA code"
+        self.codeInputView.textField.accessibilityLabel = presentationData.strings.Relay_Login_MFACodeField
         self.codeInputView.textField.accessibilityIdentifier = "Relay.MFA.CodeField"
 
         self.errorNode = ImmediateTextNode()

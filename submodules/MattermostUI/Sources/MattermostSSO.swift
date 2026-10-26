@@ -1,4 +1,5 @@
 import Foundation
+import TelegramPresentationData
 import UIKit
 import AuthenticationServices
 import MattermostKit
@@ -15,16 +16,16 @@ final class MattermostSSOSession: NSObject, ASWebAuthenticationPresentationConte
         case callback(MobileSSO.CallbackError)
         case failed(String)
 
-        var message: String? {
+        func message(strings: PresentationStrings) -> String? {
             switch self {
             case .cancelled:
                 return nil
             case .couldNotStart:
-                return "Relay couldn't open the sign-in page."
+                return strings.Relay_Login_SSOCouldNotStart
             case let .callback(.missingToken(message)):
-                return message ?? "The server didn't complete the sign-in."
+                return message ?? strings.Relay_Login_SSOIncomplete
             case .callback(.unexpectedCallback):
-                return "The server returned an unexpected sign-in response."
+                return strings.Relay_Login_SSOUnexpected
             case let .failed(message):
                 return message
             }
@@ -39,23 +40,6 @@ final class MattermostSSOSession: NSObject, ASWebAuthenticationPresentationConte
 
     init(window: UIWindow) {
         self.window = window
-    }
-
-    static func title(for provider: SSOProvider, config: ClientConfig) -> String {
-        switch provider {
-        case .gitlab:
-            return "Continue with GitLab"
-        case .google:
-            return "Continue with Google"
-        case .office365:
-            return "Continue with Entra ID"
-        case .openid:
-            let text = config["OpenIdButtonText"].flatMap { $0.isEmpty ? nil : $0 }
-            return text ?? "Continue with OpenID"
-        case .saml:
-            let text = config["SamlLoginButtonText"].flatMap { $0.isEmpty ? nil : $0 }
-            return text ?? "Continue with SAML"
-        }
     }
 
     /// Opens the provider's sign-in page; completes with the session token from the callback.

@@ -40,7 +40,7 @@ extension ChatControllerImpl {
             }))
         }
         if options.isEmpty {
-            items.append(ActionSheetTextItem(title: "No options"))
+            items.append(ActionSheetTextItem(title: presentationData.strings.Relay_PostActions_NoOptions))
         }
         controller.setItemGroups([ActionSheetItemGroup(items: items), ActionSheetItemGroup(items: [
             ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak controller] in
