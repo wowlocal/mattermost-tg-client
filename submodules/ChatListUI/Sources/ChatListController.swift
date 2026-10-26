@@ -4083,6 +4083,14 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                         filterItems.append(.filter(id: id, text: title, unread: ChatListFilterTabEntryUnreadCount(value: unreadCount, hasUnmuted: hasUnmutedUnread)))
                 }
             }
+            // MATTERMOST: Relay's team folders are generated on the device and don't name "All Chats" (Telegram's
+            // server always does), so the tab strip held only the teams and, once a team was picked, the unfiltered
+            // list (which the container below already puts first) had no tab to return to. Show its tab first (4E).
+            var addedAllChatsTab = false
+            if MattermostBackend.isEnabled, !filterItems.isEmpty, !filterItems.contains(where: { $0.id == .all }) {
+                filterItems.insert(.all(unreadCount: 0), at: 0)
+                addedAllChatsTab = true
+            }
             
             var resolvedItems = filterItems
             if case .chatList(.root) = strongSelf.location {
@@ -4091,12 +4099,15 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             }
             
             let firstItem = countAndFilterItems.1.first?.0 ?? .allChats
-            let firstItemEntryId: ChatListFilterTabEntryId
+            var firstItemEntryId: ChatListFilterTabEntryId
             switch firstItem {
                 case .allChats:
                     firstItemEntryId = .all
                 case let .filter(id, _, _, _):
                     firstItemEntryId = .filter(id)
+            }
+            if addedAllChatsTab { // MATTERMOST: start on "All Chats", as Telegram does (4E).
+                firstItemEntryId = .all
             }
             
             var selectedEntryId = !strongSelf.initializedFilters ? firstItemEntryId : strongSelf.chatListDisplayNode.mainContainerNode.currentItemFilter
