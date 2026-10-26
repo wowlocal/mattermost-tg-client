@@ -114,8 +114,8 @@ extension MattermostAccountSync {
         return peer
     }
 
-    /// Joins a public channel found by search (`POST /channels/{id}/members`) and writes it like any channel
-    /// the user is a member of. Returns the chat's peer.
+    /// Joins a public channel found by search (3D-2's `joinChannel`: `POST /channels/{id}/members`, then written
+    /// like any channel the user is a member of). Returns the chat's peer.
     func joinPreviewChannel(peerId: PeerId) async -> PeerId? {
         if let channelId = self.channelId(forPeerId: peerId), self.channelState(channelId) != nil {
             return peerId
@@ -124,17 +124,12 @@ extension MattermostAccountSync {
             return nil
         }
         do {
-            let _ = try await self.client.addChannelMember(channelId: channel.id, userId: self.ownUserId)
+            let joined = try await self.joinChannel(channelId: channel.id)
+            self.state.with { $0.previewChannels[peerId] = nil }
+            return joined
         } catch {
             MMLog.log("search: joining \(channel.id) failed: \(error)")
             return nil
         }
-        await self.refreshChannel(channel.id)
-        guard let channelState = self.channelState(channel.id) else {
-            return nil
-        }
-        self.state.with { $0.previewChannels[peerId] = nil }
-        MMLog.log("search: joined \(channel.name) (\(channel.id))")
-        return channelState.peerId
     }
 }
