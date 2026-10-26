@@ -23,6 +23,7 @@ swift_library(
         "//submodules/SolidRoundedButtonNode:SolidRoundedButtonNode",
         "//submodules/CodeInputView:CodeInputView",
         "//submodules/OverlayStatusController:OverlayStatusController",
+        "//submodules/ItemListUI:ItemListUI",
         "//submodules/MattermostKit:MattermostKit",
         "//submodules/MattermostSync:MattermostSync",
     ],

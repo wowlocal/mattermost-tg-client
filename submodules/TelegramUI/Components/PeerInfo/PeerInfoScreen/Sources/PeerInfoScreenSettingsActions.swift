@@ -4,6 +4,7 @@ import Display
 import AccountContext
 import SwiftSignalKit
 import TelegramCore
+import MattermostUI
 import SettingsUI
 import PeerInfoStoryGridScreen
 import CallListUI
@@ -84,6 +85,11 @@ extension PeerInfoScreenNode {
         case .recentCalls:
             push(CallListController(context: context, mode: .navigation))
         case .devices:
+            // MATTERMOST: the Mattermost sessions of this account.
+            if MattermostBackend.isEnabled {
+                push(mattermostDevicesController(context: self.context))
+                return
+            }
             let _ = (self.activeSessionsContextAndCount.get()
             |> take(1)
             |> deliverOnMainQueue).startStandalone(next: { [weak self] activeSessionsContextAndCount in
@@ -232,15 +238,15 @@ extension PeerInfoScreenNode {
                 guard let strongSelf = self else {
                     return
                 }
-                var maximumAvailableAccounts: Int = 3
+                var maximumAvailableAccounts: Int = maximumNumberOfAccounts // MATTERMOST: was 3
                 if accountAndPeer?.1.isPremium == true && !strongSelf.context.account.testingEnvironment {
-                    maximumAvailableAccounts = 4
+                    maximumAvailableAccounts = max(maximumAvailableAccounts, 4) // MATTERMOST: was 4
                 }
                 var count: Int = 1
                 for (accountContext, peer, _) in accountsAndPeers {
                     if !accountContext.account.testingEnvironment {
                         if peer.isPremium {
-                            maximumAvailableAccounts = 4
+                            maximumAvailableAccounts = max(maximumAvailableAccounts, 4) // MATTERMOST: was 4
                         }
                         count += 1
                     }

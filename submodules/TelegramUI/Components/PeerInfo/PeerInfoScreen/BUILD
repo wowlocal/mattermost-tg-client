@@ -10,6 +10,8 @@ swift_library(
         "-warnings-as-errors",
     ],
     deps = [
+        "//submodules/MattermostSync:MattermostSync", # MATTERMOST: override authors, sessions
+        "//submodules/MattermostUI:MattermostUI", # MATTERMOST: Settings → Devices
         "//submodules/UrlWhitelist",
         "//submodules/AccountContext",
         "//submodules/LottieSettings:LottieSettings",
