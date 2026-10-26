@@ -10,8 +10,8 @@ import MattermostSyncCore
 ///
 /// The message is a `Local` message without the unsent flag (nothing sends it; `PostSender` only takes unsent
 /// ones), incoming and not counted as unread, in the post's thread when it has one. It is never on the server:
-/// it has no reactions, no reply count and no buttons (actions need a stored post), and it stays in the chat's
-/// local history. Its author is the posting bot, a webhook-style override, or "System" for the server's own
+/// it has no reactions, no reply count and no buttons (actions need a stored post), and it is gone after a
+/// relaunch (4F, `removeEphemeralMessages`), as Mattermost drops ephemeral posts when it reloads. Its author is the posting bot, a webhook-style override, or "System" for the server's own
 /// answers (`system_ephemeral` from the user's own id), a bot user of its own without a chat.
 extension MattermostAccountSync {
     static let systemAuthorKey = "system:ephemeral"
@@ -78,6 +78,29 @@ extension MattermostAccountSync {
         }
         if written {
             MMLog.log("live: ephemeral message in \(post.channelId)\(post.rootId.isEmpty ? "" : " (thread \(post.rootId))") shown as a local message")
+        }
+    }
+
+    /// Removes the ephemeral messages of an earlier run (4F): Mattermost's clients keep them only until they reload.
+    /// They are the only incoming `Local` messages (pending sends are outgoing), so no bookkeeping is needed.
+    func removeEphemeralMessages() async {
+        let removed: Int = await self.postbox.mmTransaction { transaction in
+            var ids: [MessageId] = []
+            for peerId in transaction.chatListGetAllPeerIds() {
+                transaction.withAllMessages(peerId: peerId, namespace: Namespaces.Message.Local, { message in
+                    if message.flags.contains(.Incoming) && message.flags.contains(.NotCountedAsUnread) && !message.flags.contains(.Unsent) {
+                        ids.append(message.id)
+                    }
+                    return true
+                })
+            }
+            if !ids.isEmpty {
+                transaction.deleteMessages(ids, forEachMedia: nil)
+            }
+            return ids.count
+        }
+        if removed > 0 {
+            MMLog.log("ephemeral: removed \(removed) message(s) of an earlier run")
         }
     }
 
