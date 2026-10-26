@@ -127,18 +127,28 @@ As in plan 03. Additions from the research:
 
 ## Replacing managed operations
 
+Status: all done in Phase 2A (2026‑10‑26). Code in `submodules/MattermostSync/Sources/Write/`.
+
 | UI action | Postbox write (unchanged) | Telegram consumer (disabled) | Mattermost consumer |
 |---|---|---|---|
-| send | `.Unsent` message | `PendingMessageManager` network part | `PostSender` injected into `PendingMessageManager` (R§5 "narrowest plug") |
-| edit | `PendingUpdateMessageManager` | `requestEditMessage` | `PUT /posts/{id}/patch` |
-| delete | `CloudChatRemoveMessages` op log | `managedCloudChatRemoveMessagesOperations` | `DELETE /posts/{id}` |
-| react | pending `.updateReaction` | `managedApplyPendingMessageReactionsActions` | `POST /reactions` / `DELETE …/reactions/{name}` |
-| mark read | read‑state sync table | `managedSynchronizePeerReadStates` | `POST /channels/members/me/view` |
-| mute | pending notification settings | `managedPendingPeerNotificationSettings` | channel member notify props |
-| pin chat | `SynchronizePinnedChats` op log | `managedSynchronizePinnedChatsOperations` | favorites preference |
-| typing | local typing activities | `managedLocalTypingActivities` | WebSocket `user_typing` |
+| send | `.Unsent` message | `PendingMessageManager` network part | `PostSender` (`MattermostMessageSender`, installed with `Account.mattermostSetMessageSender`): `POST /files` with progress, `POST /posts` with `pending_post_id` = `globallyUniqueId`, one at a time per channel; Local → Cloud rewrite in place (`applyOwnPost`) |
+| edit | `PendingUpdateMessageManager` | `requestEditMessage` | `PUT /posts/{id}/patch` (text only) |
+| delete | `CloudChatRemoveMessages` op log | `managedCloudChatRemoveMessagesOperations` (gated in `Account.init`) | `DELETE /posts/{id}`; 403 → post restored + toast; "for me" stays local |
+| react | pending `.updateReaction` | `managedApplyPendingMessageReactionsActions` (never started) | `POST /reactions` / `DELETE …/reactions/{name}`, optimistic, rollback on failure |
+| mark read | read‑state sync table | `managedSynchronizePeerReadStates` | `POST /channels/members/me/view` (Spike D) |
+| mute | pending notification settings | `managedPendingPeerNotificationSettings` (never started) | member notify props `mark_unread: mention` / `all` |
+| pin chat | `SynchronizePinnedChats` op log; team folder `pinnedPeers` | `managedSynchronizePinnedChatsOperations` (never started) | Favorites sidebar category (both categories in one `PUT`); `favorite_channel` preference on old servers |
+| typing | local typing activities | `managedLocalTypingActivities` (gated in `Account.init`) | WebSocket `user_typing` (`parent_id` in threads), throttled |
 
-Each consumer observes the same Postbox source the Telegram one does. The Telegram consumer is gated off by `MattermostBackend.isEnabled` at its start site.
+Each consumer observes the same Postbox source the Telegram one does (`KeyedOperationRunner`). Consumers that Telegram starts in `Account.init` are gated off by `MattermostBackend.isEnabled` there; the rest live in `AccountTaskManager`, which never starts.
+
+**Send details.**
+- Order and offline: transient errors (offline, server down, 5xx, 429) are retried with a backoff of up to 5 s, woken by a WebSocket reconnect; messages stay pending (clock) and go out in order. Other errors fail the message (Telegram's failed state; "Resend" re-enqueues it).
+- Echo deduplication: the `pending` table row is written before the request. The WebSocket `posted` echo of a request in flight is ignored (the response rewrites, so `deliveredMessageEvents` fires); an echo without a request in flight (app restarted) rewrites the message itself.
+- The delivered event is emitted inside the rewriting transaction (as Telegram's `pendingMessageEvent`), before PendingMessageManager sees the unsent id disappear.
+- Media data of the upload is moved to the `MattermostFileResource` ids (file and preview; thumbnail when the local image has one).
+
+**Synthetic configuration** (`SyntheticConfiguration.swift`): at every start the app configuration (ui‑inventory §0.2 keys; `MaxPostSize` from the client config after bootstrap) and an `AvailableReactions` list: about 65 picker emoji (enabled), the server's custom emoji (enabled, `:name:`), every other built‑in emoji (disabled, so existing reactions render), plus the `CloudTopReactions` list the context menu reads. Reaction files are static WebP "custom emoji" files whose `LocalFileMediaResource` ids are hashes in a reserved range; `MattermostReactionImages` renders them on demand (Apple Color Emoji glyph, or the custom emoji image from `GET /emoji/{id}/image`).
 
 ## Media resources
 

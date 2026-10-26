@@ -122,6 +122,20 @@ enum SyntheticConfiguration {
             return
         }
         transaction.putItemCacheEntry(id: ItemCacheEntryId(collectionId: Namespaces.CachedItemCollection.availableReactions, key: key), entry: entry)
+
+        // The context menu's reaction bar takes its items from the "top reactions" list when every reaction is
+        // allowed (Telegram's server fills it); use the picker emoji, in order.
+        var topItems: [OrderedItemListEntry] = []
+        for reaction in reactions.reactions where reaction.isEnabled {
+            guard case let .builtin(value) = reaction.value else {
+                continue
+            }
+            let item = RecentReactionItem(.builtin(value))
+            if let entry = CodableEntry(item) {
+                topItems.append(OrderedItemListEntry(id: item.id.rawValue, contents: entry))
+            }
+        }
+        transaction.replaceOrderedItemListItems(collectionId: Namespaces.OrderedItemList.CloudTopReactions, items: topItems)
     }
 
     static func storedAvailableReactions(transaction: Transaction) -> AvailableReactions? {
