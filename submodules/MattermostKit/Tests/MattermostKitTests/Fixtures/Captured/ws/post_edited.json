@@ -1,0 +1,15 @@
+{
+  "event": "post_edited",
+  "data": {
+    "post": "{\"id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"create_at\":1792998039320,\"update_at\":1792998041394,\"edit_at\":1792998041394,\"delete_at\":0,\"is_pinned\":false,\"user_id\":\"9ik4bw7aybbqupuhs9fjsprsie\",\"channel_id\":\"4gq5dooa3iguik5izypw3ugjmh\",\"root_id\":\"\",\"original_id\":\"\",\"message\":\"fixture capture: hello from bob :wave: (edited)\",\"type\":\"\",\"props\":{},\"hashtags\":\"\",\"file_ids\":[],\"pending_post_id\":\"\",\"has_reactions\":true,\"reply_count\":0,\"last_reply_at\":0,\"participants\":null,\"metadata\":{\"reactions\":[{\"user_id\":\"9ik4bw7aybbqupuhs9fjsprsie\",\"post_id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"emoji_name\":\"+1\",\"create_at\":1792998040375,\"update_at\":1792998040375,\"delete_at\":0,\"remote_id\":\"\",\"channel_id\":\"4gq5dooa3iguik5izypw3ugjmh\"}]}}"
+  },
+  "broadcast": {
+    "omit_users": null,
+    "user_id": "",
+    "channel_id": "4gq5dooa3iguik5izypw3ugjmh",
+    "team_id": "",
+    "connection_id": "",
+    "omit_connection_id": ""
+  },
+  "seq": 4
+}

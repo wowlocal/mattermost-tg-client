@@ -1,0 +1,40 @@
+[
+  {
+    "id": "x3wnh555offqbkfx9usn17xo1y",
+    "create_at": 1792997985745,
+    "update_at": 1792997985745,
+    "delete_at": 0,
+    "display_name": "Engineering",
+    "name": "engineering",
+    "description": "Engineering team: backend, iOS, infra.",
+    "email": "",
+    "type": "O",
+    "company_name": "",
+    "allowed_domains": "",
+    "invite_id": "hag1dyoxy3n6jrb93tmi7pssdc",
+    "allow_open_invite": false,
+    "scheme_id": null,
+    "group_constrained": null,
+    "policy_id": null,
+    "cloud_limits_archived": false
+  },
+  {
+    "id": "i4a7jt5r8pn59kxp8pfsb88jqa",
+    "create_at": 1792997985912,
+    "update_at": 1792997985912,
+    "delete_at": 0,
+    "display_name": "Design",
+    "name": "design",
+    "description": "Design team (invite only). bob is intentionally not a member.",
+    "email": "",
+    "type": "I",
+    "company_name": "",
+    "allowed_domains": "",
+    "invite_id": "bwbxbnz7it89xk3row5zxo9hrc",
+    "allow_open_invite": false,
+    "scheme_id": null,
+    "group_constrained": null,
+    "policy_id": null,
+    "cloud_limits_archived": false
+  }
+]

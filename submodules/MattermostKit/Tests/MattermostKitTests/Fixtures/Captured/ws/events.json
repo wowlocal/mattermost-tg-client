@@ -1,0 +1,224 @@
+[
+  {
+    "event": "hello",
+    "data": {
+      "connection_id": "we4619i9x7yq3nqwpnjjf58dna",
+      "server_hostname": "6b00c51e015d",
+      "server_version": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+    },
+    "broadcast": {
+      "omit_users": null,
+      "user_id": "x6y9ko87wtrq7m9k3dbk3qt7me",
+      "channel_id": "",
+      "team_id": "",
+      "connection_id": "",
+      "omit_connection_id": ""
+    },
+    "seq": 0
+  },
+  {
+    "status": "OK",
+    "seq_reply": 1,
+    "data": {
+      "9ik4bw7aybbqupuhs9fjsprsie": "away",
+      "dbqu13jbwpfo3rwphe3nzpzrer": "dnd",
+      "k65qqt958pnrtxetxp6j5m3sec": "online",
+      "pq8g9zg3ipf7xehxhiptt3hi5h": "online",
+      "x6y9ko87wtrq7m9k3dbk3qt7me": "online"
+    }
+  },
+  {
+    "event": "typing",
+    "data": {
+      "parent_id": "",
+      "user_id": "9ik4bw7aybbqupuhs9fjsprsie"
+    },
+    "broadcast": {
+      "omit_users": {
+        "9ik4bw7aybbqupuhs9fjsprsie": true
+      },
+      "user_id": "",
+      "channel_id": "4gq5dooa3iguik5izypw3ugjmh",
+      "team_id": "",
+      "connection_id": "",
+      "omit_connection_id": ""
+    },
+    "seq": 1
+  },
+  {
+    "event": "posted",
+    "data": {
+      "channel_display_name": "Sandbox",
+      "channel_name": "sandbox",
+      "channel_type": "O",
+      "post": "{\"id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"create_at\":1792998039320,\"update_at\":1792998039320,\"edit_at\":0,\"delete_at\":0,\"is_pinned\":false,\"user_id\":\"9ik4bw7aybbqupuhs9fjsprsie\",\"channel_id\":\"4gq5dooa3iguik5izypw3ugjmh\",\"root_id\":\"\",\"original_id\":\"\",\"message\":\"fixture capture: hello from bob :wave:\",\"type\":\"\",\"props\":{},\"hashtags\":\"\",\"file_ids\":[],\"pending_post_id\":\"\",\"remote_id\":\"\",\"reply_count\":0,\"last_reply_at\":0,\"participants\":null,\"metadata\":{}}",
+      "sender_name": "@bob",
+      "set_online": true,
+      "team_id": "x3wnh555offqbkfx9usn17xo1y"
+    },
+    "broadcast": {
+      "omit_users": null,
+      "user_id": "",
+      "channel_id": "4gq5dooa3iguik5izypw3ugjmh",
+      "team_id": "",
+      "connection_id": "",
+      "omit_connection_id": ""
+    },
+    "seq": 2
+  },
+  {
+    "event": "reaction_added",
+    "data": {
+      "reaction": "{\"user_id\":\"9ik4bw7aybbqupuhs9fjsprsie\",\"post_id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"emoji_name\":\"+1\",\"create_at\":1792998040375,\"update_at\":1792998040375,\"delete_at\":0,\"remote_id\":\"\",\"channel_id\":\"4gq5dooa3iguik5izypw3ugjmh\"}"
+    },
+    "broadcast": {
+      "omit_users": null,
+      "user_id": "",
+      "channel_id": "4gq5dooa3iguik5izypw3ugjmh",
+      "team_id": "",
+      "connection_id": "",
+      "omit_connection_id": ""
+    },
+    "seq": 3
+  },
+  {
+    "event": "post_edited",
+    "data": {
+      "post": "{\"id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"create_at\":1792998039320,\"update_at\":1792998041394,\"edit_at\":1792998041394,\"delete_at\":0,\"is_pinned\":false,\"user_id\":\"9ik4bw7aybbqupuhs9fjsprsie\",\"channel_id\":\"4gq5dooa3iguik5izypw3ugjmh\",\"root_id\":\"\",\"original_id\":\"\",\"message\":\"fixture capture: hello from bob :wave: (edited)\",\"type\":\"\",\"props\":{},\"hashtags\":\"\",\"file_ids\":[],\"pending_post_id\":\"\",\"has_reactions\":true,\"reply_count\":0,\"last_reply_at\":0,\"participants\":null,\"metadata\":{\"reactions\":[{\"user_id\":\"9ik4bw7aybbqupuhs9fjsprsie\",\"post_id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"emoji_name\":\"+1\",\"create_at\":1792998040375,\"update_at\":1792998040375,\"delete_at\":0,\"remote_id\":\"\",\"channel_id\":\"4gq5dooa3iguik5izypw3ugjmh\"}]}}"
+    },
+    "broadcast": {
+      "omit_users": null,
+      "user_id": "",
+      "channel_id": "4gq5dooa3iguik5izypw3ugjmh",
+      "team_id": "",
+      "connection_id": "",
+      "omit_connection_id": ""
+    },
+    "seq": 4
+  },
+  {
+    "event": "reaction_removed",
+    "data": {
+      "reaction": "{\"user_id\":\"9ik4bw7aybbqupuhs9fjsprsie\",\"post_id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"emoji_name\":\"+1\",\"create_at\":0,\"update_at\":1792998042416,\"delete_at\":0,\"remote_id\":\"\",\"channel_id\":\"\"}"
+    },
+    "broadcast": {
+      "omit_users": null,
+      "user_id": "",
+      "channel_id": "4gq5dooa3iguik5izypw3ugjmh",
+      "team_id": "",
+      "connection_id": "",
+      "omit_connection_id": ""
+    },
+    "seq": 5
+  },
+  {
+    "event": "posted",
+    "data": {
+      "channel_display_name": "Sandbox",
+      "channel_name": "sandbox",
+      "channel_type": "O",
+      "post": "{\"id\":\"qepknniwipdtmek9wtwabz5wew\",\"create_at\":1792998043435,\"update_at\":1792998043435,\"edit_at\":0,\"delete_at\":0,\"is_pinned\":false,\"user_id\":\"x6y9ko87wtrq7m9k3dbk3qt7me\",\"channel_id\":\"4gq5dooa3iguik5izypw3ugjmh\",\"root_id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"original_id\":\"\",\"message\":\"alice replies (fixture capture)\",\"type\":\"\",\"props\":{},\"hashtags\":\"\",\"file_ids\":[],\"pending_post_id\":\"\",\"remote_id\":\"\",\"reply_count\":1,\"last_reply_at\":0,\"participants\":null,\"metadata\":{}}",
+      "sender_name": "@alice",
+      "set_online": true,
+      "team_id": "x3wnh555offqbkfx9usn17xo1y"
+    },
+    "broadcast": {
+      "omit_users": null,
+      "user_id": "",
+      "channel_id": "4gq5dooa3iguik5izypw3ugjmh",
+      "team_id": "",
+      "connection_id": "",
+      "omit_connection_id": ""
+    },
+    "seq": 6
+  },
+  {
+    "event": "thread_updated",
+    "data": {
+      "previous_unread_mentions": 0,
+      "previous_unread_replies": 0,
+      "thread": "{\"id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"reply_count\":1,\"last_reply_at\":1792998043435,\"last_viewed_at\":0,\"participants\":[{\"id\":\"x6y9ko87wtrq7m9k3dbk3qt7me\",\"create_at\":1792997982387,\"update_at\":1792998036183,\"delete_at\":0,\"username\":\"alice\",\"auth_data\":\"\",\"auth_service\":\"\",\"email\":\"alice@example.com\",\"nickname\":\"Al\",\"first_name\":\"Alice\",\"last_name\":\"Anderson\",\"position\":\"iOS Engineer\",\"roles\":\"system_user\",\"last_picture_update\":1792997983203,\"locale\":\"en\",\"timezone\":{\"automaticTimezone\":\"\",\"manualTimezone\":\"\",\"useAutomaticTimezone\":\"true\"},\"remote_id\":\"\",\"disable_welcome_email\":false}],\"post\":{\"id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"create_at\":1792998039320,\"update_at\":1792998043435,\"edit_at\":1792998041394,\"delete_at\":0,\"is_pinned\":false,\"user_id\":\"9ik4bw7aybbqupuhs9fjsprsie\",\"channel_id\":\"4gq5dooa3iguik5izypw3ugjmh\",\"root_id\":\"\",\"original_id\":\"\",\"message\":\"fixture capture: hello from bob :wave: (edited)\",\"type\":\"\",\"props\":{},\"hashtags\":\"\",\"file_ids\":[],\"pending_post_id\":\"\",\"reply_count\":0,\"last_reply_at\":0,\"participants\":null},\"unread_replies\":0,\"unread_mentions\":0,\"is_urgent\":false,\"delete_at\":0}"
+    },
+    "broadcast": {
+      "omit_users": null,
+      "user_id": "x6y9ko87wtrq7m9k3dbk3qt7me",
+      "channel_id": "",
+      "team_id": "x3wnh555offqbkfx9usn17xo1y",
+      "connection_id": "",
+      "omit_connection_id": ""
+    },
+    "seq": 7
+  },
+  {
+    "event": "posted",
+    "data": {
+      "channel_display_name": "Sandbox",
+      "channel_name": "sandbox",
+      "channel_type": "O",
+      "followers": "[\"x6y9ko87wtrq7m9k3dbk3qt7me\"]",
+      "post": "{\"id\":\"h45518urdi8n8p5ujj5z9rb5yy\",\"create_at\":1792998044185,\"update_at\":1792998044185,\"edit_at\":0,\"delete_at\":0,\"is_pinned\":false,\"user_id\":\"9ik4bw7aybbqupuhs9fjsprsie\",\"channel_id\":\"4gq5dooa3iguik5izypw3ugjmh\",\"root_id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"original_id\":\"\",\"message\":\"bob replies in the thread\",\"type\":\"\",\"props\":{},\"hashtags\":\"\",\"file_ids\":[],\"pending_post_id\":\"\",\"remote_id\":\"\",\"reply_count\":2,\"last_reply_at\":0,\"participants\":null,\"metadata\":{}}",
+      "sender_name": "@bob",
+      "set_online": true,
+      "team_id": "x3wnh555offqbkfx9usn17xo1y"
+    },
+    "broadcast": {
+      "omit_users": null,
+      "user_id": "",
+      "channel_id": "4gq5dooa3iguik5izypw3ugjmh",
+      "team_id": "",
+      "connection_id": "",
+      "omit_connection_id": ""
+    },
+    "seq": 8
+  },
+  {
+    "event": "thread_updated",
+    "data": {
+      "previous_unread_mentions": 0,
+      "previous_unread_replies": 0,
+      "thread": "{\"id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"reply_count\":2,\"last_reply_at\":1792998044185,\"last_viewed_at\":1792998043467,\"participants\":[{\"id\":\"x6y9ko87wtrq7m9k3dbk3qt7me\",\"create_at\":1792997982387,\"update_at\":1792998036183,\"delete_at\":0,\"username\":\"alice\",\"auth_data\":\"\",\"auth_service\":\"\",\"email\":\"alice@example.com\",\"nickname\":\"Al\",\"first_name\":\"Alice\",\"last_name\":\"Anderson\",\"position\":\"iOS Engineer\",\"roles\":\"system_user\",\"last_picture_update\":1792997983203,\"locale\":\"en\",\"timezone\":{\"automaticTimezone\":\"\",\"manualTimezone\":\"\",\"useAutomaticTimezone\":\"true\"},\"remote_id\":\"\",\"disable_welcome_email\":false},{\"id\":\"9ik4bw7aybbqupuhs9fjsprsie\",\"create_at\":1792997983212,\"update_at\":1792998036564,\"delete_at\":0,\"username\":\"bob\",\"auth_data\":\"\",\"auth_service\":\"\",\"email\":\"bob@example.com\",\"nickname\":\"\",\"first_name\":\"Bob\",\"last_name\":\"Brennan\",\"position\":\"Backend Lead\",\"roles\":\"system_user\",\"last_picture_update\":1792997984024,\"locale\":\"en\",\"timezone\":{\"automaticTimezone\":\"\",\"manualTimezone\":\"\",\"useAutomaticTimezone\":\"true\"},\"remote_id\":\"\",\"disable_welcome_email\":false}],\"post\":{\"id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"create_at\":1792998039320,\"update_at\":1792998044185,\"edit_at\":1792998041394,\"delete_at\":0,\"is_pinned\":false,\"user_id\":\"9ik4bw7aybbqupuhs9fjsprsie\",\"channel_id\":\"4gq5dooa3iguik5izypw3ugjmh\",\"root_id\":\"\",\"original_id\":\"\",\"message\":\"fixture capture: hello from bob :wave: (edited)\",\"type\":\"\",\"props\":{},\"hashtags\":\"\",\"file_ids\":[],\"pending_post_id\":\"\",\"reply_count\":0,\"last_reply_at\":0,\"participants\":null},\"unread_replies\":1,\"unread_mentions\":0,\"is_urgent\":false,\"delete_at\":0}"
+    },
+    "broadcast": {
+      "omit_users": null,
+      "user_id": "x6y9ko87wtrq7m9k3dbk3qt7me",
+      "channel_id": "",
+      "team_id": "x3wnh555offqbkfx9usn17xo1y",
+      "connection_id": "",
+      "omit_connection_id": ""
+    },
+    "seq": 9
+  },
+  {
+    "event": "post_deleted",
+    "data": {
+      "post": "{\"id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"create_at\":1792998039320,\"update_at\":1792998044185,\"edit_at\":1792998041394,\"delete_at\":0,\"is_pinned\":false,\"user_id\":\"9ik4bw7aybbqupuhs9fjsprsie\",\"channel_id\":\"4gq5dooa3iguik5izypw3ugjmh\",\"root_id\":\"\",\"original_id\":\"\",\"message\":\"fixture capture: hello from bob :wave: (edited)\",\"type\":\"\",\"props\":{},\"hashtags\":\"\",\"file_ids\":[],\"pending_post_id\":\"\",\"reply_count\":2,\"last_reply_at\":0,\"participants\":null}"
+    },
+    "broadcast": {
+      "omit_users": null,
+      "user_id": "",
+      "channel_id": "4gq5dooa3iguik5izypw3ugjmh",
+      "team_id": "",
+      "connection_id": "",
+      "omit_connection_id": "",
+      "contains_sanitized_data": true
+    },
+    "seq": 10
+  },
+  {
+    "event": "multiple_channels_viewed",
+    "data": {
+      "channel_times": {
+        "4gq5dooa3iguik5izypw3ugjmh": 1792998044185
+      }
+    },
+    "broadcast": {
+      "omit_users": null,
+      "user_id": "x6y9ko87wtrq7m9k3dbk3qt7me",
+      "channel_id": "",
+      "team_id": "",
+      "connection_id": "",
+      "omit_connection_id": ""
+    },
+    "seq": 11
+  }
+]

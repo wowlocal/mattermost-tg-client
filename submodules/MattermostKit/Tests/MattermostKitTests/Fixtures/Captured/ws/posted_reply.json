@@ -1,0 +1,21 @@
+{
+  "event": "posted",
+  "data": {
+    "channel_display_name": "Sandbox",
+    "channel_name": "sandbox",
+    "channel_type": "O",
+    "post": "{\"id\":\"qepknniwipdtmek9wtwabz5wew\",\"create_at\":1792998043435,\"update_at\":1792998043435,\"edit_at\":0,\"delete_at\":0,\"is_pinned\":false,\"user_id\":\"x6y9ko87wtrq7m9k3dbk3qt7me\",\"channel_id\":\"4gq5dooa3iguik5izypw3ugjmh\",\"root_id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"original_id\":\"\",\"message\":\"alice replies (fixture capture)\",\"type\":\"\",\"props\":{},\"hashtags\":\"\",\"file_ids\":[],\"pending_post_id\":\"\",\"remote_id\":\"\",\"reply_count\":1,\"last_reply_at\":0,\"participants\":null,\"metadata\":{}}",
+    "sender_name": "@alice",
+    "set_online": true,
+    "team_id": "x3wnh555offqbkfx9usn17xo1y"
+  },
+  "broadcast": {
+    "omit_users": null,
+    "user_id": "",
+    "channel_id": "4gq5dooa3iguik5izypw3ugjmh",
+    "team_id": "",
+    "connection_id": "",
+    "omit_connection_id": ""
+  },
+  "seq": 6
+}

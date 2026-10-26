@@ -1,0 +1,17 @@
+{
+  "event": "multiple_channels_viewed",
+  "data": {
+    "channel_times": {
+      "4gq5dooa3iguik5izypw3ugjmh": 1792998044185
+    }
+  },
+  "broadcast": {
+    "omit_users": null,
+    "user_id": "x6y9ko87wtrq7m9k3dbk3qt7me",
+    "channel_id": "",
+    "team_id": "",
+    "connection_id": "",
+    "omit_connection_id": ""
+  },
+  "seq": 11
+}

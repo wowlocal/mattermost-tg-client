@@ -1,0 +1,85 @@
+{
+  "categories": [
+    {
+      "id": "favorites_x6y9ko87wtrq7m9k3dbk3qt7me_x3wnh555offqbkfx9usn17xo1y",
+      "user_id": "x6y9ko87wtrq7m9k3dbk3qt7me",
+      "team_id": "x3wnh555offqbkfx9usn17xo1y",
+      "sort_order": 0,
+      "sorting": "",
+      "type": "favorites",
+      "display_name": "Favorites",
+      "muted": false,
+      "collapsed": false,
+      "channel_ids": [
+        "fmmhkpzzytfr5f1mgp71xpcsmo",
+        "ao55dbeah7bnpdbsswnhy1x4ye"
+      ]
+    },
+    {
+      "id": "mzcd6o6p8fdxzj1hyc6n4i7xbe",
+      "user_id": "x6y9ko87wtrq7m9k3dbk3qt7me",
+      "team_id": "x3wnh555offqbkfx9usn17xo1y",
+      "sort_order": 10,
+      "sorting": "",
+      "type": "custom",
+      "display_name": "Spike D",
+      "muted": false,
+      "collapsed": false,
+      "channel_ids": [
+        "ho3ggqcgyjddtc3r3iu9ccjhxc",
+        "3txpg3n9njny7q9bmzppsjcsqy",
+        "mpsr83ax83y9bki3d3qnq6ohtc"
+      ]
+    },
+    {
+      "id": "channels_x6y9ko87wtrq7m9k3dbk3qt7me_x3wnh555offqbkfx9usn17xo1y",
+      "user_id": "x6y9ko87wtrq7m9k3dbk3qt7me",
+      "team_id": "x3wnh555offqbkfx9usn17xo1y",
+      "sort_order": 20,
+      "sorting": "",
+      "type": "channels",
+      "display_name": "Channels",
+      "muted": false,
+      "collapsed": false,
+      "channel_ids": [
+        "uo5nhcu8g3ypbkkn5zrmjhq1dh",
+        "dtrcjim8sf8h3dsh4kqtepgdzh",
+        "4ca6fbcg1fffmpc8ir5hwztt9w",
+        "39sye7g3cbf9pcx9y15yitrrho",
+        "we7rxq8ng7n678d5wgo4mqu8kw",
+        "qm6mdge1678fdf6g5bn9z357za",
+        "ge8cqqfrh3np5fn3nkca7ix38a",
+        "8ick7crj938e9rpz9z1gdui58w",
+        "sgf4jfwrupbyzbdazwiyq5wxmr",
+        "uwkoec6aspdqmqagzbufoebm4h",
+        "4gq5dooa3iguik5izypw3ugjmh",
+        "5twncgma33br9x3g1pm1mw37gy"
+      ]
+    },
+    {
+      "id": "direct_messages_x6y9ko87wtrq7m9k3dbk3qt7me_x3wnh555offqbkfx9usn17xo1y",
+      "user_id": "x6y9ko87wtrq7m9k3dbk3qt7me",
+      "team_id": "x3wnh555offqbkfx9usn17xo1y",
+      "sort_order": 30,
+      "sorting": "recent",
+      "type": "direct_messages",
+      "display_name": "Direct Messages",
+      "muted": false,
+      "collapsed": false,
+      "channel_ids": [
+        "ktqb7e1trtr9zq7afzhtabfqkw",
+        "g1b5m3wt3tdsijtt1kq8m5976w",
+        "h87kteyusff3dc6qrbcci3346h",
+        "5pwut74oe3gb7bj5j89g59385c",
+        "5m99649s53ddxj7unm83ygdbje",
+        "8po1cahi53g4umz49m8but3ica"
+      ]
+    }
+  ],
+  "order": [
+    "favorites_x6y9ko87wtrq7m9k3dbk3qt7me_x3wnh555offqbkfx9usn17xo1y",
+    "mzcd6o6p8fdxzj1hyc6n4i7xbe",
+    "channels_x6y9ko87wtrq7m9k3dbk3qt7me_x3wnh555offqbkfx9usn17xo1y",
+    "direct_messages_x6y9ko87wtrq7m9k3dbk3qt7me_x3wnh555offqbkfx9usn17xo1y"
+  ]
+}

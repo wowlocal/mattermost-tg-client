@@ -1,0 +1,38 @@
+{
+  "id": "x6y9ko87wtrq7m9k3dbk3qt7me",
+  "create_at": 1792997982387,
+  "update_at": 1792998030723,
+  "delete_at": 0,
+  "username": "alice",
+  "auth_service": "",
+  "email": "alice@example.com",
+  "nickname": "Al",
+  "first_name": "Alice",
+  "last_name": "Anderson",
+  "position": "iOS Engineer",
+  "roles": "system_user",
+  "notify_props": {
+    "channel": "true",
+    "comments": "never",
+    "desktop": "mention",
+    "desktop_sound": "true",
+    "desktop_threads": "all",
+    "email": "true",
+    "email_threads": "all",
+    "first_name": "false",
+    "mention_keys": "",
+    "push": "mention",
+    "push_status": "online",
+    "push_threads": "all"
+  },
+  "last_password_update": 1792997982387,
+  "last_picture_update": 1792997983203,
+  "locale": "en",
+  "timezone": {
+    "automaticTimezone": "",
+    "manualTimezone": "",
+    "useAutomaticTimezone": "true"
+  },
+  "remote_id": "",
+  "disable_welcome_email": false
+}

@@ -1,0 +1,17 @@
+{
+  "event": "thread_updated",
+  "data": {
+    "previous_unread_mentions": 0,
+    "previous_unread_replies": 0,
+    "thread": "{\"id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"reply_count\":1,\"last_reply_at\":1792998043435,\"last_viewed_at\":0,\"participants\":[{\"id\":\"x6y9ko87wtrq7m9k3dbk3qt7me\",\"create_at\":1792997982387,\"update_at\":1792998036183,\"delete_at\":0,\"username\":\"alice\",\"auth_data\":\"\",\"auth_service\":\"\",\"email\":\"alice@example.com\",\"nickname\":\"Al\",\"first_name\":\"Alice\",\"last_name\":\"Anderson\",\"position\":\"iOS Engineer\",\"roles\":\"system_user\",\"last_picture_update\":1792997983203,\"locale\":\"en\",\"timezone\":{\"automaticTimezone\":\"\",\"manualTimezone\":\"\",\"useAutomaticTimezone\":\"true\"},\"remote_id\":\"\",\"disable_welcome_email\":false}],\"post\":{\"id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"create_at\":1792998039320,\"update_at\":1792998043435,\"edit_at\":1792998041394,\"delete_at\":0,\"is_pinned\":false,\"user_id\":\"9ik4bw7aybbqupuhs9fjsprsie\",\"channel_id\":\"4gq5dooa3iguik5izypw3ugjmh\",\"root_id\":\"\",\"original_id\":\"\",\"message\":\"fixture capture: hello from bob :wave: (edited)\",\"type\":\"\",\"props\":{},\"hashtags\":\"\",\"file_ids\":[],\"pending_post_id\":\"\",\"reply_count\":0,\"last_reply_at\":0,\"participants\":null},\"unread_replies\":0,\"unread_mentions\":0,\"is_urgent\":false,\"delete_at\":0}"
+  },
+  "broadcast": {
+    "omit_users": null,
+    "user_id": "x6y9ko87wtrq7m9k3dbk3qt7me",
+    "channel_id": "",
+    "team_id": "x3wnh555offqbkfx9usn17xo1y",
+    "connection_id": "",
+    "omit_connection_id": ""
+  },
+  "seq": 7
+}

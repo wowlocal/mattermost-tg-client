@@ -1,0 +1,15 @@
+{
+  "event": "reaction_added",
+  "data": {
+    "reaction": "{\"user_id\":\"9ik4bw7aybbqupuhs9fjsprsie\",\"post_id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"emoji_name\":\"+1\",\"create_at\":1792998040375,\"update_at\":1792998040375,\"delete_at\":0,\"remote_id\":\"\",\"channel_id\":\"4gq5dooa3iguik5izypw3ugjmh\"}"
+  },
+  "broadcast": {
+    "omit_users": null,
+    "user_id": "",
+    "channel_id": "4gq5dooa3iguik5izypw3ugjmh",
+    "team_id": "",
+    "connection_id": "",
+    "omit_connection_id": ""
+  },
+  "seq": 3
+}
