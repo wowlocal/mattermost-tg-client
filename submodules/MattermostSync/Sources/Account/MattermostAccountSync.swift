@@ -34,6 +34,12 @@ public final class MattermostAccountSync: @unchecked Sendable {
         /// Mention badge count, kept from the member counters plus live mentions.
         var mentionCount: Int32
 
+        /// The "@" mention badge: channels only. Mattermost counts every DM and GM message as a mention, so
+        /// DMs and GMs show the unread count alone (product decision, docs/PROGRESS.md 2D).
+        var showsMentionBadge: Bool {
+            return self.kind == .channel && self.channel.type != .groupMessage
+        }
+
         var counters: ChannelReadCounters {
             return ChannelReadCounters(
                 lastViewedAt: self.member.lastViewedAt,
@@ -479,9 +485,15 @@ public final class MattermostAccountSync: @unchecked Sendable {
     }
 
     func applyMentionCount(_ count: Int32, peerId: PeerId, transaction: Transaction) {
+        let showsBadge = self.state.with { state -> Bool in
+            guard let channelId = state.channelIdByPeerId[peerId], let channelState = state.channels[channelId] else {
+                return true
+            }
+            return channelState.showsMentionBadge
+        }
         // `maxId` at the top of the id space: tagged messages added later don't count themselves again; live
         // mentions update the count explicitly.
-        transaction.replaceMessageTagSummary(peerId: peerId, threadId: nil, tagMask: .unseenPersonalMessage, namespace: Namespaces.Message.Cloud, customTag: nil, count: max(0, count), maxId: Int32.max - 1)
+        transaction.replaceMessageTagSummary(peerId: peerId, threadId: nil, tagMask: .unseenPersonalMessage, namespace: Namespaces.Message.Cloud, customTag: nil, count: showsBadge ? max(0, count) : 0, maxId: Int32.max - 1)
     }
 
     /// Context for converting posts of `channelId` inside a transaction.
@@ -492,6 +504,7 @@ public final class MattermostAccountSync: @unchecked Sendable {
         let store = self.store
         return PostConversionContext(
             ownUserId: self.ownUserId,
+            showsMentionBadge: channelState.showsMentionBadge,
             ownUsername: self.ownUsername.lowercased(),
             accountPeerId: self.ownPeerId,
             chatPeerId: channelState.peerId,

@@ -17,6 +17,8 @@ enum ChatKind: Equatable {
 /// Everything `PostConverter` needs to know besides the post. Built inside a Postbox transaction.
 struct PostConversionContext {
     var ownUserId: String
+    /// Channels only (not DMs, GMs or Saved Messages): mentions of the user get the "@" badge tag.
+    var showsMentionBadge: Bool = false
     var ownUsername: String
     var accountPeerId: PeerId
     var chatPeerId: PeerId
@@ -129,7 +131,9 @@ enum PostConverter {
             if !entities.isEmpty {
                 textAttributes.append(TextEntitiesMessageAttribute(entities: entities))
             }
-            if isIncoming && post.createAt > context.lastViewedAt && mentionsMe(formatted, kind: context.kind, ownUsername: context.ownUsername) {
+            // Mention badges only in channels: DMs and GMs show the unread count alone (Mattermost counts every
+            // DM/GM message as a mention).
+            if isIncoming && context.showsMentionBadge && post.createAt > context.lastViewedAt && mentionsMe(formatted, kind: context.kind, ownUsername: context.ownUsername) {
                 textTags.insert(.unseenPersonalMessage)
             }
 
@@ -174,7 +178,8 @@ enum PostConverter {
                 groupingKey: part.groupingKey,
                 threadId: threadId,
                 timestamp: mmSeconds(post.createAt),
-                flags: flags,
+                // Mattermost counts a post once: the album's other messages don't count as unread.
+                flags: index == 0 || !isIncoming ? flags : [.Incoming, .NotCountedAsUnread],
                 tags: tags,
                 globalTags: [],
                 localTags: [],
