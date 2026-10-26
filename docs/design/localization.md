@@ -34,7 +34,7 @@ follows the device language, and Settings → Relay → Language lists them.
 | Share extension sign-in alert | `Telegram/Share/en.lproj/Localizable.strings` (2 keys) | English |
 | Notification extension placeholder ("You have a new message") | `MattermostPushService` | English literal (the extension has no strings) |
 | Service messages ("bob joined the channel."), "(Only visible to you)" | composed by MattermostSyncCore / MattermostSync when a post is stored | English, **stored** in the message text |
-| Write-failure toasts ("Couldn't send the message: …") | `MattermostSync.notice` | English literals (MattermostSync has no strings) |
+| Write-failure toasts ("Couldn't send the message: …") | `MattermostNotice` (MattermostSync), worded by MattermostUI's `relayNotice` | `Relay.Notice.*` since 4C; the error detail is the server's or the system's text |
 | Server texts (error messages, slash command help, system admin texts) | the Mattermost server | the server's language |
 | Dates, times, numbers | `DateFormatter`, `PresentationDateTimeFormat` | the device's region (already localized) |
 
@@ -56,9 +56,10 @@ follows the device language, and Settings → Relay → Language lists them.
    …). Best result; needs a key inventory per screen and a translation workflow (export the English, import
    translations as `<lang>.lproj/*.strings`).
 
-Any option also needs, per language: `InfoPlist.strings` (permission prompts, App Store review reads them), the
-texts composed by the sync (render service messages from a stored action instead of stored English text), and
-MattermostSync's toasts (typed notices resolved through the strings).
+Any option also needs, per language: `InfoPlist.strings` (permission prompts, App Store review reads them) and the
+texts composed by the sync (render service messages from a stored action instead of stored English text: store the
+`ServiceAction` in a message attribute and word it in the bubble). MattermostSync's toasts already go through the
+strings (`MattermostNotice`, 4C).
 
 ## The mechanism (implemented)
 
@@ -96,6 +97,12 @@ file through `getAppBundle()`.
 4. Not covered by the mechanism yet: `<lang>.lproj/InfoPlist.strings` (add the file and list it in
    `InfoPlistStringResources`), the extensions' own files, texts composed by the sync (see above).
 
+Checked in 4C with a temporary `de.lproj/Relay.strings` of 12 keys (not committed): the build merged it into
+`de.lproj/Localizable.strings`, and with `-AppleLanguages "(de)"` the threads screen read "4 UNGELESEN · 2
+ERWÄHNUNGEN", "55 Antworten", "1 neue Antwort", with English for the keys the file lacked
+(`docs/research/phase4c-lang-de.png`). A key that isn't English, an extra `%3$@`, or a full translation without
+Relay's overrides stopped the merge with a message naming the key.
+
 ## Pseudo-language (debug builds)
 
 Debug builds also bundle **`en-XA`**, generated from the merged English by
@@ -111,7 +118,12 @@ xcrun simctl launch <udid> org.relaychat.Relay -AppleLanguages "(en-XA)"
 On screen, plain English is a hard-coded text (or server data), a missing "⟧" is a clipped label, and the extra
 length shows where longer languages would truncate.
 
-Findings and fixes (4C): see PROGRESS.md (Phase 4C) and the screenshots `docs/research/phase4c-pseudo-*.png`.
+Findings (4C, with a search of Relay's code): the login divider "or", the login id placeholder, the login footer,
+"Mark as Read", MattermostSync's failure toasts (now `MattermostNotice`, worded by MattermostUI), Mattermost's
+suggested custom statuses, the table block title, generic device names, and Telegram's checkbox value "Selected"
+were English literals; all now come from the strings. Still English by design: server data (names, posts, channel
+purposes, the server's own error messages) and the texts the sync stores (above). Screenshots
+`docs/research/phase4c-pseudo-*.png`.
 
 ## Right-to-left
 
