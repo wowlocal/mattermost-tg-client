@@ -256,6 +256,36 @@ public final class MattermostAccountSync: @unchecked Sendable {
             self.isConnected.with { $0 = false }
             MMLog.log("websocket: the server rejected the session token")
             self.account.network.mattermostSetConnectionState(isConnected: false, isNetworkAvailable: true)
+            MattermostSync.sessionExpired(accountId: self.account.id, reason: "the WebSocket was rejected")
+        }
+    }
+
+    /// Stops everything `start()` started (logout, session expiry). The object is not reused; a new session
+    /// gets a new `MattermostAccountSync`.
+    func stop() {
+        let tasks = self.tasks.with { tasks -> [Task<Void, Never>] in
+            let current = tasks
+            tasks.removeAll()
+            return current
+        }
+        for task in tasks {
+            task.cancel()
+        }
+        self.disposables.dispose()
+        self.holeFiller = nil
+        self.readStatePusher = nil
+        // Write path (2A): the operation consumers stop when released. Sends of a stopped sync fail (the
+        // sender holds the sync weakly) and can be resent after a new login.
+        self.operationRunners = []
+        self.isConnected.with { $0 = false }
+        if let socket = self.socket {
+            Task {
+                await socket.disconnect()
+            }
+        }
+        self.account.network.mattermostSetConnectionState(isConnected: false, isNetworkAvailable: true)
+        if self.updatingCount.with({ $0 }) > 0 {
+            self.account.externalIsUpdating.set(.single(false))
         }
     }
 

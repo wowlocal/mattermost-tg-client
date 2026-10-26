@@ -3,9 +3,9 @@ import Security
 
 /// Session tokens in the Keychain, keyed by account record id.
 ///
-/// Spike D stores them **app-only** (the default access group): the app has no
-/// `keychain-access-groups` entitlement yet, so a shared group for the notification and share
-/// extensions needs signing work first (Phase 2).
+/// Stored **app-only** (the default access group): the app has no `keychain-access-groups`
+/// entitlement yet, so a shared group for the notification and share extensions needs signing work
+/// first. Written at login (`MattermostAccountSetup`), replaced at re-login, removed at logout.
 enum MattermostKeychain {
     private static let service = "org.relaychat.mattermost.session"
 
@@ -53,6 +53,28 @@ enum MattermostKeychain {
             kSecAttrService as String: service,
             kSecAttrAccount as String: String(accountId)
         ]
-        SecItemDelete(query as CFDictionary)
+        let status = SecItemDelete(query as CFDictionary)
+        if status != errSecSuccess && status != errSecItemNotFound {
+            MMLog.log("keychain: could not remove the session token of account \(accountId) (\(status))")
+        }
+    }
+
+    /// Account ids with a stored token. Keychain items survive uninstalling the app, so tokens of accounts
+    /// that no longer exist are removed at launch (`MattermostSync.startLifecycle`).
+    static func accountIdsWithTokens() -> [Int64] {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let items = result as? [[String: Any]] else {
+            return []
+        }
+        return items.compactMap { item in
+            return (item[kSecAttrAccount as String] as? String).flatMap(Int64.init)
+        }
     }
 }

@@ -72,6 +72,7 @@ swift_library(
         "//submodules/Postbox:Postbox",
         "//submodules/TelegramCore:TelegramCore",
         "//submodules/MattermostSync:MattermostSync",
+        "//submodules/MattermostUI:MattermostUI",
         "//submodules/WebProxyTransport:WebProxyTransport",
         "//submodules/MtProtoKit:MtProtoKit",
         "//submodules/TelegramPresentationData:TelegramPresentationData",

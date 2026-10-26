@@ -62,6 +62,9 @@
 "Conversation.UnsupportedMedia" = "This message is not supported by your version of Relay. Update the app to view it.";
 "Conversation.UnsupportedMediaPlaceholder" = "This message is not supported by your version of Relay. Please update to the latest version.";
 "Settings.LogoutConfirmationText" = "\nNote that you can use Relay on all your devices at once.";
+"LogoutOptions.AddAccountText" = "Log in to another Mattermost server or as another user, and switch between your accounts.";
+"LogoutOptions.ClearCacheText" = "Free up disk space on your device; your media will stay on the server.";
+"LogoutOptions.LogOutInfo" = "Logging out ends your session on the server and removes this account's messages and files from this device.";
 "Cache.Help" = "Photos, videos and other files from chats that you have **not accessed** during this period will be removed from this device to save disk space.\n\nAll media will stay on your server and can be re-downloaded if you need it again.";
 "Cache.MaximumCacheSizeHelp" = "If your cache size exceeds this limit, the oldest media will be deleted.\n\nAll media will stay on your server and can be re-downloaded if you need it again.";
 "ClearCache.ClearDescription" = "All media will stay on your server and can be re-downloaded if you need them again.";

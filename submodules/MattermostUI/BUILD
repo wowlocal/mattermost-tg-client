@@ -1,0 +1,32 @@
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+
+# Relay's own screens for the Mattermost backend: login (server, credentials, MFA, SSO), re-login after a
+# session expires, and their debug driver. See docs/research/ui-inventory.md §4.
+swift_library(
+    name = "MattermostUI",
+    module_name = "MattermostUI",
+    srcs = glob([
+        "Sources/**/*.swift",
+    ]),
+    copts = [
+        "-warnings-as-errors",
+    ],
+    deps = [
+        "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
+        "//submodules/AsyncDisplayKit:AsyncDisplayKit",
+        "//submodules/Display:Display",
+        "//submodules/Postbox:Postbox",
+        "//submodules/TelegramCore:TelegramCore",
+        "//submodules/TelegramPresentationData:TelegramPresentationData",
+        "//submodules/AccountContext:AccountContext",
+        "//submodules/PresentationDataUtils:PresentationDataUtils",
+        "//submodules/SolidRoundedButtonNode:SolidRoundedButtonNode",
+        "//submodules/CodeInputView:CodeInputView",
+        "//submodules/OverlayStatusController:OverlayStatusController",
+        "//submodules/MattermostKit:MattermostKit",
+        "//submodules/MattermostSync:MattermostSync",
+    ],
+    visibility = [
+        "//visibility:public",
+    ],
+)

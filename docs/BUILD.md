@@ -39,9 +39,13 @@ xcrun simctl launch "$UDID" org.relaychat.Relay
 xcrun simctl io "$UDID" screenshot /tmp/relay.png
 ```
 
-### Debug login and debug hooks (Spike D, debug builds only)
+### Login
 
-Without a login screen, the app stays logged out unless the launch environment carries credentials (`SIMCTL_CHILD_` prefix for `simctl launch`):
+A fresh install opens the login (MattermostUI): server address → credentials or SSO → MFA code. Debug builds accept `http://` for local servers (`http://localhost:8065`); release builds only HTTPS. Log out in Settings → Log Out (or the account's context menu), add accounts in Settings → Add Account (with one account: Log Out → Add Another Account, or long-press the Settings tab).
+
+### Debug login and debug hooks (debug builds only)
+
+To skip the login screens, launch with credentials in the environment (`SIMCTL_CHILD_` prefix for `simctl launch`; optional `RELAY_DEBUG_MM_MFA=<code>`):
 
 ```sh
 PW=$(grep '^SEED_USER_PASSWORD=' infra/dev-server/.env | cut -d= -f2-)
@@ -49,7 +53,37 @@ SIMCTL_CHILD_RELAY_DEBUG_MM_URL=http://localhost:8065 SIMCTL_CHILD_RELAY_DEBUG_M
 SIMCTL_CHILD_RELAY_DEBUG_MM_PASSWORD="$PW" xcrun simctl launch "$UDID" org.relaychat.Relay
 ```
 
-The credentials are only used when no account exists yet; later launches reuse the account (token in the Keychain, sync state in `<account>/mattermost/sync.sqlite`). Uninstall the app to log in again. More hooks (see `submodules/MattermostSync/Sources/Debug/MattermostDebug.swift`): `RELAY_DEBUG_OPEN_CHAT=firehose|engineering/town-square|dm:bob|saved`, `RELAY_DEBUG_OPEN_POST=<post id>` (permalink), `RELAY_DEBUG_PAGE=<channel>` (pages through the whole history and writes `Documents/relay-debug/<channel id>.json`), `RELAY_DEBUG_DUMP_CHATLIST=1` (`Documents/relay-debug/chatlist.json`), `RELAY_DEBUG_ID_SPACE=300000` (small message id space to force renumbering). MattermostSync logs with a `[Relay]` prefix: `xcrun simctl spawn "$UDID" log stream --style compact --predicate 'eventMessage CONTAINS "[Relay]"'`.
+The credentials are only used when no account exists yet (they go through the same `MattermostAccountSetup` as the login screens; on failure the login screens appear). Later launches reuse the account (token in the Keychain, sync state in `<account>/mattermost/sync.sqlite`). Log out or uninstall the app to log in again. More hooks (see `submodules/MattermostSync/Sources/Debug/MattermostDebug.swift`): `RELAY_DEBUG_OPEN_CHAT=firehose|engineering/town-square|dm:bob|saved`, `RELAY_DEBUG_OPEN_POST=<post id>` (permalink), `RELAY_DEBUG_PAGE=<channel>` (pages through the whole history and writes `Documents/relay-debug/<channel id>.json`), `RELAY_DEBUG_DUMP_CHATLIST=1` (`Documents/relay-debug/chatlist.json`), `RELAY_DEBUG_ID_SPACE=300000` (small message id space to force renumbering). MattermostSync logs with a `[Relay]` prefix: `xcrun simctl spawn "$UDID" log stream --style compact --predicate 'eventMessage CONTAINS "[Relay]"'`.
+
+### Debug remote (debug builds only)
+
+There is no UI automation, so MattermostUI listens for commands that drive the login screens and the account lifecycle through the same code paths as taps (`submodules/MattermostUI/Sources/MattermostDebugRemote.swift`). `tools/relay-remote.py` writes the command into the app's `Documents/relay-debug/command.json`, posts the Darwin notification `org.relaychat.Relay.debug` and prints the app's answer (with the visible login screen, accounts, Keychain tokens and account directories):
+
+```sh
+tools/relay-remote.py "$UDID" state
+tools/relay-remote.py "$UDID" fill field=url text=http://localhost:8065   # server screen
+tools/relay-remote.py "$UDID" press button=primary                         # Connect / Log In
+tools/relay-remote.py "$UDID" fill field=login text=alice                  # credentials screen
+tools/relay-remote.py "$UDID" fill field=password text="$PW"
+tools/relay-remote.py "$UDID" fill field=code text=$(tools/mm-dev-auth.py code carol)   # MFA screen
+tools/relay-remote.py "$UDID" add-account                                  # Settings → Add Account
+tools/relay-remote.py "$UDID" switch username=bob                          # account switcher
+tools/relay-remote.py "$UDID" logout username=alice                        # Settings → Log Out → OK
+tools/relay-remote.py "$UDID" relogin                                      # "Log In" on "Session Expired"
+tools/relay-remote.py "$UDID" press button=confirm                         # "Continue" on "Log In as …?"
+tools/relay-remote.py "$UDID" dismiss-alerts                               # "OK" on a login error alert
+```
+
+Launch with `SIMCTL_CHILD_RELAY_DEBUG_NO_PERMISSION_PROMPTS=1` from the first launch on: an unanswered notifications prompt is SpringBoard's and survives app restarts and reinstalls until the simulator reboots. Passwords filled by the remote are cleared once they are submitted, so iOS doesn't cover the screen with "Save Password?".
+
+### Login and account lifecycle checks
+
+`tools/mm-dev-auth.py` (standard library only; reads `infra/dev-server/.env`, keeps TOTP secrets in `build-input/dev-mfa-secrets.json`):
+
+- MFA: `enable-server-mfa` (sysadmin, once), `enable-mfa carol`, `code carol` (current 6-digit code), `disable-mfa carol`.
+- Session expiry: `revoke-sessions dave` (sysadmin) ends all of dave's sessions; the app shows "Session Expired" at its next request (a 401), a WebSocket reconnect, or when it becomes active (send it to the background and back: `xcrun simctl launch "$UDID" com.apple.Preferences`, then launch Relay again). Logging in again as the same user keeps the local data; as another user, the old account's data is deleted and a new account is created.
+
+Use users nobody else is using for these (carol for MFA, dave for revocation): other agents and scripts log in as alice and bob.
 
 #### Write-path hook (Phase 2A, debug builds only)
 

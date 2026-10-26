@@ -79,12 +79,21 @@ extension MattermostError {
 
     /// The login failed because an MFA token is required.
     ///
-    /// Assumption: the server reports this as a 401 with one of these error IDs;
-    /// verify against the minimum supported server version.
+    /// Verified on 11.7: a login without `token` for a user with MFA answers 401
+    /// `mfa.validate_token.authenticate.app_error` (older servers used the
+    /// `ent.` prefix).
     public var isMFARequired: Bool {
         guard let id = appError?.id else { return false }
         return id == "mfa.validate_token.authenticate.app_error"
             || id == "ent.mfa.validate_token.authenticate.app_error"
+    }
+
+    /// The login sent an MFA token, and it was wrong or expired.
+    ///
+    /// Verified on 11.7: 401 `api.user.check_user_mfa.bad_code.app_error`.
+    public var isInvalidMFAToken: Bool {
+        guard let id = appError?.id else { return false }
+        return id == "api.user.check_user_mfa.bad_code.app_error"
     }
 
     /// The session token is no longer valid; the user must log in again.

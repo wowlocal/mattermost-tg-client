@@ -56,6 +56,15 @@ final class AuthTests: StubbedClientTestCase {
         StubURLProtocol.respond(with: .json(#"{"id":"mfa.validate_token.authenticate.app_error","message":"Invalid MFA token.","status_code":401}"#, status: 401))
         let error = await expectMattermostError { try await self.makeClient(token: nil).login(loginId: "alice", password: "pw") }
         XCTAssertTrue(error?.isMFARequired == true)
+        XCTAssertFalse(error?.isInvalidMFAToken == true)
+    }
+
+    func testLoginWithWrongMFACode() async {
+        // As recorded from the 11.7 dev server.
+        StubURLProtocol.respond(with: .json(#"{"id":"api.user.check_user_mfa.bad_code.app_error","message":"Invalid MFA token.","detailed_error":"","request_id":"wkcouno6fffx5j744fy7kwkbsw","status_code":401}"#, status: 401))
+        let error = await expectMattermostError { try await self.makeClient(token: nil).login(loginId: "carol", password: "pw", mfaToken: "000000") }
+        XCTAssertTrue(error?.isInvalidMFAToken == true)
+        XCTAssertFalse(error?.isMFARequired == true)
     }
 
     func testLogoutClearsTokenEvenOnFailure() async {
