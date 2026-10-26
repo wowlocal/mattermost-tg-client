@@ -284,6 +284,7 @@ public enum MattermostAccountSetup {
         if let loginId = loginId {
             store.setCursor(MattermostSync.loginIdCursor, loginId)
         }
+        store.setCursor(MattermostSync.sessionCSRFCursor, login.csrfToken)
         let ownIdValue = MattermostPeerIds.ownUserIdValue(serverURL: serverURLString, userId: login.user.id)
         guard store.reserveOwnUserPeer(userId: login.user.id, peerId: ownIdValue) != nil else {
             throw MattermostAccountSetupError.storage("own peer id")

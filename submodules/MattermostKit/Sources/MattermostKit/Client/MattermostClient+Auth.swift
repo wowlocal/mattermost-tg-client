@@ -63,7 +63,21 @@ extension MattermostClient {
         }
         let user = try decode(User.self, from: data)
         setToken(token)
-        return LoginResult(user: user, token: token)
+        return LoginResult(user: user, token: token, csrfToken: Self.cookie(named: "MMCSRF", in: response))
+    }
+
+    /// A cookie the response sets (the client never stores cookies; the token goes in a header).
+    static func cookie(named name: String, in response: HTTPURLResponse) -> String? {
+        var fields: [String: String] = [:]
+        for (key, value) in response.allHeaderFields {
+            if let key = key as? String, let value = value as? String {
+                fields[key] = value
+            }
+        }
+        guard let url = response.url else {
+            return nil
+        }
+        return HTTPCookie.cookies(withResponseHeaderFields: fields, for: url).first(where: { $0.name == name })?.value
     }
 
     /// `POST /users/logout`. Ends the session server-side (which also removes

@@ -269,9 +269,13 @@ public struct LoginResult: Sendable, Equatable {
     public var user: User
     /// Session token from the `Token` response header.
     public var token: String
+    /// The new session's CSRF token (the `MMCSRF` cookie of the response). It is also the session's
+    /// `props.csrf`, which tells the current session apart in `sessions()`.
+    public var csrfToken: String?
 
-    public init(user: User, token: String) {
+    public init(user: User, token: String, csrfToken: String? = nil) {
         self.user = user
         self.token = token
+        self.csrfToken = csrfToken
     }
 }

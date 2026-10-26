@@ -79,6 +79,8 @@ public enum MattermostSync {
     /// Sync-store cursors kept by the account lifecycle.
     static let loginIdCursor = "login_id"
     static let sessionExpiredCursor = "session_expired"
+    /// The current session's CSRF token (`LoginResult.csrfToken`): marks it in the Devices list.
+    static let sessionCSRFCursor = "session_csrf"
 
     // MARK: Accounts
 
@@ -257,6 +259,7 @@ public enum MattermostSync {
             throw MattermostRenewSessionError.storage
         }
         store.setCursor(self.sessionExpiredCursor, nil)
+        store.setCursor(self.sessionCSRFCursor, login.csrfToken)
         if let loginId = loginId {
             store.setCursor(self.loginIdCursor, loginId)
         }
