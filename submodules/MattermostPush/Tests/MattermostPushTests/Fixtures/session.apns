@@ -1,0 +1,16 @@
+{
+  "Simulator Target Bundle": "org.relaychat.Relay",
+  "ack_id": "ack0session000000000000000",
+  "aps": {
+    "alert": "Session Expired: Please log in to continue receiving notifications.",
+    "category": "",
+    "mutable-content": 1,
+    "sound": "default"
+  },
+  "is_crt_enabled": false,
+  "server_id": "cbmk94w77in6bnhiy5q5oh114o",
+  "signature": "NO_SIGNATURE",
+  "sub_type": "",
+  "type": "session",
+  "version": "v2"
+}

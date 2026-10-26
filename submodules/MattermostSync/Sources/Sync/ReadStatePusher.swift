@@ -80,6 +80,9 @@ extension MattermostAccountSync {
         do {
             if target.count == 0 || target.nextPostId == nil {
                 _ = try await self.client.viewChannel(channelId: channelId)
+                // Phase 3A: the server sends no `clear` push to the session that read the channel. Replies
+                // show inline, so reading the channel reads its threads too.
+                MattermostSync.removeDeliveredNotifications(channelId: channelId, rootId: nil, isCRTEnabled: false, serverId: self.server.diagnosticId, accountId: self.account.id.int64)
             } else if let nextPostId = target.nextPostId {
                 _ = try await self.client.markPostUnread(postId: nextPostId)
             }

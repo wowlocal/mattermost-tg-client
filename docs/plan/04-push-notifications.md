@@ -100,3 +100,15 @@ Needs:
   - multiple servers
   - expired session
   - ID‑only timeout
+
+## Implementation (Phase 3A)
+
+What was built and verified against Mattermost 11.7.14 and mattermost-push-proxy 6.6.0 (details: [infra/push-proxy](../../infra/push-proxy/README.md), [BUILD.md](../BUILD.md#push-notifications-on-the-simulator-phase-3a)):
+
+- **Platform prefix**: `relay_apple:<token>` (production APNs) and `relay_apple_sandbox:<token>` (sandbox), matching the two `ApplePushSettings` entries of our proxy; no `-v<N>` suffix (the proxy reads it as an app version). The ack's `platform` is `ios` (the server special-cases it).
+- **Server identifier**: every push carries `server_id` = the server's `DiagnosticId` (client config), stored with the account at login. Pushes carry no user id, so several accounts on one server are told apart by channel membership, the sender, `@mentions` and a delivery log (two pushes for one post go to two accounts); `session` pushes by asking the server whose token it rejects (`MattermostPushRouter`).
+- **ID‑only** needs a licensed server: unlicensed servers send "generic" instead. The extension merges the acknowledgement's answer for `id_loaded` pushes (unverified).
+- **Shared keychain**: session tokens live in the app group's Keychain access group (`group.org.relaychat.Relay`, no Keychain Sharing capability needed); the extension acknowledges pushes with them. Older app-only tokens move on first read.
+- **`clear`** is a background push (content-available, no alert): the app removes the channel's delivered notifications (thread replies stay on a collapsed-threads channel read). It never reaches the extension, and it is not delivered to a force-quit app. Reading a channel in Relay removes its notifications too (the server sends no `clear` to the reading session). **`update_badge`** carries only `aps.badge`, which iOS applies. **`session`** says "Session Expired … Open Relay to log in again".
+- **Actions**: category `CAN_REPLY` (the server's) with Reply (the write path, so it is retried offline) and Mark as Read (`/channels/members/me/view`, plus the thread for a collapsed-thread reply). A tap opens the chat at the post, or the thread view for a channel thread reply.
+- **Simulator testing**: `xcrun simctl push` never runs a notification service extension; debug builds run the extension's code in the app (`simulate-push`). The extension itself runs only with real APNs delivery, which needs the APNs key.

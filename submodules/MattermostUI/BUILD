@@ -26,6 +26,9 @@ swift_library(
         "//submodules/ItemListUI:ItemListUI",
         "//submodules/MattermostKit:MattermostKit",
         "//submodules/MattermostSync:MattermostSync",
+        # Phase 3A: the debug remote's simulated push delivery.
+        "//submodules/MattermostPush:MattermostPush",
+        "//submodules/MattermostPushService:MattermostPushService",
     ],
     visibility = [
         "//visibility:public",

@@ -1,0 +1,37 @@
+{
+    "ListenAddress": ":8066",
+    "ThrottlePerSec": 300,
+    "ThrottleMemoryStoreSize": 50000,
+    "ThrottleVaryByHeader": "X-Forwarded-For",
+    "EnableMetrics": false,
+    "SendTimeoutSec": 30,
+    "RetryTimeoutSec": 8,
+    "ApplePushSettings": [
+        {
+            "Type": "relay_apple",
+            "ApplePushUseDevelopment": false,
+            "ApplePushCertPrivate": "",
+            "ApplePushCertPassword": "",
+            "ApplePushTopic": "__APNS_TOPIC__",
+            "AppleAuthKeyFile": "/mattermost-push-proxy/certs/AuthKey.p8",
+            "AppleAuthKeyID": "__APNS_KEY_ID__",
+            "AppleTeamID": "__APNS_TEAM_ID__"
+        },
+        {
+            "Type": "relay_apple_sandbox",
+            "ApplePushUseDevelopment": true,
+            "ApplePushCertPrivate": "",
+            "ApplePushCertPassword": "",
+            "ApplePushTopic": "__APNS_TOPIC__",
+            "AppleAuthKeyFile": "/mattermost-push-proxy/certs/AuthKey.p8",
+            "AppleAuthKeyID": "__APNS_KEY_ID__",
+            "AppleTeamID": "__APNS_TEAM_ID__"
+        }
+    ],
+    "AndroidPushSettings": [],
+    "EnableConsoleLog": true,
+    "EnableFileLog": false,
+    "LogFileLocation": "",
+    "LogFormat": "plain",
+    "LogLevel": "__LOG_LEVEL__"
+}

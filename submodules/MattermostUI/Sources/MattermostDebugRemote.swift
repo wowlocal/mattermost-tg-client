@@ -1,11 +1,13 @@
 import Foundation
 import UIKit
+import UserNotifications
 import Display
 import SwiftSignalKit
 import Postbox
 import TelegramCore
 import AccountContext
 import MattermostSync
+import MattermostPushService
 
 /// A login screen the debug remote can fill and press.
 protocol MattermostDebugDrivable: AnyObject {
@@ -33,6 +35,12 @@ protocol MattermostDebugDrivable: AnyObject {
 ///   (`logoutFromAccount`);
 /// - `relogin`: "Log In" on the session-expired alert;
 /// - `dismiss-alerts`: "OK" on visible in-app alerts.
+/// - `notifications`: the delivered notifications (newest first), in the result's `deliveredNotifications`;
+/// - `notification-open`, `notification-reply` (`text`), `notification-read` (`which`: request identifier,
+///   index or `latest`): a tap, Reply or Mark as Read on a delivered notification, through the AppDelegate's
+///   own handler (Phase 3A). The result's `visibleChat` shows the chat on top afterwards;
+/// - `simulate-push` (`payload`: the APNs JSON, or `file`: its path; `delay`: seconds, default 1): a push as the
+///   notification service extension would show it (Phase 3A, see `simulatePush`).
 ///
 /// Passwords filled by the remote are cleared once the login succeeds, so iOS doesn't offer to save them
 /// (its "Save Password?" sheet would cover the next screenshots).
@@ -143,6 +151,10 @@ final class MattermostDebugRemote {
             |> deliverOnMainQueue).start(next: { [weak self] ids in
                 self?.writeResult(id: id, ok: !ids.isEmpty, error: ids.isEmpty ? "no account" : nil)
             })
+        case "notifications", "notification-open", "notification-reply", "notification-read":
+            self.runNotificationCommand(action: action, command: command, id: id)
+        case "simulate-push":
+            self.simulatePush(command: command, id: id)
         case "dismiss-alerts":
             // "OK" on the login screens' error alerts (each screen in the flow, top first).
             var dismissed = false
@@ -158,6 +170,161 @@ final class MattermostDebugRemote {
         default:
             self.writeResult(id: id, ok: false, error: "unknown action \(action)")
         }
+    }
+
+    /// Phase 3A: delivered notifications, and a tap / Reply / Mark as Read on one of them through the app's
+    /// own response handler (`MattermostSync.debugNotificationResponder`). `which` is a request identifier, an
+    /// index into the list (newest first) or `latest` (default).
+    private func runNotificationCommand(action: String, command: [String: Any], id: String?) {
+        UNUserNotificationCenter.current().getDeliveredNotifications(completionHandler: { notifications in
+            DispatchQueue.main.async {
+                let sorted = notifications.sorted(by: { $0.date > $1.date })
+                self.notificationList = sorted.map { notification -> [String: Any] in
+                    let content = notification.request.content
+                    var userInfo: [String: String] = [:]
+                    for (key, value) in content.userInfo where key as? String != "aps" {
+                        userInfo["\(key)"] = "\(value)"
+                    }
+                    return [
+                        "identifier": notification.request.identifier,
+                        "date": notification.date.timeIntervalSince1970,
+                        "title": content.title,
+                        "subtitle": content.subtitle,
+                        "body": content.body,
+                        "threadIdentifier": content.threadIdentifier,
+                        "category": content.categoryIdentifier,
+                        "badge": content.badge?.intValue ?? -1,
+                        "userInfo": userInfo
+                    ]
+                }
+                if action == "notifications" {
+                    self.writeResult(id: id, ok: true, error: nil)
+                    return
+                }
+                let which = command["which"] as? String ?? "latest"
+                var selected: UNNotification?
+                if which == "latest" {
+                    selected = sorted.first
+                } else if let index = Int(which), index >= 0, index < sorted.count {
+                    selected = sorted[index]
+                } else {
+                    selected = sorted.first(where: { $0.request.identifier == which })
+                }
+                guard let notification = selected else {
+                    self.writeResult(id: id, ok: false, error: "no delivered notification \(which)")
+                    return
+                }
+                guard let responder = MattermostSync.debugNotificationResponder else {
+                    self.writeResult(id: id, ok: false, error: "no notification responder")
+                    return
+                }
+                let actionIdentifier: String
+                switch action {
+                case "notification-reply":
+                    actionIdentifier = MattermostSync.notificationReplyActionIdentifier
+                case "notification-read":
+                    actionIdentifier = MattermostSync.notificationMarkReadActionIdentifier
+                default:
+                    actionIdentifier = UNNotificationDefaultActionIdentifier
+                }
+                responder(notification.request.content.userInfo, actionIdentifier, command["text"] as? String)
+                Queue.mainQueue().after(1.0) {
+                    self.writeResult(id: id, ok: true, error: nil)
+                }
+            }
+        })
+    }
+
+    private var notificationList: [[String: Any]] = []
+    private var simulatedPushes: [String: MattermostPushServiceHandler] = [:]
+
+    /// Phase 3A: `xcrun simctl push` hands a push straight to SpringBoard and never starts the notification
+    /// service extension (only APNs delivery does), so on a simulator without a real APNs key the extension's
+    /// work can't be seen. This runs the same code (`MattermostPushServiceHandler`, MattermostPushService) on
+    /// the payload in the app and gives the result to the system as a local notification after `delay`
+    /// seconds: it is then shown, grouped, tapped and answered like a push, also when the app has been put in
+    /// the background, locked or killed in the meantime. `clear` and `update_badge` go to the app's handler
+    /// for background pushes, as on a device. infra/push-proxy/sim-bridge.py --deliver app sends the dev
+    /// server's pushes here.
+    private func simulatePush(command: [String: Any], id: String?) {
+        var data: Data?
+        if let text = command["payload"] as? String {
+            data = Data(text.utf8)
+        } else if let path = command["file"] as? String {
+            data = try? Data(contentsOf: URL(fileURLWithPath: path))
+        }
+        guard let data, let userInfo = (try? JSONSerialization.jsonObject(with: data)) as? [AnyHashable: Any] else {
+            self.writeResult(id: id, ok: false, error: "no readable payload")
+            return
+        }
+        let delay = max(0.1, (command["delay"] as? String).flatMap(Double.init) ?? 1.0)
+        let aps = userInfo["aps"] as? [AnyHashable: Any] ?? [:]
+        let type = userInfo["type"] as? String ?? ""
+        if type == "clear" || type == "update_badge" {
+            let handled = MattermostSync.handleBackgroundPush(userInfo: userInfo)
+            if let badge = (aps["badge"] as? NSNumber)?.intValue {
+                if #available(iOS 16.0, *) {
+                    UNUserNotificationCenter.current().setBadgeCount(badge)
+                } else {
+                    UIApplication.shared.applicationIconBadgeNumber = badge
+                }
+            }
+            self.writeResult(id: id, ok: handled, error: handled ? nil : "not a Mattermost push")
+            return
+        }
+        let content = UNMutableNotificationContent()
+        if let alert = aps["alert"] as? [AnyHashable: Any] {
+            content.title = alert["title"] as? String ?? ""
+            content.body = alert["body"] as? String ?? ""
+        } else if let alert = aps["alert"] as? String {
+            content.body = alert
+        }
+        content.userInfo = userInfo
+        let key = (userInfo["ack_id"] as? String) ?? UUID().uuidString
+        let request = UNNotificationRequest(identifier: "relay-sim-\(key)", content: content, trigger: nil)
+        let handler = MattermostPushServiceHandler(request: request, contentHandler: { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else {
+                    return
+                }
+                self.simulatedPushes.removeValue(forKey: key)
+                if result.title.isEmpty && result.body.isEmpty {
+                    NSLog("[Relay] debug remote: simulated push %@ dropped (no account)", key)
+                    self.writeResult(id: id, ok: true, error: nil)
+                    return
+                }
+                let local = UNNotificationRequest(identifier: request.identifier, content: result, trigger: UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false))
+                UNUserNotificationCenter.current().add(local, withCompletionHandler: { error in
+                    DispatchQueue.main.async {
+                        NSLog("[Relay] debug remote: simulated push %@ scheduled in %.1f s (%@)", key, delay, error.map { "\($0)" } ?? "ok")
+                        self.writeResult(id: id, ok: error == nil, error: error.map { "\($0)" })
+                    }
+                })
+            }
+        })
+        self.simulatedPushes[key] = handler
+        handler.start()
+    }
+
+    /// The chat on top of the main navigation stack (to check where a tapped notification led).
+    private func visibleChatDescription() -> [String: Any] {
+        guard let navigationController = self.sharedContext?.mainWindow?.viewController as? NavigationController else {
+            return [:]
+        }
+        guard let chat = navigationController.viewControllers.last as? ChatController else {
+            return ["top": navigationController.viewControllers.last.map { "\(type(of: $0))" } ?? ""]
+        }
+        var result: [String: Any] = ["top": "\(type(of: chat))"]
+        switch chat.chatLocation {
+        case let .peer(peerId):
+            result["peerId"] = "\(peerId.toInt64())"
+        case let .replyThread(message):
+            result["peerId"] = "\(message.peerId.toInt64())"
+            result["threadId"] = "\(message.threadId)"
+        case .customChatContents:
+            break
+        }
+        return result
     }
 
     /// The account named by `username` or `accountId`, else the current one.
@@ -208,6 +375,9 @@ final class MattermostDebugRemote {
                 ]
             }
             state["sessionExpiry"] = MattermostSessionExpiryPresenter.shared.debugState
+            state["push"] = MattermostSync.debugPushState()
+            state["deliveredNotifications"] = self.notificationList
+            state["visibleChat"] = self.visibleChatDescription()
             result["state"] = state
             do {
                 try FileManager.default.createDirectory(at: self.directory, withIntermediateDirectories: true)

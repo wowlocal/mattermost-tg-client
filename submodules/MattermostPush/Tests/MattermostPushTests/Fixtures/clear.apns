@@ -1,0 +1,14 @@
+{
+  "Simulator Target Bundle": "org.relaychat.Relay",
+  "ack_id": "ack0clear00000000000000000",
+  "aps": {
+    "badge": 0,
+    "content-available": 1
+  },
+  "channel_id": "townsquare0000000000000000",
+  "is_crt_enabled": true,
+  "server_id": "cbmk94w77in6bnhiy5q5oh114o",
+  "signature": "NO_SIGNATURE",
+  "sub_type": "",
+  "type": "clear"
+}

@@ -1670,6 +1670,15 @@ public final class SharedAccountContextImpl: SharedAccountContext {
     }
     
     public func updateNotificationTokensRegistration() {
+        // MATTERMOST: each Mattermost account attaches the APNs token to its own session
+        // (`PUT /users/sessions/device`, MattermostSync); Telegram's MTProto registration never runs.
+        if MattermostBackend.isEnabled {
+            self.registeredNotificationTokensDisposable.set((self.apsNotificationToken
+            |> deliverOnMainQueue).start(next: { token in
+                MattermostSync.setPushToken(token)
+            }))
+            return
+        }
         let sandbox: Bool
         #if DEBUG
         sandbox = true

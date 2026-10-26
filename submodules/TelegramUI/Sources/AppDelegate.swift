@@ -818,6 +818,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         if #available(iOS 10.0, *) {
             UNUserNotificationCenter.current().delegate = self
         }
+        // MATTERMOST: notifications of Mattermost pushes (see the extension at the end of this file).
+        self.installMattermostNotificationHooks()
         
         GlobalExperimentalSettings.isAppStoreBuild = buildConfig.isAppStoreBuild
         GlobalExperimentalSettings.enableFeed = false
@@ -2210,6 +2212,14 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         
         Logger.shared.log("App \(self.episodeId)", "remoteNotification: \(redactedPayload)")
         
+        // MATTERMOST: background Mattermost pushes (`clear`: the user read a channel elsewhere).
+        if MattermostBackend.isEnabled && MattermostSync.handleBackgroundPush(userInfo: userInfo) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: {
+                completionHandler(.newData)
+            })
+            return
+        }
+        
         if let firebaseAuth = redactedPayload["com.google.firebase.auth"] as? String {
             guard let firebaseAuthData = firebaseAuth.data(using: .utf8), let firebaseJson = try? JSONSerialization.jsonObject(with: firebaseAuthData) else {
                 completionHandler(.newData)
@@ -3042,6 +3052,11 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     }
     
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        // MATTERMOST: taps, Reply and Mark as Read on Mattermost notifications.
+        if MattermostBackend.isEnabled && MattermostSync.isMattermostNotification(userInfo: response.notification.request.content.userInfo) {
+            self.handleMattermostNotificationResponse(userInfo: response.notification.request.content.userInfo, actionIdentifier: response.actionIdentifier, text: (response as? UNTextInputNotificationResponse)?.userText, completion: completionHandler)
+            return
+        }
         let _ = (accountIdFromNotification(response.notification, sharedContext: self.sharedContextPromise.get())
         |> deliverOnMainQueue).start(next: { accountId in
             if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
@@ -3199,7 +3214,9 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                                 storyCategory = UNNotificationCategory(identifier: "st", actions: [], intentIdentifiers: [], hiddenPreviewsBodyPlaceholder: hiddenStoryContentString, options: options)
                                 storyReactionCategory = UNNotificationCategory(identifier: "str", actions: [], intentIdentifiers: [], hiddenPreviewsBodyPlaceholder: hiddenStoryReactionContentString, options: options)
                                 
-                                UNUserNotificationCenter.current().setNotificationCategories([
+                                // MATTERMOST: Reply and Mark as Read on Mattermost message notifications.
+                                let mattermostCategories = MattermostSync.notificationCategories(replyTitle: replyString, replyPlaceholder: messagePlaceholderString, markReadTitle: "Mark as Read", hiddenPreviewsBodyPlaceholder: hiddenContentString, options: carPlayOptions)
+                                UNUserNotificationCenter.current().setNotificationCategories(Set(mattermostCategories).union([
                                     unknownMessageCategory,
                                     repliableMessageCategory,
                                     repliableMediaMessageCategory,
@@ -3209,7 +3226,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                                     groupRepliableMediaMessageCategory,
                                     storyCategory,
                                     storyReactionCategory
-                                ])
+                                ]))
                                 
                                 Logger.shared.log("App \(self.episodeId)", "register for notifications: invoke registerForRemoteNotifications")
                                 UIApplication.shared.registerForRemoteNotifications()
@@ -3224,6 +3241,11 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     
     @available(iOS 10.0, *)
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        // MATTERMOST: Mattermost notifications show in the foreground unless their chat is open.
+        if MattermostBackend.isEnabled && MattermostSync.isMattermostNotification(userInfo: notification.request.content.userInfo) {
+            completionHandler(self.mattermostForegroundPresentation(userInfo: notification.request.content.userInfo))
+            return
+        }
         let _ = (accountIdFromNotification(notification, sharedContext: self.sharedContextPromise.get())
         |> deliverOnMainQueue).start(next: { accountId in
             if let context = self.contextValue {
@@ -3525,5 +3547,108 @@ final class UpdateSettings: Codable, Equatable {
     
     static func ==(lhs: UpdateSettings, rhs: UpdateSettings) -> Bool {
         return lhs.url == rhs.url
+    }
+}
+
+// MATTERMOST: Mattermost notifications (Phase 3A, docs/plan/04 "Notification actions"). The notification
+// service extension routes each push to an account and keeps the Mattermost ids in `userInfo`;
+// MattermostSync maps them to the chat, sends replies through the write path and marks channels read.
+extension AppDelegate {
+    func installMattermostNotificationHooks() {
+        #if DEBUG
+        // The debug remote (tools/relay-remote.py notification-open|reply|read) runs the same handler as a tap.
+        MattermostSync.debugNotificationResponder = { [weak self] userInfo, actionIdentifier, text in
+            self?.handleMattermostNotificationResponse(userInfo: userInfo, actionIdentifier: actionIdentifier, text: text, completion: {})
+        }
+        // `RELAY_DEBUG_OPEN_NOTIFICATION=latest|<request id>`: a tap on a delivered notification at launch, the
+        // moment iOS reports a tap that launched the app (cold start).
+        if let which = ProcessInfo.processInfo.environment["RELAY_DEBUG_OPEN_NOTIFICATION"], !which.isEmpty {
+            UNUserNotificationCenter.current().getDeliveredNotifications(completionHandler: { notifications in
+                let candidates = notifications.filter { MattermostSync.isMattermostNotification(userInfo: $0.request.content.userInfo) }.sorted(by: { $0.date > $1.date })
+                let notification = which == "latest" ? candidates.first : candidates.first(where: { $0.request.identifier == which })
+                guard let notification else {
+                    NSLog("[Relay] debug: no delivered notification %@", which)
+                    return
+                }
+                DispatchQueue.main.async {
+                    NSLog("[Relay] debug: opening notification %@ at launch", notification.request.identifier)
+                    self.handleMattermostNotificationResponse(userInfo: notification.request.content.userInfo, actionIdentifier: UNNotificationDefaultActionIdentifier, text: nil, completion: {})
+                }
+            })
+        }
+        #endif
+    }
+
+    func handleMattermostNotificationResponse(userInfo: [AnyHashable: Any], actionIdentifier: String, text: String?, completion: @escaping () -> Void) {
+        let signal: Signal<Bool, NoError>
+        switch actionIdentifier {
+        case UNNotificationDefaultActionIdentifier:
+            let accountId = MattermostSync.notificationAccountId(userInfo: userInfo)
+            Logger.shared.log("App \(self.episodeId)", "mattermost notification: open (account \(accountId.map { "\($0.int64)" } ?? "?"))")
+            if let accountId {
+                // Switch accounts right away; the chat opens once MattermostSync knows where the post is.
+                let _ = (self.sharedContextPromise.get()
+                |> take(1)
+                |> deliverOnMainQueue).start(next: { sharedContext in
+                    sharedContext.sharedContext.switchToAccount(id: accountId)
+                })
+            }
+            signal = MattermostSync.notificationDestination(userInfo: userInfo)
+            |> deliverOnMainQueue
+            |> map { [weak self] destination -> Bool in
+                guard let self, let destination else {
+                    return false
+                }
+                self.openChatWhenReady(accountId: destination.accountId, peerId: destination.peerId, threadId: destination.threadId, messageId: destination.messageId, storyId: nil, alwaysKeepMessageId: destination.messageId != nil)
+                return true
+            }
+            // The app is in the foreground now; the chat opens when the signal delivers.
+            completion()
+        case MattermostSync.notificationReplyActionIdentifier, MattermostSync.notificationMarkReadActionIdentifier:
+            let isReply = actionIdentifier == MattermostSync.notificationReplyActionIdentifier
+            if isReply && (text ?? "").isEmpty {
+                completion()
+                return
+            }
+            signal = self.sharedContextPromise.get()
+            |> take(1)
+            |> deliverOnMainQueue
+            |> mapToSignal { sharedContext -> Signal<Bool, NoError> in
+                // Launched in the background for the action: keep running until the server has it.
+                sharedContext.wakeupManager.allowBackgroundTimeExtension(timeout: 25.0, extendNow: true)
+                if isReply {
+                    return MattermostSync.replyFromNotification(userInfo: userInfo, text: text ?? "")
+                } else {
+                    return MattermostSync.markReadFromNotification(userInfo: userInfo)
+                }
+            }
+        default:
+            completion()
+            return
+        }
+        let completesLater = actionIdentifier != UNNotificationDefaultActionIdentifier
+        let disposable = MetaDisposable()
+        disposable.set((signal
+        |> deliverOnMainQueue
+        |> afterDisposed { [weak disposable] in
+            Queue.mainQueue().async {
+                if let disposable {
+                    self.replyFromNotificationsDisposables.remove(disposable)
+                }
+                if completesLater {
+                    completion()
+                }
+            }
+        }).start(next: { result in
+            Logger.shared.log("App \(self.episodeId)", "mattermost notification: \(actionIdentifier) → \(result)")
+        }))
+        self.replyFromNotificationsDisposables.add(disposable)
+    }
+
+    func mattermostForegroundPresentation(userInfo: [AnyHashable: Any]) -> UNNotificationPresentationOptions {
+        if let context = self.contextValue, let (accountId, peerId) = MattermostSync.notificationChat(userInfo: userInfo), context.context.account.id == accountId, let chat = context.rootController.topViewController as? ChatControllerImpl, chat.chatLocation.peerId == peerId {
+            return []
+        }
+        return [.banner, .list, .sound]
     }
 }
