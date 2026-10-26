@@ -91,10 +91,15 @@ extension MattermostAccountSync {
             state.savedPostIds = ids
             return previous
         }
-        self.savedPostsChanged()
+        // An unsave leaves the saved posts list at once; a save is announced once the server has it, since the
+        // list then reloads from the server.
+        if !saved {
+            self.savedPostsChanged()
+        }
         do {
             if saved {
                 try await self.client.savePost(id: reference.postId, userId: self.ownUserId)
+                self.savedPostsChanged()
             } else {
                 try await self.client.unsavePost(id: reference.postId, userId: self.ownUserId)
             }

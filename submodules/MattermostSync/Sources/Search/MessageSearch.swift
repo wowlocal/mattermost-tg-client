@@ -245,6 +245,8 @@ extension MattermostAccountSync {
     /// team's page was full (the database search backend answers page 0 only, with at most 100 posts).
     func runSearch(_ request: PostSearchRequest, page: Int) async -> MattermostSearchPage {
         var postsById: [String: Post] = [:]
+        // Files search: the files found (a post's other files are left out).
+        var fileIds = Set<String>()
         var hasMore = false
         let perPage = PostSearchOptions.maxPerPage
         for teamId in request.teamIds {
@@ -269,8 +271,11 @@ extension MattermostAccountSync {
                         hasMore = true
                     }
                     var missing: [String] = []
-                    for file in files where !file.postId.isEmpty && file.deleteAt == 0 && postsById[file.postId] == nil && !missing.contains(file.postId) {
-                        missing.append(file.postId)
+                    for file in files where !file.postId.isEmpty && file.deleteAt == 0 {
+                        fileIds.insert(file.id)
+                        if postsById[file.postId] == nil && !missing.contains(file.postId) {
+                            missing.append(file.postId)
+                        }
                     }
                     for start in stride(from: 0, to: missing.count, by: 100) {
                         for post in try await self.client.posts(ids: Array(missing[start ..< min(missing.count, start + 100)])) {
@@ -296,7 +301,7 @@ extension MattermostAccountSync {
         }
         posts.sort(by: { PostOrderKey(createAt: $0.createAt, postId: $0.id) > PostOrderKey(createAt: $1.createAt, postId: $1.id) })
         await self.storeFoundPosts(posts)
-        let messageIds = await self.messageIds(of: posts, tags: request.tags)
+        let messageIds = await self.messageIds(of: posts, tags: request.tags, fileIds: request.endpoint == .files ? fileIds : nil)
         return MattermostSearchPage(messageIds: messageIds, totalCount: Int32(messageIds.count), nextPage: hasMore ? Int32(page + 1) : nil)
     }
 
@@ -351,13 +356,15 @@ extension MattermostAccountSync {
 
     /// The stored messages of `posts`, in their order: the message with each post's text, or (media tabs) every
     /// message of a post that carries one of `tags`.
-    func messageIds(of posts: [Post], tags: MessageTags?) async -> [MessageId] {
-        return await self.postMessageIds(of: posts, tags: tags).map(\.messageId)
+    /// `fileIds`: only the messages of these files (a files search).
+    func messageIds(of posts: [Post], tags: MessageTags?, fileIds: Set<String>? = nil) async -> [MessageId] {
+        return await self.postMessageIds(of: posts, tags: tags, fileIds: fileIds).map(\.messageId)
     }
 
     /// `messageIds(of:tags:)` with the post of each message.
-    func postMessageIds(of posts: [Post], tags: MessageTags?) async -> [(postId: String, messageId: MessageId)] {
+    func postMessageIds(of posts: [Post], tags: MessageTags?, fileIds: Set<String>? = nil) async -> [(postId: String, messageId: MessageId)] {
         return await self.postbox.mmTransaction { transaction -> [(postId: String, messageId: MessageId)] in
+            let mediaIds: Set<Int64>? = fileIds.map { Set($0.map { self.store.allocateMediaId(fileId: $0) }) }
             var result: [(postId: String, messageId: MessageId)] = []
             for post in posts {
                 guard let channelState = self.channelState(post.channelId) else {
@@ -379,6 +386,9 @@ extension MattermostAccountSync {
                     let id = MessageId(peerId: channelState.peerId, namespace: Namespaces.Message.Cloud, id: entry.localId)
                     if let tags = tags {
                         guard let message = transaction.getMessage(id), !message.tags.intersection(tags).isEmpty else {
+                            continue
+                        }
+                        if let mediaIds = mediaIds, !message.media.contains(where: { $0.id.map { mediaIds.contains($0.id) } ?? false }) {
                             continue
                         }
                     } else if !transaction.messageExists(id: id) {

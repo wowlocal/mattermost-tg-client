@@ -8,6 +8,7 @@ import TelegramCore
 import AccountContext
 import ChatListUI
 import ContactsPeerItem
+import PeerInfoScreen
 import MattermostSync
 import MattermostUI
 
@@ -16,10 +17,11 @@ import MattermostUI
 // - `search` (`query`; `filter`: chats, media, links, files, music): the chat list's search field (`activateSearch`),
 //   then the visible results (`search-results` again later);
 // - `search-tap` (`index`, `kind`: message or peer): a tap on the n-th visible result row (`ListViewItem.selected`);
-// - `search-cancel`: leaves the search;
+// - `search-cancel`: leaves the search; `join-confirm`: Join on the join alert of a not-joined channel;
 // - `engine-search` (`query`; `chat` to search in one chat as `chat` names it; `from` username; `pages`): the engine
 //   call the search UI makes, every page, with the post ids (for comparing with REST);
 // - `people` (`query`): the engine's people/channel search;
+// - `peerinfo-search` (`chat`, `pane`: files, links, music; `query`): the profile's media pane search;
 // - `chat-search` (`query`, `from` username): Search in the visible chat; `chat-search-step` (`dir`: earlier, later);
 // - `post-list` (`kind`: saved, mentions): the Settings screen; `post-list-items`, `post-list-tap` (`index`);
 // - `save`, `unsave` (`post`): the message menu's Save Post / Remove from Saved; `saved-state` (`post`);
@@ -180,6 +182,22 @@ extension TelegramRootController {
                 }
                 completion(true, nil, extra)
             }
+        case "join-confirm":
+            // "Join" on the join alert of a public channel found by search.
+            guard let (alert, join) = mattermostDebugJoinAlert else {
+                completion(false, "no join alert", [:])
+                return true
+            }
+            mattermostDebugJoinAlert = nil
+            alert.dismiss()
+            join()
+            after(3.0) { [weak self] in
+                var extra: [String: Any] = [:]
+                if let chat = self?.relaySearchTopChat {
+                    extra["chatLocation"] = "peer \(chat.chatLocation.peerId?.toInt64() ?? 0)"
+                }
+                completion(true, nil, extra)
+            }
         case "search-cancel":
             self.chatListController?.deactivateSearch(animated: false)
             after(1.0) {
@@ -221,6 +239,43 @@ extension TelegramRootController {
                 })
             }
             run(state: nil, page: 0)
+        case "peerinfo-search":
+            // The profile's Files (Links, Music) pane: its search button, then `query` typed; the result's `posts` are
+            // what the pane's search asks the engine for (the same call).
+            guard let chat = command["chat"] as? String, let peerId = MattermostSync.debugChatPeerId(accountId: accountId, query: chat) else {
+                completion(false, "no chat", [:])
+                return true
+            }
+            let pane = command["pane"] as? String ?? "files"
+            let query = command["query"] as? String ?? ""
+            let tags: MessageTags = pane == "links" ? .webPage : (pane == "music" ? .music : .file)
+            let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
+            |> deliverOnMainQueue).startStandalone(next: { [weak self] peer in
+                guard let self, let peer, let controller = context.sharedContext.makePeerInfoController(context: context, updatedPresentationData: nil, peer: peer, mode: .generic, avatarInitiallyExpanded: false, fromChat: false, requestsContext: nil) else {
+                    completion(false, "no profile", [:])
+                    return
+                }
+                self.pushViewController(controller)
+                after(2.0) {
+                    (controller as? PeerInfoScreenImpl)?.relayDebugSearchPane(pane, query: query)
+                    after(4.0) {
+                        let _ = (context.engine.messages.searchMessages(location: .peer(peerId: peerId, fromId: nil, tags: tags, reactions: nil, threadId: nil, minDate: nil, maxDate: nil), query: query, state: nil)
+                        |> take(1)
+                        |> deliverOnMainQueue).startStandalone(next: { result, _ in
+                            let posts = result.messages.map { message -> [String: Any] in
+                                var name = ""
+                                for media in message.media {
+                                    if let file = media as? TelegramMediaFile {
+                                        name = file.fileName ?? ""
+                                    }
+                                }
+                                return ["post": MattermostSync.debugPostId(accountId: accountId, messageId: message.id) ?? "", "file": name]
+                            }
+                            completion(true, nil, ["count": posts.count, "posts": posts])
+                        })
+                    }
+                }
+            })
         case "people":
             let query = command["query"] as? String ?? ""
             let _ = (context.engine.contacts.searchRemotePeers(query: query)

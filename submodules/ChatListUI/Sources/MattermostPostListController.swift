@@ -75,7 +75,7 @@ private enum MattermostPostListEntry: Comparable, Identifiable {
                     inputActivities: nil,
                     promoInfo: nil,
                     ignoreUnreadBadge: true,
-                    displayAsMessage: true,
+                    displayAsMessage: false,
                     hasFailedMessages: false,
                     forumTopicData: nil,
                     topForumTopicItems: [],
@@ -244,9 +244,12 @@ private final class MattermostPostListControllerNode: ASDisplayNode {
         self.addSubnode(self.emptyTextNode)
 
         let interaction = self.makeInteraction()
+        // Rows are laid out as search results (chat, then author and snippet) while a highlight is set; mentions
+        // highlight the user's mention keys, as Mattermost does.
         if controller.kind == .mentions {
-            // Highlight the mention keys in the snippets, as Mattermost does.
-            interaction.searchTextHighightState = MattermostSync.mentionHighlightText(accountId: context.account.id)
+            interaction.searchTextHighightState = MattermostSync.mentionHighlightText(accountId: context.account.id) ?? ""
+        } else {
+            interaction.searchTextHighightState = ""
         }
         self.interaction = interaction
 

@@ -51,28 +51,37 @@ private func mattermostAskToJoin(params: NavigateToChatControllerParams, peer: E
             params.navigationController.presentOverlay(controller: controller)
         }
     }
+    let join: () -> Void = {
+        let _ = (MattermostSync.joinPublicChannel(accountId: context.account.id, peerId: peer.id)
+        |> mapToSignal { peerId -> Signal<EnginePeer?, NoError> in
+            guard let peerId = peerId else {
+                return .single(nil)
+            }
+            return context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
+        }
+        |> deliverOnMainQueue).startStandalone(next: { joined in
+            guard let joined = joined else {
+                present(textAlertController(context: context, title: nil, text: strings.Relay_Search_JoinFailed, actions: [TextAlertAction(type: .defaultAction, title: strings.Common_OK, action: {})]))
+                return
+            }
+            params.purposefulAction?()
+            context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: params.navigationController, context: context, chatLocation: .peer(joined), subject: params.subject, keepStack: params.keepStack, options: params.options))
+        })
+    }
     let alert = textAlertController(context: context, title: strings.Relay_Search_JoinTitle(peer.compactDisplayTitle).string, text: strings.Relay_Search_JoinText, actions: [
         TextAlertAction(type: .genericAction, title: strings.Common_Cancel, action: {}),
-        TextAlertAction(type: .defaultAction, title: strings.Relay_Search_Join, action: {
-            let _ = (MattermostSync.joinPublicChannel(accountId: context.account.id, peerId: peer.id)
-            |> mapToSignal { peerId -> Signal<EnginePeer?, NoError> in
-                guard let peerId = peerId else {
-                    return .single(nil)
-                }
-                return context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
-            }
-            |> deliverOnMainQueue).startStandalone(next: { joined in
-                guard let joined = joined else {
-                    present(textAlertController(context: context, title: nil, text: strings.Relay_Search_JoinFailed, actions: [TextAlertAction(type: .defaultAction, title: strings.Common_OK, action: {})]))
-                    return
-                }
-                params.purposefulAction?()
-                context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: params.navigationController, context: context, chatLocation: .peer(joined), subject: params.subject, keepStack: params.keepStack, options: params.options))
-            })
-        })
+        TextAlertAction(type: .defaultAction, title: strings.Relay_Search_Join, action: join)
     ])
+    #if DEBUG
+    mattermostDebugJoinAlert = (alert, join)
+    #endif
     present(alert)
 }
+
+#if DEBUG
+/// Debug remote (`RelayDebugSearch`, `join-confirm`): the visible join alert and its Join action.
+var mattermostDebugJoinAlert: (alert: ViewController, join: () -> Void)?
+#endif
 
 /// Save Post / Remove from Saved for a message's context menu (Mattermost posts only).
 func mattermostSavedPostContextMenuItems(context: AccountContext, message: Message, controllerInteraction: ChatControllerInteraction, strings: PresentationStrings) -> [ContextMenuItem] {
