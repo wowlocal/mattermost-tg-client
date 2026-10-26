@@ -113,6 +113,19 @@ extension TelegramRootController {
                 }
             }
             return true
+        case "screen":
+            // Phase 4B: a screen as `RELAY_DEBUG_OPEN_SCREEN` names it (`name`), opened from the root (parked-request
+            // audit of Settings screens).
+            guard let name = command["name"] as? String else {
+                completion(false, "missing name", [:])
+                return true
+            }
+            self.popToRoot(animated: false)
+            self.relayDebugOpenScreen(name)
+            after(2.0) {
+                completion(true, nil, ["top": self.viewControllers.last.map { "\(type(of: $0))" } ?? ""])
+            }
+            return true
         case "chats-tab":
             if let rootTabController = self.rootTabController, let index = rootTabController.controllers.firstIndex(where: { $0 is ChatListController }) {
                 self.popToRoot(animated: false)

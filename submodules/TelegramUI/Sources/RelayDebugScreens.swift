@@ -38,6 +38,8 @@ extension TelegramRootController {
         self.relayDebugInstallProfileCommands()
         // Phase 3E: link previews, links, Copy Link (RelayDebugLinks.swift).
         self.relayDebugInstallLinkCommands()
+        // Phase 4B: scroll smoothness probes (RelayDebugPerf.swift).
+        self.relayDebugInstallPerfCommands()
         guard let screen = ProcessInfo.processInfo.environment["RELAY_DEBUG_OPEN_SCREEN"], !screen.isEmpty else {
             return
         }
@@ -48,7 +50,7 @@ extension TelegramRootController {
     }
 
     #if DEBUG
-    private func relayDebugOpenScreen(_ screen: String) {
+    func relayDebugOpenScreen(_ screen: String) {
         switch screen {
         case "settings":
             if let rootTabController = self.rootTabController, let index = rootTabController.controllers.firstIndex(where: { $0 is PeerInfoScreenImpl }) {
@@ -206,3 +208,17 @@ extension TelegramRootController {
     }
     #endif
 }
+
+#if DEBUG
+/// Phase 4B: seconds since this process was started (cold-start timing; `[Relay] perf:` log lines).
+func relayDebugProcessAge() -> Double {
+    var info = kinfo_proc()
+    var size = MemoryLayout<kinfo_proc>.stride
+    var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
+    guard sysctl(&mib, u_int(mib.count), &info, &size, nil, 0) == 0 else {
+        return 0.0
+    }
+    let start = info.kp_proc.p_starttime
+    return Date().timeIntervalSince1970 - (Double(start.tv_sec) + Double(start.tv_usec) / 1_000_000.0)
+}
+#endif
