@@ -38,7 +38,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | Spike A: null network engine + seeded account | TelegramCore, `submodules/MattermostSync` | Done (commit `f0820341`); screenshots in `docs/research/spike-a-*.png` |
 | Spike D: real data as alice (bootstrap, holes, live events) | `submodules/MattermostSync` | Done (commit `030401d2`); screenshots `docs/research/spike-d-*.png` |
 | UI inventory for Phase 1 hiding, tabs, settings, login reuse, rebrand | [ui-inventory.md](research/ui-inventory.md) | Done |
-| Phase 1 steps 2–12 (feature flags, tabs, settings, chat/peer-info gates, services, rebrand, About) | branch `worktree-agent-a8ee3495c11158817` | Done (19 commits, screenshots `docs/research/phase1-*.png`); Phase 2A agent merging into main |
+| Phase 1 steps 2–12 (feature flags, tabs, settings, chat/peer-info gates, services, rebrand, About) | merged into main (`4bc94bf0`) | Done; screenshots `docs/research/phase1-*.png` |
 
 ## Phase 0 checklist
 
@@ -59,7 +59,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | # | Workstream | Status |
 |---|---|---|
 | 2A | Write path: send (text, replies, files) via PendingMessageManager seam, edit, delete, reactions (+ reaction list), typing out, mute/favorite consumers, synthetic AppConfiguration (Phase 1 step 1) | Agent working (main checkout, owns its Bazel) |
-| 2B | Login UI (server URL → password/SSO → MFA), root swap (Phase 1 step 13), Add server, logout | Waits for Phase 1 merge |
+| 2B | Login UI (server URL → password/SSO → MFA), root swap (Phase 1 step 13), Add server, logout, session expiry | Agent working (own worktree + simulator) |
 | 2C | Rendering gaps: multi-file posts (grouped messages), bot attachments bubble, webhook name/icon overrides, Mattermost service-message type, custom emoji, channel member counts | Later |
 | 2D | Media tabs via file search, notification extension encodables, skip Telegram special user ids, ATS local-networking only, DM mention-badge decision; Devices → Mattermost sessions; remove "Auto-Login via Telegram"; Notifications/Reactions subtitle; theme carousel | Later |
 
@@ -109,3 +109,4 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 - **Phase 1 steps 2–12 done** on branch `worktree-agent-a8ee3495c11158817`: `MattermostFeatures` flags (follow `MattermostBackend.isEnabled`), Chats+Settings tabs, settings trimmed (two-row Privacy screen, Language hidden), chat-screen/chat-list/peer-info gates, link/share/quick-action filters, no StoreKit/CallKit/VoIP/Siri/widget/broadcast extensions, Relay rebrand (strings overlay `Telegram-iOS/Relay.strings`, placeholder icon from `tools/relay-icon/`), About Relay (source URL TODO). Debug hook `RELAY_DEBUG_OPEN_SCREEN=settings|compose|peerinfo|attach|privacy|data|notifications|appearance|about`.
   - Open: Devices still opens Telegram's sessions screen; "Auto-Login via Telegram" in Open Links In; Notifications → Reactions subtitle says "Stories"; theme carousel shows one theme. Moved to 2D.
   - Builds: string-key or TelegramCore changes ≈15 min near-full rebuild; other incremental builds a few minutes.
+- Phase 1 merged into main (`4bc94bf0`, by the 2A agent); its worktree removed and Bazel output expunged (12 GB). 2B started in a new worktree.
