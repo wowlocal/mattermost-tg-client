@@ -15,6 +15,10 @@ public enum PinnedMessageUpdate {
 }
 
 func _internal_requestUpdatePinnedMessage(account: Account, peerId: PeerId, update: PinnedMessageUpdate) -> Signal<Void, UpdatePinnedMessageError> {
+    // MATTERMOST: pin/unpin through MattermostSync (`POST /posts/{id}/pin`, `/unpin`).
+    if MattermostBackend.isEnabled {
+        return mattermostUpdatePinnedMessage(accountPeerId: account.peerId, update: update)
+    }
     return account.postbox.transaction { transaction -> (Peer?, CachedPeerData?) in
         return (transaction.getPeer(peerId), transaction.getPeerCachedData(peerId: peerId))
     }
@@ -111,6 +115,10 @@ func _internal_requestUpdatePinnedMessage(account: Account, peerId: PeerId, upda
 }
 
 func _internal_requestUnpinAllMessages(account: Account, peerId: PeerId, threadId: Int64?) -> Signal<Never, UpdatePinnedMessageError> {
+    // MATTERMOST: unpins the chat's pinned posts one by one.
+    if MattermostBackend.isEnabled {
+        return mattermostUnpinAllMessages(accountPeerId: account.peerId, peerId: peerId, threadId: threadId)
+    }
     return account.postbox.transaction { transaction -> (Peer?, Peer?, CachedPeerData?) in
         let peer = transaction.getPeer(peerId)
         var subPeer: Peer?

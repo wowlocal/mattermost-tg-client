@@ -193,6 +193,8 @@ enum PeerInfoSettingsSection {
     case ton
     case wallet
     case about // MATTERMOST: About Relay
+    case mattermostMentions // MATTERMOST: Recent Mentions (Phase 3C)
+    case mattermostSavedPosts // MATTERMOST: Saved Posts (Phase 3C)
 }
 
 enum PeerInfoReportType {

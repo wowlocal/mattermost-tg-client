@@ -1606,6 +1606,8 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
         if !isPinnedMessages {
             actions.append(contentsOf: mattermostThreadContextMenuItems(context: context, chatLocation: chatPresentationInterfaceState.chatLocation, message: messages[0], controllerInteraction: controllerInteraction, strings: chatPresentationInterfaceState.strings))
         }
+        // MATTERMOST: Save Post / Remove from Saved (`MattermostFinding.swift`).
+        actions.append(contentsOf: mattermostSavedPostContextMenuItems(context: context, message: messages[0], controllerInteraction: controllerInteraction, strings: chatPresentationInterfaceState.strings))
         if let _ = threadId, !isPinnedMessages {
             let text: String
             if threadMessageCount != 0 {

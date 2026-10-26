@@ -5,6 +5,8 @@ import AccountContext
 import SwiftSignalKit
 import TelegramCore
 import MattermostUI
+import ChatListUI
+import MattermostSync
 import SettingsUI
 import PeerInfoStoryGridScreen
 import CallListUI
@@ -213,6 +215,12 @@ extension PeerInfoScreenNode {
         case .about:
             // MATTERMOST: About Relay.
             push(relayAboutController(context: self.context))
+        case .mattermostMentions:
+            // MATTERMOST: Recent Mentions (Phase 3C).
+            push(MattermostPostListController(context: self.context, kind: .mentions))
+        case .mattermostSavedPosts:
+            // MATTERMOST: Saved Posts (Phase 3C).
+            push(MattermostPostListController(context: self.context, kind: .saved))
         case .phoneNumber:
             guard let controller = self.controller, !controller.presentAccountFrozenInfoIfNeeded() else {
                 return

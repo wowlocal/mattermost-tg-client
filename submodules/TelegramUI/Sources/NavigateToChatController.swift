@@ -22,6 +22,11 @@ import ChatMessageNotificationItem
 import FaceScanScreen
 
 public func navigateToChatControllerImpl(_ params: NavigateToChatControllerParams) {
+    // MATTERMOST: hidden replies open their thread; public channels found by search ask to join (`MattermostFinding.swift`).
+    if mattermostNavigateToChat(params) {
+        return
+    }
+    
     if case let .peer(peer) = params.chatLocation {
         let _ = params.context.engine.peers.ensurePeerIsLocallyAvailable(peer: peer).startStandalone()
     }
