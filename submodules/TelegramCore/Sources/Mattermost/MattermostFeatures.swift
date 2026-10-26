@@ -13,9 +13,9 @@ import Foundation
 // `true`.
 //
 // Helpers that need a module's own types live in that module and read these flags:
-// - `MattermostFeatures.isAttachButtonEnabled(_:)` (TelegramUI, attach menu);
-// - `MattermostFeatures.allows(_: ResolvedUrl)` (AccountContext, deep links);
-// - `MattermostFeatures.hiddenSettingsSections` (PeerInfoScreen, Settings root);
+// - `MattermostFeatures.isAttachButtonEnabled(_:)` (AttachmentUI, attach menu);
+// - `MattermostFeatures.allows(_: ResolvedUrl)` (TelegramUI, deep links);
+// - `MattermostFeatures.hiddenSettingsSections` and `allowsPeerInfoPane(_:)` (PeerInfoScreen);
 // - `MattermostFeatures.settingsSearchAllows(_:)` (SettingsUI, settings search).
 public enum MattermostFeatures {
     /// `true` when Telegram's own UI is wanted (the Mattermost backend is off).
