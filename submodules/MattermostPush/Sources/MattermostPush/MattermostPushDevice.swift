@@ -75,15 +75,17 @@ public enum MattermostPushDevice {
 }
 
 /// What was last registered for one account, kept in the account's sync store. A registration is repeated
-/// when the token, the environment or the app version changes (and after a new login: the cursor goes with
-/// the old session's store row only if the store is reused, so `MattermostSync` clears it on re-login).
+/// when the session (a new login), the token, the environment or the app version changes, and once a week.
 public struct MattermostPushRegistrationRecord: Codable, Equatable, Sendable {
+    /// `sessionTag(token:)` of the session the device was attached to.
+    public var session: String
     public var deviceId: String
     public var appVersion: String
     /// Seconds since 1970.
     public var registeredAt: Double
 
-    public init(deviceId: String, appVersion: String, registeredAt: Double) {
+    public init(session: String, deviceId: String, appVersion: String, registeredAt: Double) {
+        self.session = session
         self.deviceId = deviceId
         self.appVersion = appVersion
         self.registeredAt = registeredAt
@@ -93,8 +95,19 @@ public struct MattermostPushRegistrationRecord: Codable, Equatable, Sendable {
     /// "unregistered" answer clears it) gets it back.
     public static let refreshInterval: Double = 7 * 24 * 60 * 60
 
-    public func needsRegistration(deviceId: String, appVersion: String, now: Double) -> Bool {
-        return self.deviceId != deviceId || self.appVersion != appVersion || now - self.registeredAt > MattermostPushRegistrationRecord.refreshInterval
+    /// A short, non-reversible tag of a session token (FNV-1a), to notice a new session without storing the
+    /// token a second time.
+    public static func sessionTag(token: String) -> String {
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in token.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x100000001b3
+        }
+        return String(hash, radix: 16)
+    }
+
+    public func needsRegistration(session: String, deviceId: String, appVersion: String, now: Double) -> Bool {
+        return self.session != session || self.deviceId != deviceId || self.appVersion != appVersion || now - self.registeredAt > MattermostPushRegistrationRecord.refreshInterval
     }
 
     public var encoded: String {

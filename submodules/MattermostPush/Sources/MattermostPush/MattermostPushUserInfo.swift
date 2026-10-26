@@ -34,15 +34,19 @@ public struct MattermostNotificationTarget: Equatable, Sendable {
     public var channelId: String
     public var postId: String?
     public var rootId: String?
+    public var teamId: String?
+    public var isCRTEnabled: Bool
     public var type: MattermostPushType
 
-    public init(accountId: Int64?, serverId: String?, serverURL: String?, channelId: String, postId: String?, rootId: String?, type: MattermostPushType) {
+    public init(accountId: Int64?, serverId: String?, serverURL: String?, channelId: String, postId: String?, rootId: String?, teamId: String? = nil, isCRTEnabled: Bool = false, type: MattermostPushType) {
         self.accountId = accountId
         self.serverId = serverId
         self.serverURL = serverURL
         self.channelId = channelId
         self.postId = postId
         self.rootId = rootId
+        self.teamId = teamId
+        self.isCRTEnabled = isCRTEnabled
         self.type = type
     }
 
@@ -62,7 +66,7 @@ public struct MattermostNotificationTarget: Equatable, Sendable {
         default:
             accountId = nil
         }
-        self.init(accountId: accountId, serverId: payload.serverId, serverURL: pushString(userInfo[MattermostPushUserInfo.serverURL]), channelId: channelId, postId: payload.postId, rootId: payload.rootId, type: payload.type)
+        self.init(accountId: accountId, serverId: payload.serverId, serverURL: pushString(userInfo[MattermostPushUserInfo.serverURL]), channelId: channelId, postId: payload.postId, rootId: payload.rootId, teamId: payload.teamId, isCRTEnabled: payload.isCRTEnabled, type: payload.type)
     }
 
     /// The root of the thread to answer in: the push's root, else nothing (a reply to a post that is not in

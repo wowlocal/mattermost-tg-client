@@ -293,18 +293,43 @@ final class MattermostPushDeviceTests: XCTestCase {
     }
 
     func testRegistrationRecord() {
-        let record = MattermostPushRegistrationRecord(deviceId: "relay_apple_sandbox:aa", appVersion: "13.0.1 (1)", registeredAt: 1000)
+        let session = MattermostPushRegistrationRecord.sessionTag(token: "token-a")
+        XCTAssertNotEqual(session, MattermostPushRegistrationRecord.sessionTag(token: "token-b"))
+        XCTAssertFalse(session.contains("token"))
+        let record = MattermostPushRegistrationRecord(session: session, deviceId: "relay_apple_sandbox:aa", appVersion: "13.0.1 (1)", registeredAt: 1000)
         XCTAssertEqual(MattermostPushRegistrationRecord(encoded: record.encoded), record)
-        XCTAssertFalse(record.needsRegistration(deviceId: "relay_apple_sandbox:aa", appVersion: "13.0.1 (1)", now: 2000))
-        XCTAssertTrue(record.needsRegistration(deviceId: "relay_apple_sandbox:bb", appVersion: "13.0.1 (1)", now: 2000))
-        XCTAssertTrue(record.needsRegistration(deviceId: "relay_apple_sandbox:aa", appVersion: "13.0.2 (1)", now: 2000))
-        XCTAssertTrue(record.needsRegistration(deviceId: "relay_apple_sandbox:aa", appVersion: "13.0.1 (1)", now: 1000 + MattermostPushRegistrationRecord.refreshInterval + 1))
+        XCTAssertFalse(record.needsRegistration(session: session, deviceId: "relay_apple_sandbox:aa", appVersion: "13.0.1 (1)", now: 2000))
+        XCTAssertTrue(record.needsRegistration(session: "other", deviceId: "relay_apple_sandbox:aa", appVersion: "13.0.1 (1)", now: 2000))
+        XCTAssertTrue(record.needsRegistration(session: session, deviceId: "relay_apple_sandbox:bb", appVersion: "13.0.1 (1)", now: 2000))
+        XCTAssertTrue(record.needsRegistration(session: session, deviceId: "relay_apple_sandbox:aa", appVersion: "13.0.2 (1)", now: 2000))
+        XCTAssertTrue(record.needsRegistration(session: session, deviceId: "relay_apple_sandbox:aa", appVersion: "13.0.1 (1)", now: 1000 + MattermostPushRegistrationRecord.refreshInterval + 1))
         XCTAssertNil(MattermostPushRegistrationRecord(encoded: "not json"))
     }
 
     func testSharedAccessGroup() {
         XCTAssertEqual(MattermostSessionKeychain.sharedAccessGroup(bundleIdentifier: "org.relaychat.Relay", isExtension: false), "group.org.relaychat.Relay")
         XCTAssertEqual(MattermostSessionKeychain.sharedAccessGroup(bundleIdentifier: "org.relaychat.Relay.NotificationService", isExtension: true), "group.org.relaychat.Relay")
+    }
+}
+
+final class MattermostPushNamesTests: XCTestCase {
+    func testOneAccountKeepsTheName() {
+        let names = MattermostPushNames(title: "Town Square", recipientAccountName: nil)
+        XCTAssertEqual(names.title, "Town Square")
+        XCTAssertEqual(names.displayedName, "Town Square")
+        XCTAssertEqual(names.donatedName, "Town Square")
+    }
+
+    func testSeveralAccountsNameTheRecipient() {
+        let names = MattermostPushNames(title: "bob", recipientAccountName: "alice")
+        XCTAssertEqual(names.title, "bob → alice")
+        XCTAssertEqual(names.displayedName, "bob → alice")
+        XCTAssertEqual(names.donatedName, "bob")
+    }
+
+    func testRightToLeftNamesPointTheOtherWay() {
+        XCTAssertEqual(MattermostPushNames(title: "שלום", recipientAccountName: "alice").title, "שלום ← alice")
+        XCTAssertEqual(MattermostPushNames(title: "42", recipientAccountName: "عمر").title, "42 ← عمر")
     }
 }
 
