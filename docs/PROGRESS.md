@@ -63,6 +63,12 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | 2C | Rendering gaps: multi-file posts (grouped messages), Slack-style attachments + interactive buttons/menus, webhook name/icon overrides, Mattermost service messages, custom emoji, channel member counts | Agent working (main checkout) |
 | 2D | Media tabs via file search, notification extension encodables, skip Telegram special user ids, ATS local-networking only, DM mention-badge decision; Devices → Mattermost sessions; remove "Auto-Login via Telegram"; Notifications/Reactions subtitle; theme carousel | Later |
 
+## Phase 3
+
+| # | Workstream | Status |
+|---|---|---|
+| 3A | Push notifications: push proxy infra, device registration, Notification Service Extension rewrite, reply/mark-read actions, open-on-tap | Agent working (own worktree; merged 2B branch first) |
+
 ## Log
 
 ### 2026‑10‑26
@@ -120,3 +126,4 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   - Gaps: login strings are English literals (not in Relay.strings); Telegram's 3-account limit screen still applies; expired session shows "Connecting…"; Keychain tokens app-only (extensions need a shared access group).
   - Dev server: MFA active for carol; dave's sessions revoked.
 - **Pre-release audit item (Phase 4):** confirm every `RELAY_DEBUG_*` hook, the debug remote and debug screens are compiled out of release builds (`#if DEBUG`), and remove `NSAllowsArbitraryLoads`.
+- 2B worktree removed (branch kept until merged); Phase 1 branch deleted. 3A (push) started in a worktree.
