@@ -232,7 +232,7 @@ public final class SQLiteMattermostSyncStore {
             }
             let namespace = kind.namespace
             let peerId = try allocateSequential("peer.\(namespace.rawValue)") { candidate in
-                try peer(namespace: namespace, peerId: candidate) == nil
+                try !ReservedPeerIds.isReserved(candidate, in: namespace) && peer(namespace: namespace, peerId: candidate) == nil
             }
             let peer = MattermostPeer(mattermostId: mattermostId, kind: kind, peerId: peerId, teamId: teamId)
             try insertPeer(peer)

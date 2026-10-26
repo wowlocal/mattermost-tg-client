@@ -10,6 +10,34 @@ public enum MattermostPeerNamespace: Int, Hashable, Sendable, CaseIterable {
     case channel = 1
 }
 
+/// Peer ids that sequential allocation never hands out: Telegram's code treats these user ids specially
+/// wherever it sees them (TelegramCore `PeerUtils.swift`: `isServicePeer`, `PeerId.isTelegramNotifications`,
+/// `isReplies`, `isVerificationCodes`, `isImport`, `isAnonymousSavedMessages`, and the UI's checks for
+/// 777000), e.g. as the "Telegram" service chat or the Replies chat. A Mattermost user mapped to one of
+/// them would get that special treatment. Channel ids are not special-cased anywhere.
+public enum ReservedPeerIds {
+    /// `Namespaces.Peer.CloudUser` ids.
+    public static let users: Set<Int64> = [
+        0, // "no peer" (cache statistics skip it)
+        225079, // `isImport` (chat import bot)
+        333000, // `isServicePeer`
+        489000, // `isVerificationCodes`
+        708513, // `isReplies` (old Replies bot)
+        777000, // service notifications (`isTelegramNotifications`, `isServicePeer`, many UI checks)
+        2666000, // `anonymousSavedMessagesId` ("Author Hidden" in Saved Messages)
+        1271266957 // `isReplies`
+    ]
+
+    public static func isReserved(_ peerId: Int64, in namespace: MattermostPeerNamespace) -> Bool {
+        switch namespace {
+        case .user:
+            return users.contains(peerId)
+        case .channel:
+            return peerId == 0
+        }
+    }
+}
+
 /// What a row of the `peers` table is.
 public enum MattermostPeerKind: String, Hashable, Sendable, CaseIterable {
     case user

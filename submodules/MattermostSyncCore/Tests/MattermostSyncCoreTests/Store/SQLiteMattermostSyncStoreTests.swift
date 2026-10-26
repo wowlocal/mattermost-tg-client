@@ -153,6 +153,42 @@ final class SQLiteMattermostSyncStoreTests: XCTestCase {
 
     // MARK: Peers
 
+    /// Sequential allocation skips the user ids Telegram's code special-cases (service notifications
+    /// 777000, Replies, verification codes, …); channels only skip 0.
+    func testPeerAllocationSkipsTelegramSpecialUserIds() throws {
+        let store = try open()
+        XCTAssertTrue(ReservedPeerIds.isReserved(777000, in: .user))
+        XCTAssertTrue(ReservedPeerIds.isReserved(1271266957, in: .user))
+        XCTAssertFalse(ReservedPeerIds.isReserved(777000, in: .channel))
+        XCTAssertFalse(ReservedPeerIds.isReserved(1, in: .user))
+
+        func setNext(_ value: Int64, _ namespace: MattermostPeerNamespace) throws {
+            try store.connection.execute("INSERT OR REPLACE INTO sequences (name, next_value) VALUES (?1, ?2)", [.text("peer.\(namespace.rawValue)"), .integer(value)])
+        }
+        for reserved in ReservedPeerIds.users.sorted() where reserved > 0 {
+            try setNext(reserved - 1, .user)
+            let before = try store.allocatePeer(mattermostId: "before-\(reserved)", kind: .user)
+            let after = try store.allocatePeer(mattermostId: "after-\(reserved)", kind: .user)
+            XCTAssertEqual(before.peerId, reserved - 1)
+            XCTAssertEqual(after.peerId, reserved + 1, "user id \(reserved) must be skipped")
+        }
+        // Starting exactly at a reserved id.
+        try setNext(777000, .user)
+        XCTAssertEqual(try store.allocatePeer(mattermostId: "at-777000", kind: .user).peerId, 777002, "777000 is reserved, 777001 taken above")
+        // Channels and GMs may use the same numbers.
+        try setNext(777000, .channel)
+        XCTAssertEqual(try store.allocatePeer(mattermostId: "c-777000", kind: .channel, teamId: "t").peerId, 777000)
+        // A sequence starting below 1 never hands out 0.
+        try setNext(0, .user)
+        XCTAssertNotEqual(try store.allocatePeer(mattermostId: "zero", kind: .user).peerId, 0)
+        // Every allocated user id is outside the reserved set.
+        var ids = Set<Int64>()
+        try store.connection.query("SELECT peer_id FROM peers WHERE kind = 'user'") { row in
+            ids.insert(row.int64(0))
+        }
+        XCTAssertTrue(ids.isDisjoint(with: ReservedPeerIds.users))
+    }
+
     func testPeerIdsAreSequentialPerNamespaceAndStable() throws {
         let store = try open()
         XCTAssertEqual(try store.allocatePeer(mattermostId: "u1", kind: .user).peerId, 1)
