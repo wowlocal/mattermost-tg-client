@@ -225,6 +225,52 @@ public struct PostEmbed: Codable, Sendable, Equatable {
         guard type == "opengraph", let data else { return nil }
         return try? data.decode(OpenGraph.self)
     }
+
+    /// The linked post for `permalink` embeds (`EnablePermalinkPreviews`).
+    public var permalink: PermalinkPreview? {
+        guard type == "permalink", let data else { return nil }
+        return try? data.decode(PermalinkPreview.self)
+    }
+}
+
+/// A `permalink` embed: the post a message links to, with where it is.
+public struct PermalinkPreview: Codable, Sendable, Equatable {
+    public var postId: String
+    /// Missing when the user can't read the linked post's channel.
+    public var post: Post?
+    public var teamName: String
+    public var channelDisplayName: String
+    /// `O`, `P`, `D`, `G`.
+    public var channelType: String
+    public var channelId: String
+
+    public init(postId: String, post: Post? = nil, teamName: String = "", channelDisplayName: String = "", channelType: String = "", channelId: String = "") {
+        self.postId = postId
+        self.post = post
+        self.teamName = teamName
+        self.channelDisplayName = channelDisplayName
+        self.channelType = channelType
+        self.channelId = channelId
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case postId = "post_id"
+        case post
+        case teamName = "team_name"
+        case channelDisplayName = "channel_display_name"
+        case channelType = "channel_type"
+        case channelId = "channel_id"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        postId = c.string(.postId)
+        post = c.lenient(Post.self, .post)
+        teamName = c.string(.teamName)
+        channelDisplayName = c.string(.channelDisplayName)
+        channelType = c.string(.channelType)
+        channelId = c.string(.channelId)
+    }
 }
 
 public struct PostImage: Codable, Sendable, Equatable {

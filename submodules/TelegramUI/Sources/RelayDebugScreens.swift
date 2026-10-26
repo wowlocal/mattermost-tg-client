@@ -36,6 +36,8 @@ extension TelegramRootController {
         self.relayDebugInstallSearchCommands()
         // Phase 3F: own status, profile, notification preferences, sharing (RelayDebugProfile.swift).
         self.relayDebugInstallProfileCommands()
+        // Phase 3E: link previews, links, Copy Link (RelayDebugLinks.swift).
+        self.relayDebugInstallLinkCommands()
         guard let screen = ProcessInfo.processInfo.environment["RELAY_DEBUG_OPEN_SCREEN"], !screen.isEmpty else {
             return
         }

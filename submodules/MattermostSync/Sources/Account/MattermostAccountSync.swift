@@ -93,6 +93,10 @@ public final class MattermostAccountSync: @unchecked Sendable {
         var previewChannels: [PeerId: Channel] = [:]
         /// Phase 3C: the saved ("flagged") posts (`SavedPosts.swift`); nil until loaded.
         var savedPostIds: Set<String>?
+        /// Phase 3E: link previews, emoticons, inline LaTeX, image proxy (`RichContent.swift`).
+        var richContent = RichContentSettings()
+        /// Phase 3E: the server's `SiteURL` (permalinks; links to it open in the app, `MattermostLinks.swift`).
+        var siteURL: String?
     }
 
     let state = MMLocked(SyncState())
@@ -170,6 +174,7 @@ public final class MattermostAccountSync: @unchecked Sendable {
         MattermostResourceClients.shared.register(postbox: self.postbox, client: self.client)
         // Collapsed reply threads as last known, before any chat opens (the bootstrap checks the server).
         self.restoreCollapsedThreads()
+        self.restoreRichContent()
         self.account.network.mattermostSetConnectionState(isConnected: false, isNetworkAvailable: true)
 
         // Write path: sending/editing through PendingMessageManager, then the operation consumers.
@@ -613,7 +618,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
             mediaId: { fileId in
                 return store.allocateMediaId(fileId: fileId)
             },
-            collapsedThreads: self.isCollapsedThreads
+            collapsedThreads: self.isCollapsedThreads,
+            richContent: self.richContent
         )
     }
 }

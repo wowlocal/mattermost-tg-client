@@ -411,3 +411,11 @@
 "Relay.ChannelNotifications.ThreadsHeader" = "THREADS";
 "Relay.Share.Failed" = "Couldn't share: %@";
 "Relay.Share.FileTooLarge" = "%@ is larger than the server allows.";
+
+/* Links (Phase 3E): permalinks and other links into a signed-in server open in the app; Copy Link / Share Link in the
+   message menu give the post's permalink. */
+"Relay.Link.Share" = "Share Link";
+"Relay.Link.PostNotFound" = "This message was deleted, or you don't have access to it.";
+"Relay.Link.ChannelNotFound" = "This channel doesn't exist, or you don't have access to it.";
+"Relay.Link.UserNotFound" = "This user doesn't exist.";
+"Relay.Link.Unreachable" = "The link couldn't be opened. Check your connection and try again.";

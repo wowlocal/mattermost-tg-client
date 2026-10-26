@@ -9,6 +9,8 @@ struct FormattedTextBuilder {
     private(set) var text = ""
     private(set) var entities: [TextEntity] = []
     private var length = 0
+    /// How `appendMarkdown` parses (emoticons, inline LaTeX; 3E).
+    var markdownOptions: MattermostMarkdown.Options = .default
 
     var isEmpty: Bool {
         return self.length == 0
@@ -31,7 +33,7 @@ struct FormattedTextBuilder {
 
     /// Appends Mattermost markdown, with `types` around all of it.
     mutating func appendMarkdown(_ markdown: String, _ types: [TextEntityType] = []) {
-        let formatted = MattermostMarkdown.parse(markdown)
+        let formatted = MattermostMarkdown.parse(markdown, options: self.markdownOptions)
         let start = self.length
         self.append(formatted.text)
         for entity in formatted.entities {
@@ -133,7 +135,7 @@ enum AttachmentConverter {
     }
 
     /// Appends the attachments' text to `builder` and returns their buttons and image.
-    static func convert(props: [String: JSONValue], images: [String: PostImage], serverURL: String, builder: inout FormattedTextBuilder) -> Result {
+    static func convert(props: [String: JSONValue], images: [String: PostImage], serverURL: String, imageProxy: Bool = false, builder: inout FormattedTextBuilder) -> Result {
         var result = Result()
         var rows: [ReplyMarkupRow] = []
         for attachment in attachments(props) {
@@ -205,7 +207,7 @@ enum AttachmentConverter {
             // `image_url` only: `thumb_url` is a small decorative icon that Telegram would blow up to a photo.
             if result.image == nil {
                 let url = string("image_url")
-                if !url.isEmpty, let size = images[url], size.width > 0, size.height > 0, let serverURL = URL(string: serverURL), MattermostURLImageResource.sameOriginURL(url, serverURL: serverURL) != nil {
+                if !url.isEmpty, let size = images[url], size.width > 0, size.height > 0, let serverURL = URL(string: serverURL), imageProxy || MattermostURLImageResource.sameOriginURL(url, serverURL: serverURL) != nil {
                     result.image = (url, size.width, size.height)
                 }
             }

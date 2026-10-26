@@ -44,3 +44,12 @@ public enum PreferenceCategory {
     public static let emoji = "emoji"
     public static let customStatus = "custom_status"
 }
+
+/// Names of `display_settings` preferences.
+public enum DisplaySettingName {
+    /// `"true"` (default) / `"false"`: show link previews.
+    public static let linkPreviews = "link_previews"
+    /// `"true"` (default) / `"false"`: render emoticons such as `:)` as emoji.
+    public static let renderEmoticonsAsEmoji = "render_emoticons_as_emoji"
+    public static let collapsedReplyThreads = "collapsed_reply_threads"
+}
