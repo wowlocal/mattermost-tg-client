@@ -481,6 +481,11 @@ public struct MessageFlags: OptionSet {
             rawValue |= MessageFlags.ReactionsArePossible.rawValue
         }
         
+        // MATTERMOST: see `NotCountedAsUnread`.
+        if flags.contains(StoreMessageFlags.NotCountedAsUnread) {
+            rawValue |= MessageFlags.NotCountedAsUnread.rawValue
+        }
+        
         self.rawValue = rawValue
     }
     
@@ -495,6 +500,9 @@ public struct MessageFlags: OptionSet {
     public static let CopyProtected = MessageFlags(rawValue: 512)
     public static let IsForumTopic = MessageFlags(rawValue: 1024)
     public static let ReactionsArePossible = MessageFlags(rawValue: 2048)
+    // MATTERMOST: an incoming message that does not count towards the unread count (the other messages
+    // of a Mattermost post shown as an album: the server counts the post once).
+    public static let NotCountedAsUnread = MessageFlags(rawValue: 4096)
     
     public static let IsIncomingMask = MessageFlags([.Incoming, .CountedAsIncoming])
 }
@@ -868,6 +876,11 @@ public struct StoreMessageFlags: OptionSet {
             rawValue |= StoreMessageFlags.ReactionsArePossible.rawValue
         }
         
+        // MATTERMOST: see `NotCountedAsUnread`.
+        if flags.contains(.NotCountedAsUnread) {
+            rawValue |= StoreMessageFlags.NotCountedAsUnread.rawValue
+        }
+        
         self.rawValue = rawValue
     }
     
@@ -882,6 +895,8 @@ public struct StoreMessageFlags: OptionSet {
     public static let CopyProtected = StoreMessageFlags(rawValue: 512)
     public static let IsForumTopic = StoreMessageFlags(rawValue: 1024)
     public static let ReactionsArePossible = StoreMessageFlags(rawValue: 2048)
+    // MATTERMOST: see `MessageFlags.NotCountedAsUnread`.
+    public static let NotCountedAsUnread = StoreMessageFlags(rawValue: 4096)
     
     public static let IsIncomingMask = StoreMessageFlags([.Incoming, .CountedAsIncoming])
 }

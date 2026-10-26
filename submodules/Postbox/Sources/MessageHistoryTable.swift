@@ -347,7 +347,8 @@ final class MessageHistoryTable: Table {
                             self.timeBasedAttributesTable.set(tag: tag, id: message.id, timestamp: timestamp, operations: &timestampBasedMessageAttributesOperations)
                         }
                     }
-                    if self.seedConfiguration.chatMessagesNamespaces.contains(message.id.namespace) && !message.flags.intersection(.IsIncomingMask).isEmpty {
+                    // MATTERMOST: `NotCountedAsUnread` messages don't add to the unread count.
+                    if self.seedConfiguration.chatMessagesNamespaces.contains(message.id.namespace) && !message.flags.intersection(.IsIncomingMask).isEmpty && !message.flags.contains(.NotCountedAsUnread) {
                         accumulatedAddedIncomingMessageIndices.insert(message.index)
                     }
                 case let .InsertExistingMessage(storeMessage):
@@ -377,7 +378,8 @@ final class MessageHistoryTable: Table {
                             outputOperations.append(.UpdateGroupInfos(updatedGroupInfos))
                         }
                         
-                        if self.seedConfiguration.chatMessagesNamespaces.contains(message.id.namespace) && !message.flags.intersection(.IsIncomingMask).isEmpty {
+                        // MATTERMOST: `NotCountedAsUnread` messages don't add to the unread count.
+                        if self.seedConfiguration.chatMessagesNamespaces.contains(message.id.namespace) && !message.flags.intersection(.IsIncomingMask).isEmpty && !message.flags.contains(.NotCountedAsUnread) {
                             if index != message.index {
                                 accumulatedRemoveIndices.append(index)
                                 accumulatedAddedIncomingMessageIndices.insert(message.index)
@@ -3055,7 +3057,8 @@ final class MessageHistoryTable: Table {
             let key = self.key(index)
             if let value = self.valueBox.get(self.table, key: key) {
                 let entry = self.readIntermediateEntry(key, value: value)
-                if entry.message.id.namespace == namespace && !entry.message.flags.intersection(.IsIncomingMask).isEmpty {
+                // MATTERMOST: `NotCountedAsUnread` messages are not in the unread count.
+                if entry.message.id.namespace == namespace && !entry.message.flags.intersection(.IsIncomingMask).isEmpty && !entry.message.flags.contains(.NotCountedAsUnread) {
                     count += 1
                 }
             } else {
@@ -3077,8 +3080,11 @@ final class MessageHistoryTable: Table {
         if fromIndex <= toIndex {
             self.valueBox.range(self.table, start: self.key(fromIndex).predecessor, end: self.key(toIndex).successor, values: { key, value in
                 let entry = self.readIntermediateEntry(key, value: value)
+                // MATTERMOST: `NotCountedAsUnread` messages are not in the unread count (still marked read).
                 if entry.message.id.namespace == namespace && !entry.message.flags.intersection(.IsIncomingMask).isEmpty {
-                    count += 1
+                    if !entry.message.flags.contains(.NotCountedAsUnread) {
+                        count += 1
+                    }
                     messageIds.append(entry.message.id)
                 }
                 return true
