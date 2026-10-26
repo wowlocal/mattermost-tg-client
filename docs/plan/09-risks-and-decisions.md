@@ -56,6 +56,7 @@ Mattermost:
 | D10 | Source hosting (GPL) | Public repo · source on request | Public repo at each released commit | Before first external build |
 | D11 | Deleted posts display | Remove · "deleted" placeholder | Placeholder (matches Mattermost) | Phase 2 |
 | D12 | DM "seen" checks | Off · derived from `last_viewed_at` | Off (matches Mattermost) | Phase 2 |
+| V1 | Voice message format and detection | AAC `.m4a` (transcoded) · Ogg/Opus as recorded; voice bubbles for Relay's marked posts only · also short audio files from other clients | AAC, marked posts only, after checking playback in the web, desktop and official mobile apps | Phase 5A |
 
 ## Staffing
 

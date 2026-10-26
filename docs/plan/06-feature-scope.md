@@ -66,6 +66,7 @@ Legend: **Keep** = reuse Telegram's feature, adapted to Mattermost data · **Hid
 | Saved posts, recent mentions screens | 3 |
 | Permalinks and deep links | 3 |
 | Managed app configuration (AppConfig/MDM) | 4 |
+| Voice messages: record, send as an audio attachment, voice bubble with waveform ([5A](05-phases.md#5a--voice-messages-12-weeks)) | 5 |
 
 ## Later (after v1)
 
@@ -74,6 +75,5 @@ Legend: **Keep** = reuse Telegram's feature, adapted to Mattermost data · **Hid
 - Message priority and acknowledgements
 - Custom sidebar categories
 - Server‑synced drafts, scheduled posts
-- Voice messages (send audio files as voice notes, if the server/plugin supports it)
 - iPad layout polish (Telegram supports iPad; verify it still works, then improve)
 - Widgets, Apple Watch, Siri / App Intents

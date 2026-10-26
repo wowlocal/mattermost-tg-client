@@ -178,6 +178,27 @@ Durations assume 2–3 senior iOS engineers. Phase 1 runs in parallel with Phase
 
 **Exit criteria:** release candidate passes the regression checklist on the supported server versions and device matrix.
 
+## Phase 5 · After the release candidate
+
+### 5A · Voice messages (1–2 weeks)
+
+Mattermost has no voice‑message post type: the 11.7 web app and server config have no voice post, recorder or setting (checked 2026‑10‑26). So a Relay voice message is an ordinary post with **one audio file attachment**, which every other Mattermost client shows with its own audio player. Relay adds a marker so it can show its own voice bubble.
+
+- [ ] **Recording and sending** with Telegram's composer: hold the mic button to record, slide to cancel, lock, pause and resume, preview before sending. Works in channels, DMs, group messages and thread replies, and offline (queued through the write path; the upload id is kept, as in 4F).
+- [ ] **Format** (decision V1; default: AAC). Telegram records Ogg/Opus. Send **AAC `.m4a`** (mono, ~32 kbps), transcoded on the device, because it plays in every Mattermost client, Safari included. The alternative is to send Ogg/Opus unchanged: smaller and no transcoding, but not every client plays it inline. Check playback in the web app (Chrome, Safari), the desktop app and the official mobile app before deciding.
+- [ ] **Marker in the post's `props`** (e.g. `relay_voice: {duration, waveform}`) and a file name like `Voice message 2026-10-26 14.05.m4a`. First check that the server keeps custom `props` from a regular user's post.
+- [ ] **Receiving:** an audio attachment with the marker becomes Telegram's voice bubble (`TelegramMediaFile` with `.Audio(isVoice: true, duration, waveform)`). Without a waveform, compute it after the download. Other audio files stay music/file bubbles; whether short audio files from other clients should also show as voice is part of V1.
+- [ ] **Playback** through Telegram's player (FFmpeg plays m4a, ogg, mp3). Consecutive voice messages play one after another; playback speed, raise‑to‑listen and the background audio session work.
+- [ ] **Listened state:** Mattermost keeps none, so the "not yet played" dot is local to the device and never synced.
+- [ ] **Gates:** turn on `MattermostFeatures.voiceMessages` (the mic button and the recording UI). Round video messages and voice‑to‑text stay hidden.
+- [ ] **Notifications:** a voice post's push says "attached a file" (its message text is empty). The notification service extension shows "Voice message" when the post has the marker; full‑content pushes carry no `props`, so this needs a post fetch.
+- [ ] **Search and media tabs:** the Voice tab lists the chat's voice posts. `MessageSearch` currently assumes there are none.
+- [ ] **Privacy and permissions:** a Relay wording for the microphone permission; `docs/release/privacy.md` and the privacy labels cover recorded audio sent to the user's own server.
+- [ ] **Accessibility:** VoiceOver labels for the record button and the voice bubble ("Voice message, 0:12", played or not); the recording hint is announced.
+- [ ] **Tests:** SwiftPM tests for the marker and waveform encoding. Runtime checks against the dev server: send from Relay and play it in the web app; send an audio file from the web app and play it in Relay; offline send; thread reply; push.
+
+**Exit criteria:** a voice message recorded in Relay plays in the Mattermost web, desktop and mobile apps; Relay shows its own and other Relay users' voice messages as voice bubbles with a waveform; release audit and parked‑request checks stay at 0.
+
 ## Milestones
 
 | Milestone | When (from start) | Demo |

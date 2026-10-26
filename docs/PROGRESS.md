@@ -4,7 +4,7 @@ Working log for the Mattermost client fork. Each work session reads this first a
 
 ## Current state
 
-- **Phase:** 0–3 done; Phase 4: 4A, 4B, 4C, 4F, 4G done on `main`; 4E (release-candidate regression) next; 4D (TestFlight) blocked on the user's Apple Developer account.
+- **Phase:** 0–3 done; Phase 4: 4A, 4B, 4C, 4F, 4G done on `main`; 4E (release-candidate regression) next, then 5A voice messages. 4D (TestFlight): development signing with the user's team works (device builds installed, `tools/relay-device-build.sh`); TestFlight still needs the App Store Connect record, a distribution certificate and App Store profiles, D1/D6 and the GPL review.
 - **Upstream pin:** Telegram‑iOS `5c20d095d1ab` (app 13.0.1, tag `upstream-pin`), the newest commit built with Xcode 27.0 (installed). Master needs Xcode 27.1.
 - **Working name:** "Relay" (`org.relaychat.Relay`, URL scheme `relay`). Placeholder until D6 is decided.
 - **Build:** commands in [BUILD.md](BUILD.md). Main simulator "Relay iPhone 17 Pro" (iOS 26.5). `main` is pushed to `origin` (github.com/wowlocal/mattermost-tg-client) after each merge.
@@ -85,7 +85,13 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | 4F | Known-gaps burn-down (CRT chat-list preview/sort, thread unread separator, mixed posts, attachment polish, ephemeral semantics, in-chat search incl. replies, permalink into unjoined channel, DND indicator, push sender display name, live DM close, live mentions, persisted upload ids, admin delete) | Done (main checkout; 4C merged in at `cd723ed9`); design: mattermost-sync.md "Known-gaps burn-down (4F)"; screenshots `docs/research/phase4f-*.png` |
 | 4G | Security and diagnostics (plan 05 Phase 4): Telegram passcode lock with Relay accounts, managed app configuration (AppConfig/MDM: server URL, restrictions), optional certificate pinning, privacy-respecting local diagnostics (MetricKit, exportable logs) | Done (main checkout); design: mattermost-sync.md "Security and diagnostics (4G)"; admin guide: [release/managed-configuration.md](release/managed-configuration.md); privacy: [release/privacy.md](release/privacy.md); BUILD.md "Phase 4G"; evidence `docs/research/phase4g/`, screenshots `docs/research/phase4g-*.png` |
 | 4E | Release-candidate regression: written checklist, release build, cold start from cache, supported server versions (11.7 ESR and the newest release), device matrix | After 4G |
-| 4D | Release: TestFlight build — **needs the user's Apple Developer account** ([release/RELEASE.md](release/RELEASE.md)) | Blocked on user |
+| 4D | Release: TestFlight build ([release/RELEASE.md](release/RELEASE.md)) | Development signing done with the user's team (App IDs, App Group, APNs key, development profiles; device build installed; BUILD.md "Device builds"). TestFlight blocked on the user: App Store Connect record, distribution certificate and App Store profiles, D1/D6, GPL review |
+
+## Phase 5
+
+| # | Workstream | Status |
+|---|---|---|
+| 5A | Voice messages ([plan 05](plan/05-phases.md#5a--voice-messages-12-weeks)): Telegram's recorder and voice bubbles; sent as an ordinary audio attachment (Mattermost has no voice post type) with a `props` marker, so other clients play it as a file | Planned, after 4E (decision V1, default AAC `.m4a`) |
 
 ## Log
 
@@ -423,3 +429,5 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
     sessions logged out again. No server settings changed. Simulator: managed configuration deleted, passcode off,
     accounts alice/bob/dave; the throwaway "Relay 4G Test CA" stays trusted in its keychain; the Mac's pasteboard was
     used for the paste check (text restored).
+- **Device signing with the user's own team** (branch `device-signing`): Apple Developer portal set up through the cua driver with the user signed in (App Group `group.org.relaychat.Relay`; App IDs `org.relaychat.Relay` with Push, App Groups, Communication Notifications, `.NotificationService` with App Groups and Communication Notifications, `.NotificationContent` and `.Share` with App Groups; four iOS App Development profiles, valid to 2027‑10‑26; an APNs key, team‑scoped, Sandbox & Production, kept outside the repository). The push proxy runs with the real key ("Initializing apple notification server with AuthKey" for `relay_apple` and `relay_apple_sandbox`). `tools/relay-device-build.sh` builds with the team id in git-ignored `build-input/` and installs with `ideviceinstaller` or `devicectl`; signing must run in the GUI login session (BUILD.md "Device builds"). First `debug_arm64` device build installed on the user's iPhone (iOS 27.0.1). 4D still needs the App Store Connect record, a distribution certificate and App Store profiles, D1/D6 and the GPL review.
+- **Voice messages added to the roadmap** as 5A ([plan 05](plan/05-phases.md#5a--voice-messages-12-weeks), decision V1 in plan 09): Mattermost 11.7 has no voice post type (web app and config checked), so they go out as audio attachments with a `props` marker.
