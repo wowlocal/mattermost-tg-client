@@ -240,6 +240,10 @@ private func mergedResult(_ state: SearchMessagesState) -> SearchMessagesResult 
 }
 
 func _internal_getSearchMessageCount(account: Account, location: SearchMessagesLocation, query: String) -> Signal<Int?, NoError> {
+    // MATTERMOST: the server has no count-only search.
+    if MattermostBackend.isEnabled {
+        return .single(nil)
+    }
     guard case let .peer(peerId, fromId, _, _, threadId, _, _) = location else {
         return .single(nil)
     }
@@ -306,6 +310,10 @@ func _internal_getSearchMessageCount(account: Account, location: SearchMessagesL
 }
 
 func _internal_searchMessages(account: Account, location: SearchMessagesLocation, query: String, state: SearchMessagesState?, centerId: MessageId?, limit: Int32 = 100) -> Signal<(SearchMessagesResult, SearchMessagesState), NoError> {
+    // MATTERMOST: message search through MattermostSync (`MattermostSearchProvider`).
+    if MattermostBackend.isEnabled {
+        return mattermostSearchMessages(account: account, location: location, query: query, state: state, limit: limit)
+    }
     if case let .peer(peerId, fromId, tags, reactions, threadId, minDate, maxDate) = location, fromId == nil, tags == nil, peerId == account.peerId, let reactions, let reaction = reactions.first, (minDate == nil || minDate == 0), (maxDate == nil || maxDate == 0) {
         return account.postbox.transaction { transaction -> (SearchMessagesResult, SearchMessagesState) in
             let messages = transaction.getMessagesWithCustomTag(peerId: peerId, namespace: Namespaces.Message.Cloud, threadId: threadId, customTag: ReactionsMessageAttribute.messageTag(reaction: reaction), from: MessageIndex.upperBound(peerId: peerId, namespace: Namespaces.Message.Cloud), includeFrom: false, to: MessageIndex.lowerBound(peerId: peerId, namespace: Namespaces.Message.Cloud), limit: 500)
@@ -650,6 +658,11 @@ func _internal_searchMessages(account: Account, location: SearchMessagesLocation
 }
 
 func _internal_searchHashtagPosts(account: Account, hashtag: String, state: SearchMessagesState?, limit: Int32 = 100) -> Signal<(SearchMessagesResult, SearchMessagesState), NoError> {
+    // MATTERMOST: Telegram's public posts (channel directory); hashtags are searched with `searchMessages`.
+    if MattermostBackend.isEnabled {
+        let state = SearchMessagesState(main: SearchMessagesPeerState(messages: [], readStates: [:], threadInfo: [:], totalCount: 0, completed: true, nextRate: nil), additional: nil)
+        return .single((mergedResult(state), state))
+    }
     let remoteSearchResult = account.postbox.transaction { transaction -> (Int32, MessageIndex?, Api.InputPeer) in
         var lowerBound: MessageIndex?
         var peer: Peer?
@@ -1162,5 +1175,42 @@ func _internal_refreshGlobalPostSearchState(account: Account) -> Signal<Never, N
             })
         }
         |> ignoreValues
+    }
+}
+
+// MATTERMOST: a page of MattermostSync's message search, merged into the state as Telegram merges its pages
+// (`nextRate` holds the next page; a state without one is complete).
+private func mattermostSearchMessages(account: Account, location: SearchMessagesLocation, query: String, state: SearchMessagesState?, limit: Int32) -> Signal<(SearchMessagesResult, SearchMessagesState), NoError> {
+    let page: Int32
+    if let state = state {
+        guard !state.main.completed, let nextPage = state.main.nextRate else {
+            return .single((mergedResult(state), state))
+        }
+        page = nextPage
+    } else {
+        page = 0
+    }
+    return mattermostSearchPage(accountPeerId: account.peerId, location: location, query: query, page: page, limit: limit)
+    |> mapToSignal { result -> Signal<(SearchMessagesResult, SearchMessagesState), NoError> in
+        return account.postbox.transaction { transaction -> (SearchMessagesResult, SearchMessagesState) in
+            var messages: [Message] = state?.main.messages ?? []
+            var readStates: [PeerId: CombinedPeerReadState] = state?.main.readStates ?? [:]
+            var seen = Set(messages.map { $0.id })
+            for id in result.messageIds where !seen.contains(id) {
+                guard let message = transaction.getMessage(id) else {
+                    continue
+                }
+                seen.insert(id)
+                messages.append(message)
+                if readStates[id.peerId] == nil, let readState = transaction.getCombinedPeerReadState(id.peerId) {
+                    readStates[id.peerId] = readState
+                }
+            }
+            messages.sort(by: { $0.index > $1.index })
+            let completed = result.nextPage == nil
+            let totalCount = completed ? Int32(messages.count) : max(result.totalCount, Int32(messages.count))
+            let updatedState = SearchMessagesState(main: SearchMessagesPeerState(messages: messages, readStates: readStates, threadInfo: [:], totalCount: totalCount, completed: completed, nextRate: result.nextPage), additional: nil)
+            return (mergedResult(updatedState), updatedState)
+        }
     }
 }
