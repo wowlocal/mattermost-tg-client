@@ -127,7 +127,10 @@ extension ChatControllerImpl {
                             if let navigateIndex = navigateIndex {
                                 switch strongSelf.chatLocation {
                                 case .peer, .replyThread, .customChatContents:
-                                    strongSelf.navigateToMessage(from: nil, to: .index(navigateIndex), forceInCurrentChat: true)
+                                    // MATTERMOST: a reply hidden by collapsed reply threads shows as its root (4F).
+                                    if !strongSelf.mattermostShowSearchResultRoot(messageId: navigateIndex.id) {
+                                        strongSelf.navigateToMessage(from: nil, to: .index(navigateIndex), forceInCurrentChat: true)
+                                    }
                                 }
                             }
                             strongSelf.updateItemNodesSearchTextHighlightStates()

@@ -179,18 +179,15 @@ extension MattermostAccountSync {
                 }
                 threadRootPostId = entry.serverPostId
             }
-            // The chat's main history shows root posts only while collapsed reply threads are on: results are what
-            // stepping through it can show (replies are found from the chat list search or in their thread).
-            let rootsOnly = threadRootPostId == nil && MattermostBackend.mainHistoryTag(accountPeerId: self.ownPeerId, peerId: peerId) != nil
+            // Replies are found too, as Mattermost's search in a channel finds them (4F): with collapsed reply
+            // threads stepping to one (or picking it from the list) opens its thread (TelegramUI
+            // `mattermostNavigateToReplyInThread`; the newest result shown while typing is shown as its root).
             let terms = SearchQuery.terms(query: query, inChannels: [channelId], fromUsernames: fromUsernames, minDate: minDate.map(Int64.init), maxDate: maxDate.map(Int64.init), secondsFromGMT: offset)
             let teamId = channelState.teamId.isEmpty ? firstTeamId : channelState.teamId
             var request = PostSearchRequest(terms: terms, teamIds: [teamId])
             request.include = { post, _ in
                 if let root = threadRootPostId {
                     return post.id == root || post.rootId == root
-                }
-                if rootsOnly {
-                    return post.rootId.isEmpty
                 }
                 return true
             }
