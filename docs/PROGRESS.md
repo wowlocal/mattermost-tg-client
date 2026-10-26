@@ -31,7 +31,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | iOS 27 simulator runtime | `xcodebuild -downloadPlatform iOS` | Downloading (not blocking: iOS 26.5 works) |
 | First simulator build (stock code, our bundle ID) | [BUILD.md](BUILD.md) | Done: builds in ~9 min, launches |
 | MattermostKit (REST + WebSocket client) | [submodules/MattermostKit](../submodules/MattermostKit/README.md) | Done: 139 tests pass (`xcrun swift test`); no Bazel BUILD file yet |
-| MattermostSyncCore (ID allocator, markdown, mapping helpers) | `submodules/MattermostSyncCore` | Agent working |
+| MattermostSyncCore (ID allocator, markdown, mapping helpers) | [submodules/MattermostSyncCore](../submodules/MattermostSyncCore/README.md) | Done: 57 tests incl. property tests; BUILD file present, not yet built by Bazel |
 | Local Mattermost server + seed + fixtures | [infra/dev-server](../infra/dev-server/README.md) | Done: Mattermost 11.7.14 ESR (Team Edition) at http://localhost:8065, reset+seed 56 s |
 | Telegram internals map (Spike A prep, assumptions) | [telegram-internals.md](research/telegram-internals.md) | Done |
 | Spike A: null network engine + seeded account | TelegramCore, `submodules/MattermostSync` | Agent working (only workstream running Bazel) |
@@ -43,7 +43,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 - [x] Local Mattermost server seeded
 - [ ] Spike A: boot without MTProto, fake data renders
 - [x] Spike B: MattermostKit skeleton with tests
-- [ ] Spike C: message ID allocator with tests
+- [x] Spike C: message ID allocator with tests
 - [ ] Spike D: real channel history in the chat screen
 - [x] TelegramEngine inventory for kept screens (research doc §7)
 - [x] Assumptions in 09 verified (code reading; see research doc table)
@@ -73,3 +73,5 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   - An invalid token still gets a WebSocket upgrade, then silence; the client times out the handshake and checks `GET /users/me`.
   - Use `channelsViewed` (handles `multiple_channels_viewed` and `channel_viewed`).
   - Use `xcrun swift` (or `/usr/bin/swift`): the swiftly 6.3.3 `swift` first on PATH can't build against the Xcode 27 SDK.
+- MattermostSyncCore done. Allocator deviations worth knowing: pages squeeze spacing near a full hole; renumbering moves the smaller part of an island (≤10,000 posts) or a small window for repeated late inserts; a late post landing in a hole becomes a one-post island. **Callers must remap every stored local id (read state, thread roots, replies) when applying a renumber plan.** Markdown gaps: reference links, HTML entities, LaTeX, emoticons.
+- Both SwiftPM packages pin `.swift-version` = `xcode` so plain `swift test` uses Xcode's toolchain.
