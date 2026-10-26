@@ -146,6 +146,10 @@ extension User {
         roles.split(separator: " ").map(String.init)
     }
 
+    /// Whether the user set a picture: `last_picture_update` is 0 for never and negative after
+    /// `DELETE /users/{id}/image` (11.x), when the server serves a generated one.
+    public var hasCustomPicture: Bool { lastPictureUpdate > 0 }
+
     public var isSystemAdmin: Bool { roleList.contains("system_admin") }
     public var isGuest: Bool { roleList.contains("system_guest") }
 
@@ -208,6 +212,43 @@ public struct UserCustomStatus: Codable, Sendable, Equatable {
         text = c.string(.text)
         duration = c.string(.duration)
         expiresAt = c.string(.expiresAt)
+    }
+
+    /// An empty `expires_at` is left out: the server can't parse `""` as a time.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(emoji, forKey: .emoji)
+        try c.encode(text, forKey: .text)
+        try c.encode(duration, forKey: .duration)
+        if !expiresAt.isEmpty {
+            try c.encode(expiresAt, forKey: .expiresAt)
+        }
+    }
+
+    /// The expiry, or nil when the status doesn't expire (`""` or Go's zero time `0001-01-01T00:00:00Z`).
+    public var expiryDate: Date? {
+        guard !expiresAt.isEmpty else {
+            return nil
+        }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let date = fractional.date(from: expiresAt) ?? ISO8601DateFormatter().date(from: expiresAt), date.timeIntervalSince1970 > 0 else {
+            return nil
+        }
+        return date
+    }
+
+    /// Whether the status has expired at `now` (statuses without an expiry never do).
+    public func isExpired(at now: Date) -> Bool {
+        guard let expiry = expiryDate else {
+            return false
+        }
+        return expiry <= now
+    }
+
+    /// Nothing set (no emoji and no text).
+    public var isEmpty: Bool {
+        return emoji.isEmpty && text.isEmpty
     }
 }
 
