@@ -33,12 +33,23 @@ import PhoneNumberFormat
 import AttachmentUI
 import MinimizedContainer
 import BrowserUI
+import MattermostUI
+
+// MATTERMOST: the login root is Telegram's AuthorizationSequenceController or, while
+// `MattermostBackend.isEnabled`, MattermostUI's login (docs/research/ui-inventory.md §4.3 option (a)).
+protocol UnauthorizedRootController: NavigationController {
+    func dismiss()
+    func applyConfirmationCode(_ code: Int)
+}
+
+extension AuthorizationSequenceController: UnauthorizedRootController {}
+extension MattermostLoginController: UnauthorizedRootController {}
 
 final class UnauthorizedApplicationContext {
     let sharedContext: SharedAccountContextImpl
     let account: UnauthorizedAccount
-    
-    let rootController: AuthorizationSequenceController
+
+    let rootController: UnauthorizedRootController
     
     let isReady = Promise<Bool>()
     
@@ -53,9 +64,15 @@ final class UnauthorizedApplicationContext {
         
         var authorizationCompleted: (() -> Void)?
         
-        self.rootController = AuthorizationSequenceController(sharedContext: sharedContext, account: account, otherAccountPhoneNumbers: otherAccountPhoneNumbers, presentationData: presentationData, openUrl: sharedContext.applicationBindings.openUrl, apiId: apiId, apiHash: apiHash, authorizationCompleted: {
-            authorizationCompleted?()
-        })
+        if MattermostBackend.isEnabled {
+            self.rootController = MattermostLoginController(sharedContext: sharedContext, account: account, presentationData: presentationData, authorizationCompleted: {
+                authorizationCompleted?()
+            })
+        } else {
+            self.rootController = AuthorizationSequenceController(sharedContext: sharedContext, account: account, otherAccountPhoneNumbers: otherAccountPhoneNumbers, presentationData: presentationData, openUrl: sharedContext.applicationBindings.openUrl, apiId: apiId, apiHash: apiHash, authorizationCompleted: {
+                authorizationCompleted?()
+            })
+        }
         (self.rootController as NavigationController).statusBarHost = sharedContext.mainWindow?.statusBarHost
         
         authorizationCompleted = { [weak self] in

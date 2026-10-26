@@ -46,6 +46,7 @@ import HashtagSearchUI
 import PeerInfoStoryGridScreen
 import TelegramAccountAuxiliaryMethods
 import MattermostSync
+import MattermostUI
 import PeerSelectionController
 import LegacyMessageInputPanel
 import StatisticsUI
@@ -825,10 +826,16 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                 }
                 
                 if self.activeAccountsValue!.primary == nil && self.activeAccountsValue!.currentAuth == nil {
-                    // MATTERMOST: no Telegram phone login. Until the Mattermost login exists, a debug-only
-                    // login with credentials from the launch environment creates the account (Spike D).
-                    if MattermostBackend.isEnabled {
-                        MattermostDebugLogin.createAccountIfNeeded(accountManager: accountManager, rootPath: rootPath, encryptionParameters: encryptionParameters)
+                    // MATTERMOST: the auth record shows the Mattermost login (MattermostUI, see
+                    // UnauthorizedApplicationContext). Debug builds launched with RELAY_DEBUG_MM_* credentials
+                    // log in without it.
+                    if MattermostBackend.isEnabled && MattermostDebugLogin.isRequested {
+                        MattermostDebugLogin.createAccountIfNeeded(accountManager: accountManager, rootPath: rootPath, encryptionParameters: encryptionParameters, fallback: {
+                            guard self.activeAccountsValue?.primary == nil, self.activeAccountsValue?.currentAuth == nil else {
+                                return
+                            }
+                            self.beginNewAuth(testingEnvironment: self.testingEnvironment)
+                        })
                     } else {
                         self.beginNewAuth(testingEnvironment: self.testingEnvironment)
                     }
@@ -1091,7 +1098,13 @@ public final class SharedAccountContextImpl: SharedAccountContext {
         })
         
         let _ = managedCleanupAccounts(networkArguments: networkArguments, accountManager: self.accountManager, rootPath: rootPath, auxiliaryMethods: makeTelegramAccountAuxiliaryMethods(uploadInBackground: appDelegate?.uploadInBackround), encryptionParameters: encryptionParameters).start()
-        
+        // MATTERMOST: logout and session expiry of Mattermost accounts (MattermostSync), re-login prompts
+        // (MattermostUI).
+        if MattermostBackend.isEnabled && applicationBindings.isMainApp {
+            MattermostSync.startLifecycle(accountManager: self.accountManager, rootPath: rootPath, encryptionParameters: encryptionParameters)
+            MattermostAppHooks.sharedContextCreated(self)
+        }
+
         self.updateNotificationTokensRegistration()
         
         if applicationBindings.isMainApp {
