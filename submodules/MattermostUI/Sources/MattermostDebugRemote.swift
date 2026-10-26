@@ -272,6 +272,13 @@ final class MattermostDebugRemote {
             }
         default:
             self.lastExtra = [:]
+            // Phase 3D-2: directory and membership screens (`MattermostDirectoryDebug`); output in `extra`.
+            if MattermostDirectoryDebug.handle(sharedContext: self.sharedContext, action: action, command: command, completion: { [weak self] ok, error, extra in
+                self?.lastExtra = extra
+                self?.writeResult(id: id, ok: ok, error: error)
+            }) {
+                return
+            }
             if let handler = MattermostDebugChatCommands.handler, handler(action, command, { [weak self] ok, error, extra in
                 self?.lastExtra = extra
                 self?.writeResult(id: id, ok: ok, error: error)

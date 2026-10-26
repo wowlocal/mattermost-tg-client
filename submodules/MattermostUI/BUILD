@@ -28,6 +28,11 @@ swift_library(
         "//submodules/TemporaryCachedPeerDataManager:TemporaryCachedPeerDataManager",
         # Phase 3B: the threads screen's avatars.
         "//submodules/AvatarNode:AvatarNode",
+        # Phase 3D-2: the user and channel directories (peer rows, action rows, icons, channel naming rules).
+        "//submodules/ItemListPeerItem:ItemListPeerItem",
+        "//submodules/ItemListPeerActionItem:ItemListPeerActionItem",
+        "//submodules/AppBundle:AppBundle",
+        "//submodules/MattermostSyncCore:MattermostSyncCore",
         "//submodules/MattermostKit:MattermostKit",
         "//submodules/MattermostSync:MattermostSync",
         # Phase 3A: the debug remote's simulated push delivery.
