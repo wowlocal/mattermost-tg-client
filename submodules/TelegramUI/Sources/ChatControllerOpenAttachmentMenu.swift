@@ -425,6 +425,12 @@ extension ChatControllerImpl {
                     buttons.insert(.richText, at: firstBotIndex)
                 }
                 
+                // MATTERMOST: one filter for Telegram-only attach buttons (bot apps, gift, poll, todo, money, …).
+                buttons = buttons.filter { MattermostFeatures.isAttachButtonEnabled($0) }
+                if let currentInitialButton = initialButton, !MattermostFeatures.isAttachButtonEnabled(currentInitialButton) {
+                    initialButton = .gallery
+                }
+                
                 guard let initialButton = initialButton else {
                     if case let .bot(botId, botPayload, botJustInstalled) = subject {
                         if let button = allButtons.first(where: { button in

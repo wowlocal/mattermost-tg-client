@@ -66,18 +66,22 @@ func inputContextQueriesForChatPresentationIntefaceState(_ chatPresentationInter
     for (possibleQueryRange, possibleTypes, additionalStringRange) in textInputStateContextQueryRangeAndType(inputState) {
         let query = inputString.substring(with: possibleQueryRange)
         if possibleTypes == [.emoji] {
-            result.append(.emoji(query.basicEmoji.0))
+            // MATTERMOST: the `.emoji` query only suggests Telegram stickers.
+            if MattermostFeatures.stickersAndGifs {
+                result.append(.emoji(query.basicEmoji.0))
+            }
         } else if possibleTypes == [.hashtag] {
             result.append(.hashtag(query))
         } else if possibleTypes == [.mention] {
             var types: ChatInputQueryMentionTypes = [.members]
-            if possibleQueryRange.lowerBound == 1 {
+            // MATTERMOST: no Telegram inline bots.
+            if possibleQueryRange.lowerBound == 1 && MattermostFeatures.botWebApps {
                 types.insert(.contextBots)
             }
             result.append(.mention(query: query, types: types))
         } else if possibleTypes == [.command] {
             result.append(.command(query))
-        } else if possibleTypes == [.contextRequest], let additionalStringRange = additionalStringRange {
+        } else if possibleTypes == [.contextRequest], MattermostFeatures.botWebApps, let additionalStringRange = additionalStringRange { // MATTERMOST: no inline bots
             let additionalString = inputString.substring(with: additionalStringRange)
             result.append(.contextRequest(addressName: query, query: additionalString))
         } else if possibleTypes == [.emojiSearch], !query.isEmpty, let inputLanguage = chatPresentationInterfaceState.interfaceState.inputLanguage {
@@ -247,6 +251,11 @@ func inputTextPanelStateForChatPresentationInterfaceState(_ chatPresentationInte
                     case .businessLinkSetup:
                         stickersEnabled = false
                     }
+                }
+                
+                // MATTERMOST: no sticker packs; the input toggle only opens the emoji keyboard.
+                if !MattermostFeatures.stickersAndGifs {
+                    stickersEnabled = false
                 }
                 
                 if isTextEmpty && chatPresentationInterfaceState.hasBots && chatPresentationInterfaceState.hasBotCommands && !hasForward {

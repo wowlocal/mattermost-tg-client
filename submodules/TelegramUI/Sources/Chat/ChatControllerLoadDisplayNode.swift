@@ -406,7 +406,9 @@ extension ChatControllerImpl {
             presentationInterfaceState = presentationInterfaceState.updatedIsManagedBot(contentData.state.isManagedBot)
             presentationInterfaceState = presentationInterfaceState.updatedHasBots(contentData.state.hasBots)
             presentationInterfaceState = presentationInterfaceState.updatedHasBotCommands(contentData.state.hasBotCommands)
-            presentationInterfaceState = presentationInterfaceState.updatedBotMenuButton(contentData.state.botMenuButton)
+            // MATTERMOST: Telegram-only chat state is masked in this funnel (bot web-app menu, paid messages,
+            // gifts, boosts, ads, calls, translation, custom emoji); see docs/research/ui-inventory.md §1.18.
+            presentationInterfaceState = presentationInterfaceState.updatedBotMenuButton(MattermostFeatures.botWebApps ? contentData.state.botMenuButton : .commands)
             presentationInterfaceState = presentationInterfaceState.updatedIsArchived(contentData.state.isArchived)
             presentationInterfaceState = presentationInterfaceState.updatedPeerIsMuted(contentData.state.peerIsMuted)
             presentationInterfaceState = presentationInterfaceState.updatedPeerDiscussionId(contentData.state.peerDiscussionId)
@@ -419,36 +421,36 @@ extension ChatControllerImpl {
             presentationInterfaceState = presentationInterfaceState.updatedMyCopyProtectionEnabled(contentData.state.myCopyProtectionEnabled)
             presentationInterfaceState = presentationInterfaceState.updatedHasSearchTags(contentData.state.hasSearchTags)
             presentationInterfaceState = presentationInterfaceState.updatedIsPremiumRequiredForMessaging(contentData.state.isPremiumRequiredForMessaging)
-            presentationInterfaceState = presentationInterfaceState.updatedSendPaidMessageStars(contentData.state.sendPaidMessageStars)
+            presentationInterfaceState = presentationInterfaceState.updatedSendPaidMessageStars(MattermostFeatures.premium ? contentData.state.sendPaidMessageStars : nil)
             presentationInterfaceState = presentationInterfaceState.updatedGramAddress(contentData.state.gramAddress)
-            presentationInterfaceState = presentationInterfaceState.updatedAlwaysShowGiftButton(contentData.state.alwaysShowGiftButton)
+            presentationInterfaceState = presentationInterfaceState.updatedAlwaysShowGiftButton(MattermostFeatures.premium && contentData.state.alwaysShowGiftButton)
             presentationInterfaceState = presentationInterfaceState.updatedDisallowedGifts(contentData.state.disallowedGifts)
             presentationInterfaceState = presentationInterfaceState.updatedHasSavedChats(contentData.state.hasSavedChats)
             presentationInterfaceState = presentationInterfaceState.updatedAppliedBoosts(contentData.state.appliedBoosts)
-            presentationInterfaceState = presentationInterfaceState.updatedBoostsToUnrestrict(contentData.state.boostsToUnrestrict)
+            presentationInterfaceState = presentationInterfaceState.updatedBoostsToUnrestrict(MattermostFeatures.premium ? contentData.state.boostsToUnrestrict : nil)
             presentationInterfaceState = presentationInterfaceState.updatedHasBirthdayToday(contentData.state.hasBirthdayToday)
             presentationInterfaceState = presentationInterfaceState.updatedBusinessIntro(contentData.state.businessIntro)
-            presentationInterfaceState = presentationInterfaceState.updatedAdMessage(contentData.state.adMessage)
+            presentationInterfaceState = presentationInterfaceState.updatedAdMessage(MattermostFeatures.ads ? contentData.state.adMessage : nil)
             presentationInterfaceState = presentationInterfaceState.updatedPeerVerification(contentData.state.peerVerification)
-            presentationInterfaceState = presentationInterfaceState.updatedStarGiftsAvailable(contentData.state.starGiftsAvailable)
+            presentationInterfaceState = presentationInterfaceState.updatedStarGiftsAvailable(MattermostFeatures.premium && contentData.state.starGiftsAvailable)
             presentationInterfaceState = presentationInterfaceState.updatedSavedMessagesTopicPeer(contentData.state.savedMessagesTopicPeer)
             presentationInterfaceState = presentationInterfaceState.updatedKeyboardButtonsMessage(contentData.state.keyboardButtonsMessage)
             presentationInterfaceState = presentationInterfaceState.updatedPinnedMessageId(contentData.state.pinnedMessageId)
             presentationInterfaceState = presentationInterfaceState.updatedPinnedMessage(contentData.state.pinnedMessage)
             presentationInterfaceState = presentationInterfaceState.updatedPeerIsBlocked(contentData.state.peerIsBlocked)
-            presentationInterfaceState = presentationInterfaceState.updatedCallsAvailable(contentData.state.callsAvailable)
+            presentationInterfaceState = presentationInterfaceState.updatedCallsAvailable(MattermostFeatures.calls && contentData.state.callsAvailable)
             presentationInterfaceState = presentationInterfaceState.updatedCallsPrivate(contentData.state.callsPrivate)
             presentationInterfaceState = presentationInterfaceState.updatedActiveGroupCallInfo(contentData.state.activeGroupCallInfo)
             presentationInterfaceState = presentationInterfaceState.updatedSlowmodeState(contentData.state.slowmodeState)
-            presentationInterfaceState = presentationInterfaceState.updatedSuggestPremiumGift(contentData.state.suggestPremiumGift)
-            presentationInterfaceState = presentationInterfaceState.updatedTranslationState(contentData.state.translationState)
+            presentationInterfaceState = presentationInterfaceState.updatedSuggestPremiumGift(MattermostFeatures.premium && contentData.state.suggestPremiumGift)
+            presentationInterfaceState = presentationInterfaceState.updatedTranslationState(MattermostFeatures.translation ? contentData.state.translationState : nil)
             presentationInterfaceState = presentationInterfaceState.updatedVoiceMessagesAvailable(contentData.state.voiceMessagesAvailable)
-            presentationInterfaceState = presentationInterfaceState.updatedCustomEmojiAvailable(contentData.state.customEmojiAvailable)
+            presentationInterfaceState = presentationInterfaceState.updatedCustomEmojiAvailable(MattermostFeatures.customEmoji && contentData.state.customEmojiAvailable)
             presentationInterfaceState = presentationInterfaceState.updatedThreadData(contentData.state.threadData)
             presentationInterfaceState = presentationInterfaceState.updatedForumTopicData(contentData.state.forumTopicData)
             presentationInterfaceState = presentationInterfaceState.updatedIsGeneralThreadClosed(contentData.state.isGeneralThreadClosed)
-            presentationInterfaceState = presentationInterfaceState.updatedPremiumGiftOptions(contentData.state.premiumGiftOptions)
-            presentationInterfaceState = presentationInterfaceState.updatedRemovePaidMessageFeeData(contentData.state.removePaidMessageFeeData)
+            presentationInterfaceState = presentationInterfaceState.updatedPremiumGiftOptions(MattermostFeatures.premium ? contentData.state.premiumGiftOptions : [])
+            presentationInterfaceState = presentationInterfaceState.updatedRemovePaidMessageFeeData(MattermostFeatures.premium ? contentData.state.removePaidMessageFeeData : nil)
             presentationInterfaceState = presentationInterfaceState.updatedViewForumAsMessages(contentData.state.viewForumAsMessages)
             presentationInterfaceState = presentationInterfaceState.updatedHasTopics(contentData.state.hasTopics)
             presentationInterfaceState = presentationInterfaceState.updatedCanStopIncomingStreamingMessage(contentData.state.canStopIncomingStreamingMessage)
@@ -3054,6 +3056,10 @@ extension ChatControllerImpl {
             }
         }, switchMediaRecordingMode: { [weak self] in
             guard let strongSelf = self else {
+                return
+            }
+            // MATTERMOST: no round video messages.
+            guard MattermostFeatures.videoMessages else {
                 return
             }
             

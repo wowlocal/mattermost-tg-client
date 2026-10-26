@@ -1672,7 +1672,7 @@ public class ChatMessageTextBubbleContentNode: ChatMessageBubbleContentNode {
                 }
                 
                 textSelectionNode.enableQuote = enableQuote
-                textSelectionNode.enableTranslate = enableOtherActions
+                textSelectionNode.enableTranslate = enableOtherActions && MattermostFeatures.translation // MATTERMOST: no Telegram translation
                 textSelectionNode.enableShare = enableOtherActions && enableCopy
                 textSelectionNode.menuSkipCoordnateConversion = !enableOtherActions
                 self.textSelectionNode = textSelectionNode
