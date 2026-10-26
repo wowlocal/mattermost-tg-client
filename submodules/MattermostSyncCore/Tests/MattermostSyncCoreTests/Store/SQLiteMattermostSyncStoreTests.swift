@@ -293,6 +293,39 @@ final class SQLiteMattermostSyncStoreTests: XCTestCase {
         XCTAssertEqual(try store.allPendingPosts(), [second])
     }
 
+    func testPendingUploadsSurviveReopening() throws {
+        let path = directory.path("uploads.sqlite")
+        var store = try SQLiteMattermostSyncStore(path: path)
+        let uploads = [MattermostPendingUpload(mediaIndex: 0, fileId: "file-a"), MattermostPendingUpload(mediaIndex: 1, fileId: "file-b")]
+        // The upload comes first: it registers the message.
+        let recorded = try store.setPendingUploads(MattermostPendingPost(pendingPostId: "4242", channelId: "c", globallyUniqueId: 4242, localMessageId: 12, uploadedFiles: uploads))
+        XCTAssertEqual(recorded.uploadedFiles, uploads)
+        // The post's own registration keeps them.
+        XCTAssertEqual(try store.registerPendingPost(MattermostPendingPost(pendingPostId: "4242", channelId: "c", globallyUniqueId: 4242, localMessageId: 12)).uploadedFiles, uploads)
+        store.close()
+        store = try SQLiteMattermostSyncStore(path: path)
+        XCTAssertEqual(try store.pendingPost(channelId: "c", localMessageId: 12)?.uploadedFiles, uploads)
+        // A new upload replaces them; none clears them.
+        try store.setPendingUploads(MattermostPendingPost(pendingPostId: "4242", channelId: "c", globallyUniqueId: 4242, localMessageId: 12, uploadedFiles: [uploads[1]]))
+        XCTAssertEqual(try store.pendingPost(pendingPostId: "4242")?.uploadedFiles, [uploads[1]])
+        try store.setPendingUploads(MattermostPendingPost(pendingPostId: "4242", channelId: "c", globallyUniqueId: 4242, localMessageId: 12))
+        XCTAssertEqual(try store.pendingPost(pendingPostId: "4242")?.uploadedFiles, [])
+        try store.removePendingPost(pendingPostId: "4242")
+        XCTAssertNil(try store.pendingPost(channelId: "c", localMessageId: 12))
+        store.close()
+    }
+
+    func testPendingPostsOfVersionOneGetTheUploadsColumn() throws {
+        let path = directory.path("v1.sqlite")
+        var store = try SQLiteMattermostSyncStore(path: path, migrations: Array(MattermostSyncStoreSchema.migrations.prefix(1)))
+        try store.connection.execute("INSERT INTO pending (pending_post_id, channel_id, globally_unique_id, local_message_id) VALUES ('1', 'c', 1, 1)")
+        store.close()
+        store = try SQLiteMattermostSyncStore(path: path)
+        XCTAssertEqual(try store.storedSchemaVersion(), SQLiteMattermostSyncStore.schemaVersion)
+        XCTAssertEqual(try store.pendingPost(pendingPostId: "1"), MattermostPendingPost(pendingPostId: "1", channelId: "c", globallyUniqueId: 1, localMessageId: 1))
+        store.close()
+    }
+
     func testMediaIdsAreSequentialAndStable() throws {
         let store = try open()
         XCTAssertEqual(try store.allocateMediaId(fileId: "f1"), 1)

@@ -12,7 +12,7 @@ enum MattermostSyncStoreSchema {
     );
     """
 
-    static let migrations: [String] = [version1]
+    static let migrations: [String] = [version1, version2]
 
     static var latestVersion: Int {
         return migrations.count
@@ -113,5 +113,11 @@ enum MattermostSyncStoreSchema {
         key TEXT PRIMARY KEY NOT NULL,
         value TEXT NOT NULL
     ) WITHOUT ROWID;
+    """
+
+    /// 4F: the files an outgoing message already uploaded (`[MattermostPendingUpload]` as JSON), so a restart
+    /// between the upload and `POST /posts` doesn't upload them again.
+    private static let version2 = """
+    ALTER TABLE pending ADD COLUMN uploaded_files TEXT;
     """
 }

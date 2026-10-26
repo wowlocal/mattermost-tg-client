@@ -316,14 +316,28 @@ public final class SQLiteMattermostSyncStore {
 
     // MARK: - Pending posts
 
-    private static let pendingColumns = "pending_post_id, channel_id, globally_unique_id, local_message_id"
+    private static let pendingColumns = "pending_post_id, channel_id, globally_unique_id, local_message_id, uploaded_files"
 
     private func pendingPosts(where condition: String, _ bindings: [SQLiteValue]) throws -> [MattermostPendingPost] {
         var posts: [MattermostPendingPost] = []
         try connection.query("SELECT \(Self.pendingColumns) FROM pending \(condition)", bindings) { row in
-            posts.append(MattermostPendingPost(pendingPostId: row.string(0), channelId: row.string(1), globallyUniqueId: row.int64(2), localMessageId: Int32(truncatingIfNeeded: row.int64(3))))
+            posts.append(MattermostPendingPost(pendingPostId: row.string(0), channelId: row.string(1), globallyUniqueId: row.int64(2), localMessageId: Int32(truncatingIfNeeded: row.int64(3)), uploadedFiles: Self.decodeUploads(row.optionalString(4))))
         }
         return posts
+    }
+
+    private static func decodeUploads(_ json: String?) -> [MattermostPendingUpload] {
+        guard let json = json, let data = json.data(using: .utf8), let uploads = try? JSONDecoder().decode([MattermostPendingUpload].self, from: data) else {
+            return []
+        }
+        return uploads
+    }
+
+    private static func encodeUploads(_ uploads: [MattermostPendingUpload]) -> SQLiteValue {
+        guard !uploads.isEmpty, let data = try? JSONEncoder().encode(uploads), let json = String(data: data, encoding: .utf8) else {
+            return .null
+        }
+        return .text(json)
     }
 
     /// Records an outgoing post. Idempotent: a known `pendingPostId` returns the stored record
@@ -335,10 +349,23 @@ public final class SQLiteMattermostSyncStore {
                 return existing
             }
             try connection.execute(
-                "INSERT INTO pending (pending_post_id, channel_id, globally_unique_id, local_message_id) VALUES (?1, ?2, ?3, ?4)",
-                [.text(post.pendingPostId), .text(post.channelId), .integer(post.globallyUniqueId), .integer(Int64(post.localMessageId))]
+                "INSERT INTO pending (pending_post_id, channel_id, globally_unique_id, local_message_id, uploaded_files) VALUES (?1, ?2, ?3, ?4, ?5)",
+                [.text(post.pendingPostId), .text(post.channelId), .integer(post.globallyUniqueId), .integer(Int64(post.localMessageId)), Self.encodeUploads(post.uploadedFiles)]
             )
             return post
+        }
+    }
+
+    /// Records the files a pending message uploaded (4F), registering the message when it isn't yet (the upload
+    /// comes before `POST /posts`). Returns the stored record.
+    @discardableResult
+    public func setPendingUploads(_ post: MattermostPendingPost) throws -> MattermostPendingPost {
+        return try writeTransaction {
+            let stored = try registerPendingPost(post)
+            try connection.execute("UPDATE pending SET uploaded_files = ?2 WHERE pending_post_id = ?1", [.text(stored.pendingPostId), Self.encodeUploads(post.uploadedFiles)])
+            var updated = stored
+            updated.uploadedFiles = post.uploadedFiles
+            return updated
         }
     }
 

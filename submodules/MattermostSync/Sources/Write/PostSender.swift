@@ -19,6 +19,9 @@ import MattermostSyncCore
 /// Deduplication against the WebSocket `posted` echo: the `pending` table maps `pending_post_id` to the local
 /// message; while our request is in flight, its echo is ignored and the response does the rewrite. An echo
 /// without a request in flight (the app was restarted) does the rewrite itself.
+///
+/// Uploaded file ids are kept in memory and with the message's `pending` row (4F): a restart between the upload
+/// and `POST /posts` uses them instead of uploading again.
 final class PostSender: MattermostMessageSender {
     struct UploadedFile {
         /// Index into the message's `media`.
@@ -174,6 +177,14 @@ final class PostSender: MattermostMessageSender {
         guard let channelId = await sync.ensureChannel(forPeerId: messageId.peerId) else {
             throw SendFailure.unknownChat
         }
+        // Uploaded by an earlier run of the app (4F): the file ids are in the message's pending row.
+        if self.uploadedFiles(messageId: messageId).isEmpty, let stored = sync.store.pendingPost(channelId: channelId, localMessageId: messageId.id), !stored.uploadedFiles.isEmpty {
+            let files = stored.uploadedFiles.map { UploadedFile(mediaIndex: $0.mediaIndex, fileId: $0.fileId) }
+            self.uploads.with { $0[messageId] = files }
+            progress(1.0)
+            MMLog.log("send: \(messageId) reuses \(files.count) file(s) uploaded before a restart: \(files.map { $0.fileId })")
+            return
+        }
         var items: [(mediaIndex: Int, upload: FileUpload)] = []
         for (index, media) in message.media.enumerated() {
             guard let source = UploadSource(media: media, messageId: messageId, index: index) else {
@@ -203,7 +214,19 @@ final class PostSender: MattermostMessageSender {
             files = zip(items, response.fileInfos).map { UploadedFile(mediaIndex: $0.0.mediaIndex, fileId: $0.1.id) }
         }
         self.uploads.with { $0[messageId] = files }
+        // Kept with the message's pending row, in case the app ends before the post is created (4F).
+        let globallyUniqueId = message.globallyUniqueId ?? Int64(messageId.id)
+        await sync.postbox.mmTransaction { _ in
+            sync.store.setPendingUploads(MattermostPendingPost(pendingPostId: String(globallyUniqueId), channelId: channelId, globallyUniqueId: globallyUniqueId, localMessageId: messageId.id, uploadedFiles: files.map { MattermostPendingUpload(mediaIndex: $0.mediaIndex, fileId: $0.fileId) }))
+        }
         MMLog.log("send: uploaded \(files.count) file(s) for \(messageId) in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms: \(files.map { $0.fileId })")
+        #if DEBUG
+        // Debug hook (4F checks): time to end the app between the upload and the post.
+        if let delay = ProcessInfo.processInfo.environment["RELAY_DEBUG_SEND_DELAY"].flatMap(Double.init), delay > 0 {
+            MMLog.log("send: debug delay of \(delay) s before posting \(messageId)")
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        }
+        #endif
     }
 
     // MARK: Post
@@ -219,7 +242,7 @@ final class PostSender: MattermostMessageSender {
         for id in messageIds {
             var uploaded = self.uploadedFiles(messageId: id)
             if uploaded.isEmpty, await sync.messageHasMedia(id) {
-                // Uploaded by an earlier run of the app: upload again (file ids are kept only in memory).
+                // Not uploaded by this run: the ids stored with the pending row (4F), else upload again.
                 try await self.upload(messageId: id, sync: sync, progress: { _ in })
                 uploaded = self.uploadedFiles(messageId: id)
             }
@@ -254,6 +277,16 @@ final class PostSender: MattermostMessageSender {
             MMLog.log("send: \(messageIds) → post \(post.id) with \(fileIds.count) file(s) (pending \(pendingPostId)) in \(Int((CFAbsoluteTimeGetCurrent() - queuedAt) * 1000)) ms")
             await sync.applyOwnPost(post, pendingPostId: pendingPostId, uploadedFiles: files, onRewritten: onRewritten)
             self.inFlight.with { _ = $0.remove(pendingPostId) }
+            // The group's other messages recorded their uploads in rows of their own (4F).
+            if messageIds.count > 1 {
+                await sync.postbox.mmTransaction { _ in
+                    for id in messageIds.dropFirst() {
+                        if let row = sync.store.pendingPost(channelId: draft.post.channelId, localMessageId: id.id), row.pendingPostId != pendingPostId {
+                            sync.store.removePendingPost(pendingPostId: row.pendingPostId)
+                        }
+                    }
+                }
+            }
             self.uploads.with { uploads in
                 for id in messageIds {
                     uploads.removeValue(forKey: id)

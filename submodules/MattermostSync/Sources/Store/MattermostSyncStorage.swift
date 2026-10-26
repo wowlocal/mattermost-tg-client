@@ -195,6 +195,16 @@ public final class MattermostSyncStore: MessageIdStore {
         return self.attempt("pendingPost(pendingPostId:)", nil) { try self.base.pendingPost(pendingPostId: pendingPostId) }
     }
 
+    /// The files a pending message already uploaded (4F), recorded with its pending row.
+    @discardableResult
+    public func setPendingUploads(_ post: MattermostPendingPost) -> MattermostPendingPost? {
+        return self.attempt("setPendingUploads", nil) { try self.base.setPendingUploads(post) }
+    }
+
+    public func pendingPost(channelId: String, localMessageId: Int32) -> MattermostPendingPost? {
+        return self.attempt("pendingPost(channelId:localMessageId:)", nil) { try self.base.pendingPost(channelId: channelId, localMessageId: localMessageId) }
+    }
+
     public func removePendingPost(pendingPostId: String) {
         self.attempt("removePendingPost", ()) { try self.base.removePendingPost(pendingPostId: pendingPostId) }
     }

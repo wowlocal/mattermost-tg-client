@@ -102,12 +102,26 @@ public struct MattermostPendingPost: Hashable, Sendable {
     public var channelId: String
     public var globallyUniqueId: Int64
     public var localMessageId: Int32
+    /// Files of the message already uploaded (`POST /files`), not yet in a post (4F).
+    public var uploadedFiles: [MattermostPendingUpload]
 
-    public init(pendingPostId: String, channelId: String, globallyUniqueId: Int64, localMessageId: Int32) {
+    public init(pendingPostId: String, channelId: String, globallyUniqueId: Int64, localMessageId: Int32, uploadedFiles: [MattermostPendingUpload] = []) {
         self.pendingPostId = pendingPostId
         self.channelId = channelId
         self.globallyUniqueId = globallyUniqueId
         self.localMessageId = localMessageId
+        self.uploadedFiles = uploadedFiles
+    }
+}
+
+/// One uploaded file of an outgoing message: the media item it came from and the server's file id.
+public struct MattermostPendingUpload: Hashable, Sendable, Codable {
+    public var mediaIndex: Int
+    public var fileId: String
+
+    public init(mediaIndex: Int, fileId: String) {
+        self.mediaIndex = mediaIndex
+        self.fileId = fileId
     }
 }
 
