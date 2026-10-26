@@ -105,9 +105,10 @@ public final class MattermostAvatarResource: TelegramMediaResource {
     }
 }
 
-/// An image at a URL on the Mattermost server: message attachment images (`image_url`, `thumb_url`) and
-/// webhook icons (`override_icon_url`). Only URLs on the account's server are fetched (relative URLs
-/// resolve against it); images elsewhere would need the server's image proxy and are not loaded.
+/// An image at a URL: message attachment images (`image_url`, `thumb_url`), webhook icons (`override_icon_url`)
+/// and link preview images (3E). URLs on the account's server are fetched directly (relative URLs resolve against
+/// it); images elsewhere only through the server's image proxy (`GET /image?url=`, when `HasImageProxy`), never
+/// from the third-party site itself.
 public final class MattermostURLImageResource: TelegramMediaResource {
     public let url: String
 
@@ -151,6 +152,14 @@ public final class MattermostURLImageResource: TelegramMediaResource {
         }
         return url
     }
+
+    /// The external image of a URL on the server's image proxy (`…/api/v4/image?url=<image>`), else nil.
+    static func proxiedTarget(_ url: URL) -> String? {
+        guard url.path.hasSuffix("/api/v4/image"), let components = URLComponents(url: url, resolvingAgainstBaseURL: false), let target = components.queryItems?.first(where: { $0.name == "url" })?.value, !target.isEmpty else {
+            return nil
+        }
+        return target
+    }
 }
 
 extension String {
@@ -185,6 +194,8 @@ final class MattermostResourceClients {
     private struct Entry {
         weak var postbox: Postbox?
         let client: Promise<MattermostClient?>
+        /// The server's image proxy is on (`HasImageProxy`), see `MattermostURLImageResource`.
+        let imageProxy: MMLocked<Bool>
     }
 
     private let lock = NSLock()
@@ -197,13 +208,21 @@ final class MattermostResourceClients {
         if let entry = self.entries[key], entry.postbox === postbox {
             return entry
         }
-        let entry = Entry(postbox: postbox, client: Promise<MattermostClient?>(nil))
+        let entry = Entry(postbox: postbox, client: Promise<MattermostClient?>(nil), imageProxy: MMLocked(false))
         self.entries[key] = entry
         return entry
     }
 
     func register(postbox: Postbox, client: MattermostClient) {
         self.entry(postbox: postbox).client.set(.single(client))
+    }
+
+    func setImageProxy(postbox: Postbox, enabled: Bool) {
+        self.entry(postbox: postbox).imageProxy.with { $0 = enabled }
+    }
+
+    func hasImageProxy(postbox: Postbox) -> Bool {
+        return self.entry(postbox: postbox).imageProxy.current
     }
 
     func client(postbox: Postbox) -> Signal<MattermostClient, NoError> {
@@ -263,24 +282,42 @@ public func mattermostFetchResource(postbox: Postbox, resource: MediaResource) -
     }
 }
 
-/// A `MattermostURLImageResource`: a plain GET on the server's origin (static images need no session).
+/// A `MattermostURLImageResource`: a plain GET on the server's origin (static images need no session), or the
+/// server's image proxy (with the session) for an image elsewhere.
 private func fetchURLImage(postbox: Postbox, resource: MattermostURLImageResource) -> Signal<MediaResourceDataFetchResult, MediaResourceDataFetchError> {
     let resourceId = resource.id.stringRepresentation
     return MattermostResourceClients.shared.client(postbox: postbox)
     |> castError(MediaResourceDataFetchError.self)
     |> mapToSignal { client -> Signal<MediaResourceDataFetchResult, MediaResourceDataFetchError> in
-        guard let url = MattermostURLImageResource.sameOriginURL(resource.url, serverURL: client.serverURL) else {
-            MMLog.log("fetch \(resourceId): \(resource.url) is not on the server; not loaded")
+        var sameOrigin = MattermostURLImageResource.sameOriginURL(resource.url, serverURL: client.serverURL)
+        var externalURL = resource.url
+        if let url = sameOrigin, let proxied = MattermostURLImageResource.proxiedTarget(url) {
+            // The server already pointed it at its image proxy (with the proxy on, it rewrites attachment and
+            // markdown images): that endpoint needs the session.
+            externalURL = proxied
+            sameOrigin = nil
+        } else if sameOrigin == nil && !MattermostResourceClients.shared.hasImageProxy(postbox: postbox) {
+            MMLog.log("fetch \(resourceId): \(resource.url) is not on the server and the server has no image proxy; not loaded")
             return .fail(.generic)
         }
+        let proxiedURL = externalURL
         return Signal { subscriber in
             let task = Task {
                 do {
-                    var request = URLRequest(url: url)
-                    request.setValue(MattermostSync.userAgent, forHTTPHeaderField: "User-Agent")
-                    let (data, response) = try await URLSession.shared.data(for: request)
-                    guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode), !data.isEmpty else {
-                        throw URLError(.badServerResponse)
+                    let data: Data
+                    if let url = sameOrigin {
+                        var request = URLRequest(url: url)
+                        request.setValue(MattermostSync.userAgent, forHTTPHeaderField: "User-Agent")
+                        let (body, response) = try await URLSession.shared.data(for: request)
+                        guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode), !body.isEmpty else {
+                            throw URLError(.badServerResponse)
+                        }
+                        data = body
+                    } else {
+                        data = try await client.data(for: .proxiedImage(url: proxiedURL))
+                        guard !data.isEmpty else {
+                            throw URLError(.badServerResponse)
+                        }
                     }
                     let image = flattenedImageData(data)
                     subscriber.putNext(.reset)

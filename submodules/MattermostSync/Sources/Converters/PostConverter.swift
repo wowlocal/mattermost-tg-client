@@ -40,6 +40,8 @@ struct PostConversionContext {
     /// The stored reply summary of a root (by local id): channel pages and `since=` lists say `reply_count: 0` for
     /// every root, so a root rewritten from them keeps what threads told us.
     var existingReplyThread: (Int32) -> ReplyThreadMessageAttribute? = { _ in nil }
+    /// Link previews, emoticons and inline LaTeX as the server and the user have them (3E).
+    var richContent = RichContentSettings()
 }
 
 /// The messages of one post (one per mapped part, in part order) and the custom emoji files their text
@@ -115,8 +117,9 @@ enum PostConverter {
             media[0].append(self.serviceAction(post: post, context: context))
         } else {
             var builder = FormattedTextBuilder()
+            builder.markdownOptions = context.richContent.markdownOptions
             builder.appendMarkdown(post.message)
-            let attachments = AttachmentConverter.convert(props: post.props, images: post.metadata?.images ?? [:], serverURL: context.serverURL, builder: &builder)
+            let attachments = AttachmentConverter.convert(props: post.props, images: post.metadata?.images ?? [:], serverURL: context.serverURL, imageProxy: context.richContent.imageProxy, builder: &builder)
             if let markup = attachments.replyMarkup {
                 primaryAttributes.append(markup)
             }
@@ -137,6 +140,13 @@ enum PostConverter {
                 }
                 if let converted = textEntity(entity, context: context) {
                     entities.append(converted)
+                }
+                // The Links tab (`.webPage` tag) lists messages with links, as Telegram's tagging does.
+                switch entity.type {
+                case .url, .textUrl:
+                    textTags.insert(.webPage)
+                default:
+                    break
                 }
             }
             if post.type == "me", !text.isEmpty {
@@ -168,6 +178,12 @@ enum PostConverter {
                 if !text.isEmpty {
                     textAttributes.append(InvertMediaMessageAttribute())
                 }
+            } else if media[layout.textPartIndex].isEmpty, !text.isEmpty, let preview = LinkPreviewConverter.webpage(post: post, context: context) {
+                // A link preview (3E) on the text message when it carries no file or attachment image: Telegram
+                // shows one media per message.
+                media[layout.textPartIndex].append(preview.webpage)
+                textAttributes.append(preview.attribute)
+                textTags.insert(.webPage)
             }
         }
 
@@ -383,6 +399,9 @@ enum PostConverter {
             type = .Hashtag
         case .customEmoji:
             return nil
+        case let .heading(level):
+            // Larger text (TextFormat renders the custom entity); the `.bold` entity over the same range stays.
+            type = .Custom(type: MattermostCustomEntity.heading(level: level))
         }
         return MessageTextEntity(range: entity.range, type: type)
     }
@@ -400,7 +419,7 @@ enum PostConverter {
 
 extension StoreMessage {
     /// Rebuilds a stored message under a new id (renumbering) or with changed thread references.
-    static func mmCopy(of message: Message, id: MessageId, threadId: Int64?, attributes: [MessageAttribute], flags: StoreMessageFlags? = nil, tags: MessageTags? = nil) -> StoreMessage {
+    static func mmCopy(of message: Message, id: MessageId, threadId: Int64?, attributes: [MessageAttribute], flags: StoreMessageFlags? = nil, tags: MessageTags? = nil, media: [Media]? = nil) -> StoreMessage {
         return StoreMessage(
             id: id,
             customStableId: nil,
@@ -416,7 +435,7 @@ extension StoreMessage {
             authorId: message.author?.id,
             text: message.text,
             attributes: attributes,
-            media: message.media
+            media: media ?? message.media
         )
     }
 }
