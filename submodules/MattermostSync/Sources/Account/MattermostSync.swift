@@ -131,8 +131,12 @@ public enum MattermostSync {
         configuration.onUnauthorized = {
             MattermostSync.reportUnauthorized(accountId: accountId)
         }
+        let serverURL = server.url
         configuration.onServerReached = {
-            MattermostSync.sync(accountId: accountId)?.reconnectSoon(reason: "the server answered a request")
+            // Every account on this server: one account's answer says the server is back for all of them.
+            for sync in MattermostSync.accounts.with({ Array($0.values) }) where sync.server.url == serverURL {
+                sync.reconnectSoon(reason: "the server answered a request")
+            }
         }
         let client = MattermostClient(configuration: configuration, token: token)
         let sync = MattermostAccountSync(account: account, client: client, store: store, server: server)

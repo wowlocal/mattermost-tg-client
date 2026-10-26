@@ -501,6 +501,10 @@ private func synchronizeUnseenReactionsAndPollVotesTag(postbox: Postbox, network
 }
 
 func managedSynchronizeMessageHistoryTagSummaries(postbox: Postbox, network: Network, stateManager: AccountStateManager, peerId: PeerId, threadId: Int64?) -> Signal<Void, NoError> {
+    // MATTERMOST: mention and reaction counters come from MattermostSync (`messages.search` per invalidated summary) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .complete()
+    }
     let accountPeerId = stateManager.accountPeerId
     
     return Signal { _ in
@@ -640,6 +644,10 @@ private func synchronizeMessageHistoryTagSummary(accountPeerId: PeerId, postbox:
 }
 
 func synchronizeSavedMessageTags(postbox: Postbox, network: Network, peerId: PeerId, threadId: Int64?, force: Bool) -> Signal<Never, NoError> {
+    // MATTERMOST: no saved-message reaction tags (`messages.getSavedReactionTags`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .complete()
+    }
     let key: PostboxViewKey = .pendingMessageActions(type: .updateReaction)
     let waitForApplySignal: Signal<Never, NoError> = postbox.combinedView(keys: [key])
     |> map { views -> Bool in

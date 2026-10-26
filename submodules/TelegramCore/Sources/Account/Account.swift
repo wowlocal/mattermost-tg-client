@@ -488,6 +488,10 @@ public struct TwoStepAuthData {
 }
 
 func _internal_twoStepAuthData(_ network: Network) -> Signal<TwoStepAuthData, MTRpcError> {
+    // MATTERMOST: no Telegram two-step verification (`account.getPassword`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .never()
+    }
     return network.request(Api.functions.account.getPassword())
     |> map { config -> TwoStepAuthData in
         switch config {

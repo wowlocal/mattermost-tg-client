@@ -65,6 +65,22 @@ enum RelayBackgroundRefresh {
         }
     }
 
+    #if DEBUG
+    /// Debug remote `background-refresh`: what the task runs, without the task (the simulator refuses
+    /// `BGTaskScheduler.submit`, so `_simulateLaunchForTaskWithIdentifier:` has no pending request to launch).
+    static func debugRun(completion: @escaping ([String: Any]) -> Void) {
+        let started = CFAbsoluteTimeGetCurrent()
+        let status = UIApplication.shared.backgroundRefreshStatus.rawValue
+        let state = UIApplication.shared.applicationState.rawValue
+        Task {
+            let ok = await MattermostSync.backgroundRefresh(timeout: 25.0)
+            DispatchQueue.main.async {
+                completion(["caughtUp": ok, "ms": Int((CFAbsoluteTimeGetCurrent() - started) * 1000.0), "backgroundRefreshStatus": status, "applicationState": state])
+            }
+        }
+    }
+    #endif
+
     private static func log(_ text: String) {
         Logger.shared.log("Relay", "background refresh: \(text)")
         #if DEBUG

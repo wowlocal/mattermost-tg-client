@@ -15,6 +15,7 @@ import MattermostUI
 //   path accessibility scrolling takes, and reports the frame intervals measured by the same display link: frames,
 //   average, 95th percentile and worst interval, and hitches (intervals over 1.5 and 3 expected frames).
 // The simulator renders on the Mac's GPU, so absolute numbers say little about a device; compare runs.
+// - `background-refresh`: what the BGAppRefreshTask runs (`RelayBackgroundRefresh.debugRun`);
 // - `storage` (`do`: stats, clear, evict, reset): Telegram's storage usage and cache eviction for Mattermost media
 //   (see `relayDebugStorage`).
 #if DEBUG
@@ -88,6 +89,11 @@ extension TelegramRootController {
                     completion(true, nil, result)
                 })
             }
+            })
+            return true
+        case "background-refresh":
+            RelayBackgroundRefresh.debugRun(completion: { result in
+                completion(true, nil, result)
             })
             return true
         case "storage":

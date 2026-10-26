@@ -166,6 +166,10 @@ public enum GetWallpaperError {
 }
 
 public func getWallpaper(network: Network, slug: String) -> Signal<TelegramWallpaper, GetWallpaperError> {
+    // MATTERMOST: no cloud wallpapers (`account.getWallPaper`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .never()
+    }
     return network.request(Api.functions.account.getWallPaper(wallpaper: .inputWallPaperSlug(.init(slug: slug))))
     |> mapError { _ -> GetWallpaperError in return .generic }
     |> map { wallpaper -> TelegramWallpaper in
