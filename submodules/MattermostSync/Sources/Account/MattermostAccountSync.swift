@@ -84,6 +84,11 @@ public final class MattermostAccountSync: @unchecked Sendable {
         var collapsedThreads = false
         /// Followed threads per team (`Threads.swift`).
         var threads: [String: MattermostTeamThreads] = [:]
+        /// Phase 3D-2 (`ChannelAccess.swift`): the user's roles per team, and the roles (by name) of the user's
+        /// system, team and channel roles, for what the user may do with each channel.
+        var teamRoles: [String: String] = [:]
+        var roles: [String: Role] = [:]
+        var rolesLoaded = false
     }
 
     let state = MMLocked(SyncState())
@@ -118,6 +123,9 @@ public final class MattermostAccountSync: @unchecked Sendable {
     let threadsVersionPromise = ValuePromise<Int>(0, ignoreRepeated: true)
     /// Threads whose read state is being pushed.
     let threadReadsInFlight = MMLocked<Set<String>>([])
+    /// The user directory's team scope (3D-2): `""` for the whole server, a team id with the server's
+    /// `RestrictDirectMessage: team`; nil until the client config was read.
+    let directoryScope = MMLocked<String?>(nil)
     /// What the `AvailableReactions` list holds (`SyntheticConfiguration`).
     let reactionList = MMLocked<(customNames: [String], usedEmoji: [String], listed: Set<String>)>(([], [], []))
 
@@ -471,7 +479,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
             }
             peerId = MattermostPeerIds.channelPeerId(peer.peerId)
             let title = channel.displayName.isEmpty ? channel.name : channel.displayName
-            updatePeersCustom(transaction: transaction, peers: [PeerConverter.channel(channel, title: title, peerId: peerId)], update: { _, updated in
+            let access = self.channelAccess(channel: channel, member: member, teamId: teamId)
+            updatePeersCustom(transaction: transaction, peers: [PeerConverter.channel(channel, title: title, peerId: peerId, access: access)], update: { _, updated in
                 return updated
             })
             let about = channel.purpose.isEmpty ? channel.header : channel.purpose

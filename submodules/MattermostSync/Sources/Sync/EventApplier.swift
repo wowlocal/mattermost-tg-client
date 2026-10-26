@@ -109,6 +109,17 @@ extension MattermostAccountSync {
                 await self.postbox.mmTransaction { transaction in
                     self.writeUsers([user], transaction: transaction)
                 }
+                // The own system roles may have changed (3D-2: channel access).
+                if user.id == self.ownUserId, user.roles != self.state.with({ $0.me?.roles }) {
+                    await self.refreshChannelAccess(reason: "own roles changed")
+                }
+            }
+        case .roleUpdated, .memberRoleUpdated:
+            await self.refreshChannelAccess(reason: event.type.rawValue)
+        case .channelSchemeUpdated:
+            let channelId = event.data["channel_id"]?.stringValue ?? event.broadcast.channelId
+            if !channelId.isEmpty {
+                await self.refreshChannel(channelId)
             }
         default:
             break
@@ -348,13 +359,17 @@ extension MattermostAccountSync {
             if let partnerId = channel.directMessagePartnerId(myUserId: self.ownUserId) {
                 await self.ensureUsers([partnerId])
             }
-            let isNew = self.channelState(channelId) == nil
+            let previous = self.channelState(channelId)
+            let isNew = previous == nil
+            // Roles of a channel scheme the user hasn't met yet (3D-2: channel access).
+            await self.ensureRoles([member.roles])
             await self.postbox.mmTransaction { transaction in
                 let teamId = channel.teamId
                 self.writeChannel(channel, member: member, teamId: teamId, transaction: transaction)
             }
             await self.refreshMemberCounts([channelId])
-            if isNew && channel.type != .directMessage {
+            // Archived channels leave the team folders (and come back when restored).
+            if (isNew || previous?.channel.isArchived != channel.isArchived) && channel.type != .directMessage {
                 await self.writeTeamFolders(teams: self.state.with { $0.teams })
             }
             MMLog.log("live: channel \(channelId) \(isNew ? "added" : "updated")")

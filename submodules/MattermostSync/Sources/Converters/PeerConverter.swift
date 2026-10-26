@@ -51,8 +51,9 @@ enum PeerConverter {
     /// Public/private channels and group messages are all supergroups (`TelegramChannel` with `.group`
     /// info): basic groups never get a `threadId` on replies.
     /// `username` is only set on the composer's `~` suggestions (the channel name to insert); stored channel
-    /// peers have none.
-    static func channel(_ channel: Channel, title: String, peerId: PeerId, username: String? = nil) -> TelegramChannel {
+    /// peers have none. `access` (`MattermostChannelAccess`, Phase 3D-2) is what the user may do with the channel;
+    /// it goes into `version`, which Telegram's UI doesn't read for these peers.
+    static func channel(_ channel: Channel, title: String, peerId: PeerId, username: String? = nil, access: MattermostChannelAccess = []) -> TelegramChannel {
         return TelegramChannel(
             id: peerId,
             accessHash: .personal(0),
@@ -60,7 +61,7 @@ enum PeerConverter {
             username: username,
             photo: [],
             creationDate: mmSeconds(channel.createAt),
-            version: 0,
+            version: access.rawValue,
             participationStatus: .member,
             info: .group(TelegramChannelGroupInfo(flags: [])),
             flags: [],

@@ -339,6 +339,12 @@ enum PostConverter {
         return false
     }
 
+    /// Mattermost markdown as Telegram text and entities (a channel header on its profile, 3D-2).
+    static func formattedMarkdown(_ markdown: String, context: PostConversionContext) -> (text: String, entities: [MessageTextEntity]) {
+        let formatted = MattermostMarkdown.parse(markdown)
+        return (formatted.text, formatted.entities.compactMap { self.textEntity($0, context: context) })
+    }
+
     private static func textEntity(_ entity: TextEntity, context: PostConversionContext) -> MessageTextEntity? {
         let type: MessageTextEntityType
         switch entity.type {

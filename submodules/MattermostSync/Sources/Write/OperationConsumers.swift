@@ -310,6 +310,9 @@ extension MattermostAccountSync {
             } else {
                 MMLog.log("delete: \(operation.messageIds.count) message(s) deleted on this device only")
             }
+        } else if let operation = contents as? CloudChatRemoveChatOperation {
+            // Leave Group / Delete Chat (3D-2): leave the channel, or close the DM or group message.
+            await self.removeChat(peerId: operation.peerId)
         } else {
             MMLog.log("delete: \(type(of: contents)) is not supported by Mattermost; dropped")
         }

@@ -94,6 +94,8 @@ extension MattermostAccountSync {
             state.me = me
             state.teams = teams
         }
+        // What the user may do with each channel (3D-2) goes into the channel peers.
+        await self.loadRoles(me: me, channelRoles: included.map { $0.member.roles })
         var favoriteChannelIds: [String] = []
         var favoritesByTeam: [String: [String]] = [:]
         for team in teams {
