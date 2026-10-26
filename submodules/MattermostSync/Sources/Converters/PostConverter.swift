@@ -215,6 +215,8 @@ enum PostConverter {
             if let peerId = peerId {
                 entities.append(MessageTextEntity(range: mention.range, type: .TextMention(peerId: peerId)))
             }
+            // Names in bold, like Telegram's own service messages (a mention alone keeps the regular font there).
+            entities.append(MessageTextEntity(range: mention.range, type: .Bold))
         }
         for range in formatted.emphasized {
             entities.append(MessageTextEntity(range: range, type: .Bold))

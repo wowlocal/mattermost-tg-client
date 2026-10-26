@@ -133,7 +133,14 @@ extension MattermostAccountSync {
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
         if let post = answer.current {
-            return .message(author: self.ephemeralAuthorName(post), text: MattermostMarkdown.parse(post.message).text)
+            // The answer is posted as the user who acted; show it as coming from the message's author (the bot).
+            let author: String? = await self.postbox.mmTransaction { transaction in
+                guard let user = transaction.getMessage(messageId)?.author as? TelegramUser else {
+                    return nil
+                }
+                return [user.firstName, user.lastName].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
+            }
+            return .message(author: author ?? self.ephemeralAuthorName(post), text: MattermostMarkdown.parse(post.message).text)
         }
         return .done
     }

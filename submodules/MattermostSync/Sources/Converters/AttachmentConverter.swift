@@ -120,8 +120,8 @@ public struct MattermostPostActionData: Codable, Equatable {
 /// Each attachment becomes a block of text: the pretext, then a quote (Telegram's block quote stands in
 /// for the attachment's colour bar) with the author, the title (a link when `title_link` is set), the text,
 /// the fields (`Title: value`) and the footer. Telegram has no per-message colour, so `color` is not shown.
-/// Buttons and menus become an inline keyboard; the first `image_url` (else `thumb_url`) on the server
-/// becomes the message's photo when the post has no files.
+/// Buttons and menus become an inline keyboard; the first `image_url` on the server becomes the message's
+/// photo when the post has no files (`thumb_url` and `author_icon` are not shown).
 enum AttachmentConverter {
     struct Result {
         var replyMarkup: ReplyMarkupMessageAttribute?
@@ -202,16 +202,11 @@ enum AttachmentConverter {
             }
             builder.addEntity(.blockQuote, from: quoteStart)
 
+            // `image_url` only: `thumb_url` is a small decorative icon that Telegram would blow up to a photo.
             if result.image == nil {
-                for key in ["image_url", "thumb_url"] {
-                    let url = string(key)
-                    if url.isEmpty {
-                        continue
-                    }
-                    if let size = images[url], size.width > 0, size.height > 0, let serverURL = URL(string: serverURL), MattermostURLImageResource.sameOriginURL(url, serverURL: serverURL) != nil {
-                        result.image = (url, size.width, size.height)
-                        break
-                    }
+                let url = string("image_url")
+                if !url.isEmpty, let size = images[url], size.width > 0, size.height > 0, let serverURL = URL(string: serverURL), MattermostURLImageResource.sameOriginURL(url, serverURL: serverURL) != nil {
+                    result.image = (url, size.width, size.height)
                 }
             }
             rows.append(contentsOf: self.buttonRows(attachment["actions"]?.arrayValue ?? []))

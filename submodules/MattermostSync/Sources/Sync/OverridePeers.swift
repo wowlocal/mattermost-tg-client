@@ -14,6 +14,9 @@ import MattermostSyncCore
 /// from the peer. Telegram's alternatives were weaker: an author signature attribute shows only in channel
 /// posts, and "via @bot" or forward headers would keep the poster's name and avatar. The synthetic peer has no
 /// chat: it is never included in the chat list, and its profile shows the override name and the poster.
+/// Override icons already requested in this process (each is fetched once).
+private let prefetchedOverrideIcons = MMLocked<Set<String>>([])
+
 extension MattermostAccountSync {
     struct AuthorOverride: Hashable {
         var username: String
@@ -101,6 +104,11 @@ extension MattermostAccountSync {
             }
             written[override] = peerId
             result[post.id] = peerId
+            // Load the icon now: Telegram only fetches avatars it is about to show, and an override's messages
+            // are often above the newest ones.
+            if let resource = photo.first?.resource, prefetchedOverrideIcons.with({ $0.insert(resource.id.stringRepresentation).inserted }) {
+                self.addDisposable(fetchedMediaResource(mediaBox: self.postbox.mediaBox, userLocation: .other, userContentType: .avatar, reference: .standalone(resource: resource)).start())
+            }
         }
         return result
     }
