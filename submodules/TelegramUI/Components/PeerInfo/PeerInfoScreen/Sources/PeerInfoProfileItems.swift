@@ -227,6 +227,11 @@ func infoItems(
             )
         }
         
+        // MATTERMOST: the Mattermost profile (status, nickname, position, email, local time).
+        items[currentPeerInfoSection]!.append(contentsOf: mattermostProfileItems(context: context, user: user, presentationData: presentationData, requestLayout: { animated in
+            interaction.requestLayout(animated)
+        }))
+        
         if let cachedData = data.cachedData as? CachedUserData {
             if MattermostFeatures.telegramPrivacy, let birthday = cachedData.birthday { // MATTERMOST: no Telegram birthdays
                 let isBirthdayToday = hasBirthdayToday(birthday: birthday)
@@ -249,7 +254,7 @@ func infoItems(
             }
             
             var hasAbout = false
-            if let about = cachedData.about, !about.isEmpty {
+            if let about = cachedData.about, !about.isEmpty, mattermostShowsAbout(user) { // MATTERMOST: a person's position has its own row
                 hasAbout = true
             }
             var hasNote = false
@@ -405,7 +410,7 @@ func infoItems(
         }
         
         if !isMyProfile {
-            if !data.isContact, user.botInfo == nil {
+            if MattermostFeatures.contacts, !data.isContact, user.botInfo == nil { // MATTERMOST: no contacts
                 items[currentPeerInfoSection]!.append(PeerInfoScreenActionItem(id: ItemAddToContacts, text: presentationData.strings.PeerInfo_AddToContacts, action: {
                     interaction.openAddContact()
                 }))
@@ -417,9 +422,11 @@ func infoItems(
                         interaction.openDeleteReaction(reactionSourceMessageId)
                     }))
                 }
+                if MattermostFeatures.reporting { // MATTERMOST: no Telegram reports
                 items[currentPeerInfoSection]!.append(PeerInfoScreenActionItem(id: ItemReport, text: presentationData.strings.ReportPeer_BanAndReport, color: .destructive, action: {
                     interaction.openReport(.reaction(reactionSourceMessageId))
                 }))
+                }
             } else {
                 var isBlocked = false
                 if let cachedData = data.cachedData as? CachedUserData, cachedData.isBlocked {
@@ -431,7 +438,7 @@ func infoItems(
                         interaction.updateBlocked(false)
                     }))
                 } else {
-                    if user.flags.contains(.isSupport) || data.isContact {
+                    if user.flags.contains(.isSupport) || data.isContact || !MattermostFeatures.telegramChatSettings { // MATTERMOST: Mattermost has no user blocking
                     } else {
                         if user.botInfo == nil {
                             items[currentPeerInfoSection]!.append(PeerInfoScreenActionItem(id: ItemBlock, text: presentationData.strings.Conversation_BlockUser, color: .destructive, action: {
@@ -696,6 +703,12 @@ func infoItems(
                         interaction.requestLayout(animated)
                     }))
                 }
+                // MATTERMOST: the channel header (markdown) under the purpose.
+                if let header = mattermostChannelHeaderItem(context: context, channel: channel, presentationData: presentationData, linkItemAction: bioLinkAction, requestLayout: { animated in
+                    interaction.requestLayout(animated)
+                }) {
+                    items[currentPeerInfoSection]!.append(header)
+                }
                 
                 if let verification = (data.cachedData as? CachedChannelData)?.verification {
                     let attributedPrefix = NSMutableAttributedString(string: "  ")
@@ -869,6 +882,9 @@ func infoItems(
                 if channel.flags.contains(.isCreator) || channel.hasPermission(.inviteMembers) {
                     canAddMembers = true
                 }
+            }
+            if let mattermostValue = mattermostCanAddMembers(channel) { // MATTERMOST
+                canAddMembers = mattermostValue
             }
         }
         

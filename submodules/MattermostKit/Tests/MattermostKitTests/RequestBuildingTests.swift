@@ -116,6 +116,34 @@ final class RequestBuildingTests: StubbedClientTestCase {
         )
     }
 
+    func testDirectoryAndChannelManagement() async {
+        await check({ _ = try await $0.searchChannels(teamId: "t1", term: "rel") }, response: "[]", method: "POST", path: "/api/v4/teams/t1/channels/search", body: ["term": "rel"])
+        await check({ _ = try await $0.searchArchivedChannels(teamId: "t1", term: "old") }, response: "[]", method: "POST", path: "/api/v4/teams/t1/channels/search_archived", body: ["term": "old"])
+        await check({ _ = try await $0.archivedChannels(teamId: "t1", page: 1, perPage: 60) }, response: "[]", method: "GET", path: "/api/v4/teams/t1/channels/deleted", query: ["page": "1", "per_page": "60"])
+        await check({ _ = try await $0.channel(teamId: "t1", name: "ops") }, response: channel, method: "GET", path: "/api/v4/teams/t1/channels/name/ops")
+        await check({ _ = try await $0.channel(teamId: "t1", name: "ops", includeDeleted: true) }, response: channel, method: "GET", path: "/api/v4/teams/t1/channels/name/ops", query: ["include_deleted": "true"])
+        await check({ _ = try await $0.channelMemberCounts(channelIds: ["c1", "c2"]) }, response: #"{"c1":3,"c2":1}"#, method: "POST", path: "/api/v4/channels/stats/member_count", body: ["c1", "c2"])
+        await check({ try await $0.patchChannel(id: "c1", patch: ChannelPatch(displayName: "Ops", purpose: "")) }, response: channel, method: "PUT", path: "/api/v4/channels/c1/patch", body: ["display_name": "Ops", "purpose": ""])
+        await check({ try await $0.archiveChannel(id: "c1") }, method: "DELETE", path: "/api/v4/channels/c1")
+        await check({ try await $0.restoreChannel(id: "c1") }, response: channel, method: "POST", path: "/api/v4/channels/c1/restore")
+        await check({ try await $0.updateChannelPrivacy(id: "c1", type: .privateChannel) }, response: channel, method: "PUT", path: "/api/v4/channels/c1/privacy", body: ["privacy": "P"])
+        await check({ try await $0.updateChannelMemberSchemeRoles(channelId: "c1", userId: "u2", isAdmin: true) }, response: #"{"status":"OK"}"#, method: "PUT", path: "/api/v4/channels/c1/members/u2/schemeRoles", body: ["scheme_admin": true, "scheme_user": true])
+        await check(
+            { _ = try await $0.users(UserListOptions(inTeamId: "t1", notInChannelId: "c1", active: true, page: 2, perPage: 60)) },
+            response: "[]",
+            method: "GET",
+            path: "/api/v4/users",
+            query: ["in_team": "t1", "not_in_channel": "c1", "active": "true", "page": "2", "per_page": "60"]
+        )
+    }
+
+    func testMemberCountsDecode() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.respond(with: .json(#"{"c1":3,"c2":1}"#))
+        let counts = try await makeClient().channelMemberCounts(channelIds: ["c1", "c2"])
+        XCTAssertEqual(counts, ["c1": 3, "c2": 1])
+    }
+
     // MARK: Posts
 
     func testPostReads() async {

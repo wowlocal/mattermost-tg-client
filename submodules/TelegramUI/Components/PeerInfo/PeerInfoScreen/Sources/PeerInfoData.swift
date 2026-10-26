@@ -2488,6 +2488,9 @@ func canEditPeerInfo(context: AccountContext, peer: EnginePeer?, chatLocation: C
     if case let .user(user) = peer, let botInfo = user.botInfo {
         return botInfo.flags.contains(.canEdit)
     } else if case let .channel(channel) = peer {
+        if threadData == nil, let canEdit = mattermostCanEditChannel(channel) { // MATTERMOST
+            return canEdit
+        }
         if let threadData = threadData {
             if chatLocation.threadId == 1 {
                 return false
@@ -2533,6 +2536,10 @@ struct PeerInfoMemberActions: OptionSet {
 }
 
 func availableActionsForMemberOfPeer(accountPeerId: PeerId, peer: EnginePeer?, member: PeerInfoMember) -> PeerInfoMemberActions {
+    // MATTERMOST: remove (`.restrict`) and channel admin (`.promote`) by the channel's Mattermost access.
+    if let actions = mattermostMemberActions(accountPeerId: accountPeerId, peer: peer, member: member) {
+        return actions
+    }
     var result: PeerInfoMemberActions = []
 
     if peer == nil {
@@ -2697,11 +2704,12 @@ func peerInfoHeaderButtons(peer: EnginePeer?, cachedData: CachedPeerData?, isOpe
             result.append(.search)
         }
         
-        if user.botInfo != nil, let cachedData = cachedData as? CachedUserData, !cachedData.isBlocked {
+        if MattermostFeatures.telegramChatSettings, user.botInfo != nil, let cachedData = cachedData as? CachedUserData, !cachedData.isBlocked { // MATTERMOST: no blocking
             result.append(.stop)
         }
         
-        if (isSecretChat && !isContact) || user.flags.contains(.isSupport) {
+        // MATTERMOST: a Mattermost user's More menu would be empty (contacts, blocking, gifts, wallpapers, … are hidden).
+        if (isSecretChat && !isContact) || user.flags.contains(.isSupport) || MattermostBackend.isEnabled {
         } else {
             result.append(.more)
         }
@@ -2725,7 +2733,7 @@ func peerInfoHeaderButtons(peer: EnginePeer?, cachedData: CachedPeerData?, isOpe
             let canLeave: Bool
             switch channel.participationStatus {
             case .member:
-                canLeave = true
+                canLeave = mattermostCanLeave(channel) // MATTERMOST: not the town square or a group message; was true
             default:
                 canLeave = false
             }
@@ -2753,7 +2761,7 @@ func peerInfoHeaderButtons(peer: EnginePeer?, cachedData: CachedPeerData?, isOpe
                 result.append(.leave)
             }
             
-            var canReport = true
+            var canReport = MattermostFeatures.reporting // MATTERMOST: no Telegram reports (was true)
             if channel.adminRights != nil || channel.flags.contains(.isCreator)  {
                 canReport = false
             }
@@ -2836,6 +2844,9 @@ func peerInfoCanEdit(peer: EnginePeer?, chatLocation: ChatLocation, threadData: 
                 return false
             }
         } else {
+            if let canEdit = mattermostCanEditChannel(peer) { // MATTERMOST
+                return canEdit
+            }
             if peer.flags.contains(.isCreator) {
                 return true
             } else if peer.hasPermission(.changeInfo) {

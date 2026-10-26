@@ -484,7 +484,7 @@ extension PeerInfoScreenNode {
                 }
                 
                 if case let .user(user) = peer {
-                    if user.botInfo == nil && strongSelf.data?.encryptionKeyFingerprint == nil && !user.isDeleted {
+                    if MattermostFeatures.chatThemes, user.botInfo == nil && strongSelf.data?.encryptionKeyFingerprint == nil && !user.isDeleted { // MATTERMOST: chat wallpapers are Telegram's
                         items.append(.action(ContextMenuActionItem(text: presentationData.strings.UserInfo_ChangeWallpaper, icon: { theme in
                             generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/ApplyTheme"), color: theme.contextMenu.primaryColor)
                         }, action: { _, f in
@@ -877,7 +877,7 @@ extension PeerInfoScreenNode {
                     }
                     
                     let clearPeerHistory = ClearPeerHistory(context: strongSelf.context, peer: user, chatPeer: chatPeer, cachedData: strongSelf.data?.cachedData)
-                    if clearPeerHistory.canClearForMyself != nil || clearPeerHistory.canClearForEveryone != nil {
+                    if MattermostFeatures.telegramChatSettings, clearPeerHistory.canClearForMyself != nil || clearPeerHistory.canClearForEveryone != nil { // MATTERMOST: Mattermost has no clearing of history
                         items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.PeerInfo_ClearMessages, icon: { theme in
                             generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/ClearMessages"), color: theme.contextMenu.primaryColor)
                         }, action: { c, _ in
@@ -1096,7 +1096,7 @@ extension PeerInfoScreenNode {
                     }
                     
                     let clearPeerHistory = ClearPeerHistory(context: strongSelf.context, peer: channel, chatPeer: EnginePeer(channel), cachedData: strongSelf.data?.cachedData)
-                    if clearPeerHistory.canClearForMyself != nil || clearPeerHistory.canClearForEveryone != nil {
+                    if MattermostFeatures.telegramChatSettings, clearPeerHistory.canClearForMyself != nil || clearPeerHistory.canClearForEveryone != nil { // MATTERMOST: Mattermost has no clearing of history
                         items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.PeerInfo_ClearMessages, icon: { theme in
                             generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/ClearMessages"), color: theme.contextMenu.primaryColor)
                         }, action: { c, _ in
@@ -1121,7 +1121,7 @@ extension PeerInfoScreenNode {
                             })))
                         }
                     case .group:
-                        if case .member = channel.participationStatus, !headerButtons.contains(.leave) {
+                        if case .member = channel.participationStatus, !headerButtons.contains(.leave), mattermostCanLeave(channel) { // MATTERMOST
                             if !items.isEmpty {
                                 items.append(.separator)
                             }

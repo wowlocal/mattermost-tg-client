@@ -1,17 +1,9 @@
 import Foundation
 
-// MARK: - Finding things (Phase 3C): channel search, saved posts, pinning, team file search
+// MARK: - Finding things (Phase 3C): saved posts, pinning, team file search
 
 extension MattermostClient {
-    private struct ChannelSearchBody: Encodable {
-        var term: String
-    }
-
-    /// `POST /teams/{team_id}/channels/search`: the team's public channels whose name or display name matches
-    /// `term` (joined or not; archived channels included, check `deleteAt`).
-    public func searchChannels(teamId: String, term: String) async throws -> [Channel] {
-        try await send(APIRequest.json(.post, apiPath("teams", teamId, "channels", "search"), body: ChannelSearchBody(term: term)))
-    }
+    // Channel search: `searchChannels(teamId:term:)` (Phase 3D-2, `MattermostClient+Channels.swift`).
 
     /// `GET /users/{user_id}/posts/flagged`: the user's saved ("flagged") posts, newest first, in every team
     /// (`teamId` limits them to one team and its DMs/GMs, `channelId` to one channel). Only posts of channels

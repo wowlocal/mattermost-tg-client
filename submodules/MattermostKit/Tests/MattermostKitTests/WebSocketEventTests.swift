@@ -138,6 +138,9 @@ final class WebSocketEventTests: XCTestCase {
         XCTAssertEqual(WebSocketEventType(rawValue: "sidebar_category_order_updated"), .sidebarCategoryOrderUpdated)
         XCTAssertEqual(WebSocketEventType.threadReadChanged.rawValue, "thread_read_changed")
         XCTAssertEqual(WebSocketEventType.unknown("x").rawValue, "x")
+        XCTAssertEqual(WebSocketEventType(rawValue: "role_updated"), .roleUpdated)
+        XCTAssertEqual(WebSocketEventType(rawValue: "memberrole_updated"), .memberRoleUpdated)
+        XCTAssertEqual(WebSocketEventType.channelSchemeUpdated.rawValue, "channel_scheme_updated")
     }
 
     func testReplies() {

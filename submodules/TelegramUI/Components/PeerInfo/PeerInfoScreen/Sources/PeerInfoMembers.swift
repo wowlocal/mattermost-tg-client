@@ -205,6 +205,9 @@ private final class PeerInfoMembersContextImpl {
                             canAddMembers = true
                         }
                     }
+                    if let mattermostValue = mattermostCanAddMembers(channel) { // MATTERMOST
+                        canAddMembers = mattermostValue
+                    }
                     strongSelf.canAddMembers = canAddMembers
                     strongSelf.pushState()
                 }

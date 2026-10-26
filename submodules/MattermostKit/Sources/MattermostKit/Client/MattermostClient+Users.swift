@@ -43,6 +43,20 @@ extension MattermostClient {
         return try await send(APIRequest(.get, "/users/autocomplete", query: query.items))
     }
 
+    /// `GET /users`: a page of users, filtered by the options (the user directory).
+    public func users(_ options: UserListOptions) async throws -> [User] {
+        var query = QueryBuilder()
+        query.add("in_team", options.inTeamId)
+        query.add("not_in_team", options.notInTeamId)
+        query.add("in_channel", options.inChannelId)
+        query.add("not_in_channel", options.notInChannelId)
+        query.add("active", options.active)
+        query.add("sort", options.sort)
+        query.add("page", options.page)
+        query.add("per_page", options.perPage)
+        return try await send(APIRequest(.get, "/users", query: query.items))
+    }
+
     /// `POST /users/search`.
     public func searchUsers(_ options: UserSearchOptions) async throws -> [User] {
         try await send(APIRequest.json(.post, "/users/search", body: options))

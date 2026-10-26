@@ -32,4 +32,21 @@ public struct Role: Codable, Sendable, Equatable {
 public enum PermissionName {
     /// `@channel`, `@all` and `@here` notify the channel.
     public static let useChannelMentions = "use_channel_mentions"
+    /// Add and remove members of public / private channels.
+    public static let managePublicChannelMembers = "manage_public_channel_members"
+    public static let managePrivateChannelMembers = "manage_private_channel_members"
+    /// Edit a channel's name, purpose and header.
+    public static let managePublicChannelProperties = "manage_public_channel_properties"
+    public static let managePrivateChannelProperties = "manage_private_channel_properties"
+    /// Archive (and unarchive) channels.
+    public static let deletePublicChannel = "delete_public_channel"
+    public static let deletePrivateChannel = "delete_private_channel"
+    /// Make members channel admins and back.
+    public static let manageChannelRoles = "manage_channel_roles"
+    public static let convertPublicChannelToPrivate = "convert_public_channel_to_private"
+    public static let createPublicChannel = "create_public_channel"
+    public static let createPrivateChannel = "create_private_channel"
+    public static let createGroupChannel = "create_group_channel"
+    public static let joinPublicChannels = "join_public_channels"
+    public static let manageSystem = "manage_system"
 }
