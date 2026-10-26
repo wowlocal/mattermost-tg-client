@@ -37,7 +37,8 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | SQLite sync store (ID map, peers, cursors) | `submodules/MattermostSyncCore/Sources/MattermostSyncCore/Store` | Done: 100 tests (allocator suites also run on SQLite); Bazel build via sqlcipher untested until Spike D |
 | Spike A: null network engine + seeded account | TelegramCore, `submodules/MattermostSync` | Done (commit `f0820341`); screenshots in `docs/research/spike-a-*.png` |
 | Spike D: real data as alice (bootstrap, holes, live events) | `submodules/MattermostSync` | Agent working (owns Bazel) |
-| UI inventory for Phase 1 hiding, tabs, settings, login reuse, rebrand | `docs/research/ui-inventory.md` | Agent working (read-only) |
+| UI inventory for Phase 1 hiding, tabs, settings, login reuse, rebrand | [ui-inventory.md](research/ui-inventory.md) | Done |
+| Phase 1 steps 2–12 (feature flags, tabs, settings, chat/peer-info gates, services, rebrand, About) | separate git worktree + own simulator | Agent working; merge after Spike D |
 
 ## Phase 0 checklist
 
@@ -89,3 +90,5 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 - Spike D started (agent): debug login as alice, bootstrap, hole filler, WebSocket events, converters, media resources.
 - License check: Telegram-iOS has no LICENSE file (pinned commit or history); README only asks forks to publish their code. Updated plan 08: license terms need legal confirmation before external distribution.
 - SQLite sync store done (`SQLiteMattermostSyncStore`): allocator calls must run inside `store.transaction {}`; posts are keyed by Mattermost channel id; only the app writes the ID map. Spike D told to switch to it.
+- UI inventory done. Key points: a synthetic local `AppConfiguration` hides Premium/Stars/gifts with no upstream edit (Phase 1 step 1, goes with MattermostSync); Calls/Contacts tabs removable with two small changes; login = new `ItemListController` screens (not Telegram's auth flow); reaction picker is empty until MattermostSync writes `AvailableReactions`; Log Out does nothing for phone-less users; strings are English-only.
+- Phase 1 steps 2–12 started in a separate worktree (agent). Steps 1 and 13 + AvailableReactions wait for Spike D.
