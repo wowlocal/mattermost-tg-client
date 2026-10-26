@@ -524,7 +524,7 @@ func infoItems(
                     }))
                 }
                 
-                if let botInfo = user.botInfo, !botInfo.flags.contains(.canEdit) {
+                if MattermostFeatures.reporting, let botInfo = user.botInfo, !botInfo.flags.contains(.canEdit) { // MATTERMOST: no Telegram reports
                     items[currentPeerInfoSection]!.append(PeerInfoScreenActionItem(id: ItemBotReport, text: presentationData.strings.ReportPeer_Report, action: {
                         interaction.openReport(.default)
                     }))
