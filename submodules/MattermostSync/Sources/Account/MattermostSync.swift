@@ -52,7 +52,7 @@ public enum MattermostRenewSessionError: Error, Equatable {
 /// data (`renewSession`); as another user, the old account is logged out and a new one created
 /// (`replaceAccount`), because local ids, read states and caches belong to the old user.
 public enum MattermostSync {
-    private struct Registered {
+    struct Registered {
         let account: Account
         let server: MattermostServerInfo
     }
@@ -63,9 +63,9 @@ public enum MattermostSync {
         let encryptionParameters: ValueBoxEncryptionParameters
     }
 
-    private static let accounts = MMLocked<[AccountRecordId: MattermostAccountSync]>([:])
+    static let accounts = MMLocked<[AccountRecordId: MattermostAccountSync]>([:])
     /// Every account loaded in this process, running or expired.
-    private static let registry = MMLocked<[AccountRecordId: Registered]>([:])
+    static let registry = MMLocked<[AccountRecordId: Registered]>([:])
     private static let expired = MMLocked<[AccountRecordId: MattermostExpiredSession]>([:])
     private static let expiredPromise = ValuePromise<[MattermostExpiredSession]>([], ignoreRepeated: true)
     private static let checkingTokens = MMLocked<Set<AccountRecordId>>([])
@@ -133,6 +133,8 @@ public enum MattermostSync {
         }
         previous?.stop()
         sync.start()
+        // Phase 3A: attach the APNs token to this session (a new login has no device yet).
+        self.registerPushDevice(sync: sync)
     }
 
     static func sync(accountId: AccountRecordId) -> MattermostAccountSync? {
