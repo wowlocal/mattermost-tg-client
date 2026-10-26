@@ -34,9 +34,10 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | MattermostSyncCore (ID allocator, markdown, mapping helpers) | [submodules/MattermostSyncCore](../submodules/MattermostSyncCore/README.md) | Done: 57 tests incl. property tests; BUILD file present, not yet built by Bazel |
 | Local Mattermost server + seed + fixtures | [infra/dev-server](../infra/dev-server/README.md) | Done: Mattermost 11.7.14 ESR (Team Edition) at http://localhost:8065, reset+seed 56 s |
 | Telegram internals map (Spike A prep, assumptions) | [telegram-internals.md](research/telegram-internals.md) | Done |
-| SQLite sync store (ID map, peers, cursors) | `submodules/MattermostSyncCore` | Agent working |
+| SQLite sync store (ID map, peers, cursors) | `submodules/MattermostSyncCore/Sources/MattermostSyncCore/Store` | Done: 100 tests (allocator suites also run on SQLite); Bazel build via sqlcipher untested until Spike D |
 | Spike A: null network engine + seeded account | TelegramCore, `submodules/MattermostSync` | Done (commit `f0820341`); screenshots in `docs/research/spike-a-*.png` |
 | Spike D: real data as alice (bootstrap, holes, live events) | `submodules/MattermostSync` | Agent working (owns Bazel) |
+| UI inventory for Phase 1 hiding, tabs, settings, login reuse, rebrand | `docs/research/ui-inventory.md` | Agent working (read-only) |
 
 ## Phase 0 checklist
 
@@ -87,3 +88,4 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   - Debug hook: `SIMCTL_CHILD_RELAY_DEBUG_OPEN_CHAT=1|ios-team|town-square|dm|off-topic|saved`.
 - Spike D started (agent): debug login as alice, bootstrap, hole filler, WebSocket events, converters, media resources.
 - License check: Telegram-iOS has no LICENSE file (pinned commit or history); README only asks forks to publish their code. Updated plan 08: license terms need legal confirmation before external distribution.
+- SQLite sync store done (`SQLiteMattermostSyncStore`): allocator calls must run inside `store.transaction {}`; posts are keyed by Mattermost channel id; only the app writes the ID map. Spike D told to switch to it.
