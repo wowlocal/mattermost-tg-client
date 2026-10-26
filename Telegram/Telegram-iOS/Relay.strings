@@ -422,3 +422,22 @@
 "Relay.Link.ChannelNotFound" = "This channel doesn't exist, or you don't have access to it.";
 "Relay.Link.UserNotFound" = "This user doesn't exist.";
 "Relay.Link.Unreachable" = "The link couldn't be opened. Check your connection and try again.";
+
+/* Accessibility and localization (Phase 4C): VoiceOver labels, values and hints on Relay's screens and Mattermost
+   content, and texts that were hard-coded English. */
+"Relay.Login.Or" = "or";
+"Relay.Login.ServerAddress" = "Server address";
+"Relay.Login.Id.Email" = "Email";
+"Relay.Login.Id.Username" = "Username";
+"Relay.Login.Id.UsernameInList" = "username";
+"Relay.Login.Id.Ldap" = "AD/LDAP username";
+"Relay.Login.Id.EmailOrUsername" = "Email or username";
+"Relay.Login.Id.Two" = "%1$@ or %2$@";
+"Relay.Login.Id.Three" = "%1$@, %2$@ or %3$@";
+"Relay.Threads.UnreadThreads_1" = "%@ unread thread";
+"Relay.Threads.UnreadThreads_any" = "%@ unread threads";
+"Relay.Threads.WithMentions" = "with mentions";
+"Relay.Threads.UnreadState" = "Unread";
+"Relay.Threads.LastReply" = "Last reply %@";
+"Relay.Accessibility.UnreadReplies" = "Unread replies";
+"Relay.Accessibility.MenuHint" = "Opens a list of options";

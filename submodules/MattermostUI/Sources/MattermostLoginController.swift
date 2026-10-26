@@ -228,7 +228,7 @@ public final class MattermostLoginController: NavigationController {
             text = self.strings.Relay_Login_CredentialsText(host).string
         }
         if server.allowsPasswordLogin {
-            fields.append(MattermostAuthField(id: "login", kind: .loginId, placeholder: server.loginIdPlaceholder, text: prefilledLoginId))
+            fields.append(MattermostAuthField(id: "login", kind: .loginId, placeholder: self.strings.relayLoginIdPlaceholder(server), text: prefilledLoginId))
             fields.append(MattermostAuthField(id: "password", kind: .password, placeholder: self.strings.Relay_Login_Password, text: ""))
         } else if server.ssoProviders.isEmpty {
             text = self.strings.Relay_Login_NoSupportedLogin

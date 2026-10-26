@@ -66,6 +66,33 @@ extension PresentationStrings {
         }
     }
 
+    /// The login id field's placeholder, as the official clients word it (`MattermostServerDescription.loginIdPlaceholder`
+    /// is the English original, kept for logs).
+    func relayLoginIdPlaceholder(_ server: MattermostServerDescription) -> String {
+        var kinds: [String] = []
+        if server.allowsEmailLogin {
+            kinds.append(self.Relay_Login_Id_Email)
+        }
+        if server.allowsUsernameLogin {
+            kinds.append(kinds.isEmpty ? self.Relay_Login_Id_Username : self.Relay_Login_Id_UsernameInList)
+        }
+        if server.allowsLdapLogin {
+            // The server's own name for the field comes as configured (its language).
+            let field = server.config["LdapLoginFieldName"].flatMap { $0.isEmpty ? nil : $0 } ?? self.Relay_Login_Id_Ldap
+            kinds.append(field)
+        }
+        switch kinds.count {
+        case 0:
+            return self.Relay_Login_Id_EmailOrUsername
+        case 1:
+            return kinds[0]
+        case 2:
+            return self.Relay_Login_Id_Two(kinds[0], kinds[1]).string
+        default:
+            return self.Relay_Login_Id_Three(kinds[0], kinds[1], kinds[2]).string
+        }
+    }
+
     func relaySSOTitle(_ provider: SSOProvider, config: ClientConfig) -> String {
         switch provider {
         case .gitlab:

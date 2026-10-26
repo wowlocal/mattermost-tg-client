@@ -3214,8 +3214,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                                 storyCategory = UNNotificationCategory(identifier: "st", actions: [], intentIdentifiers: [], hiddenPreviewsBodyPlaceholder: hiddenStoryContentString, options: options)
                                 storyReactionCategory = UNNotificationCategory(identifier: "str", actions: [], intentIdentifiers: [], hiddenPreviewsBodyPlaceholder: hiddenStoryReactionContentString, options: options)
                                 
-                                // MATTERMOST: Reply and Mark as Read on Mattermost message notifications.
-                                let mattermostCategories = MattermostSync.notificationCategories(replyTitle: replyString, replyPlaceholder: messagePlaceholderString, markReadTitle: "Mark as Read", hiddenPreviewsBodyPlaceholder: hiddenContentString, options: carPlayOptions)
+                                // MATTERMOST: Reply and Mark as Read on Mattermost message notifications (the strings' "Mark as Read", 4C).
+                                let mattermostCategories = MattermostSync.notificationCategories(replyTitle: replyString, replyPlaceholder: messagePlaceholderString, markReadTitle: defaultPresentationStrings.ChatList_Context_MarkAsRead, hiddenPreviewsBodyPlaceholder: hiddenContentString, options: carPlayOptions)
                                 UNUserNotificationCenter.current().setNotificationCategories(Set(mattermostCategories).union([
                                     unknownMessageCategory,
                                     repliableMessageCategory,

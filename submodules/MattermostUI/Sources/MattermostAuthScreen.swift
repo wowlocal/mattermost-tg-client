@@ -238,15 +238,30 @@ final class MattermostAuthScreen: ViewController, MattermostDebugDrivable {
     }
 }
 
+/// Text sizes of the login screens: Telegram's own login keeps fixed sizes, Relay's follow the app's text size
+/// (Settings → Appearance → Text Size, or the system's Dynamic Type while "Use System Text Size" is on), so nothing
+/// is too small to read at the largest sizes. 1.0 at the default size (17 pt).
+struct MattermostAuthTextScale {
+    let factor: CGFloat
+
+    init(presentationData: PresentationData) {
+        self.factor = max(1.0, presentationData.listsFontSize.baseDisplaySize / 17.0)
+    }
+
+    func size(_ base: CGFloat) -> CGFloat {
+        return floor(base * self.factor)
+    }
+}
+
 private final class MattermostDividerNode: ASDisplayNode {
     private let titleNode: ImmediateTextNode
     private let leftLineNode: ASDisplayNode
     private let rightLineNode: ASDisplayNode
 
-    init(theme: PresentationTheme) {
+    init(theme: PresentationTheme, strings: PresentationStrings, textScale: MattermostAuthTextScale) {
         self.titleNode = ImmediateTextNode()
         self.titleNode.maximumNumberOfLines = 1
-        self.titleNode.attributedText = NSAttributedString(string: "or", font: Font.regular(15.0), textColor: theme.list.itemSecondaryTextColor)
+        self.titleNode.attributedText = NSAttributedString(string: strings.Relay_Login_Or, font: Font.regular(textScale.size(15.0)), textColor: theme.list.itemSecondaryTextColor)
         self.leftLineNode = ASDisplayNode()
         self.leftLineNode.backgroundColor = theme.list.itemPlainSeparatorColor
         self.rightLineNode = ASDisplayNode()
@@ -259,9 +274,9 @@ private final class MattermostDividerNode: ASDisplayNode {
     }
 
     func updateLayout(width: CGFloat) -> CGSize {
-        let height: CGFloat = 36.0
         let spacing: CGFloat = 10.0
-        let titleSize = self.titleNode.updateLayout(CGSize(width: width, height: height))
+        let titleSize = self.titleNode.updateLayout(CGSize(width: width, height: 100.0))
+        let height: CGFloat = max(36.0, titleSize.height + 12.0)
         let titleFrame = CGRect(origin: CGPoint(x: floor((width - titleSize.width) / 2.0), y: floor((height - titleSize.height) / 2.0)), size: titleSize)
         self.titleNode.frame = titleFrame
         let lineY = floorToScreenPixels(height / 2.0)
@@ -285,6 +300,7 @@ final class MattermostAuthScreenNode: ASDisplayNode, UITextFieldDelegate {
     private let dividerNode: MattermostDividerNode?
     private let alternativeButtons: [SolidRoundedButtonNode]
     private let footerNode: ImmediateTextNode
+    private let textScale: MattermostAuthTextScale
 
     var primaryAction: (() -> Void)?
     var alternativeAction: ((String) -> Void)?
@@ -315,20 +331,24 @@ final class MattermostAuthScreenNode: ASDisplayNode, UITextFieldDelegate {
         self.presentationData = presentationData
         self.content = content
         let theme = presentationData.theme
+        let textScale = MattermostAuthTextScale(presentationData: presentationData)
+        self.textScale = textScale
 
         self.scrollNode = ASScrollNode()
 
         self.logoNode = ASImageNode()
         self.logoNode.displaysAsynchronously = false
         self.logoNode.image = content.showsLogo ? RelayBranding.logoImage(size: 76.0) : nil
-        self.logoNode.isAccessibilityElement = true
+        // The credentials screen has no logo: no empty "Relay" image for VoiceOver either.
+        self.logoNode.isAccessibilityElement = content.showsLogo
         self.logoNode.accessibilityLabel = RelayBranding.appName
         self.logoNode.accessibilityTraits = .image
 
         self.titleNode = ImmediateTextNode()
-        self.titleNode.maximumNumberOfLines = 2
+        // Wraps rather than truncates (large text sizes, longer languages).
+        self.titleNode.maximumNumberOfLines = 0
         self.titleNode.textAlignment = .center
-        self.titleNode.attributedText = NSAttributedString(string: content.title, font: Font.bold(28.0), textColor: theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
+        self.titleNode.attributedText = NSAttributedString(string: content.title, font: Font.bold(textScale.size(28.0)), textColor: theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
         self.titleNode.isAccessibilityElement = true
         self.titleNode.accessibilityLabel = content.title
         self.titleNode.accessibilityTraits = .header
@@ -337,7 +357,7 @@ final class MattermostAuthScreenNode: ASDisplayNode, UITextFieldDelegate {
         self.textNode.maximumNumberOfLines = 0
         self.textNode.textAlignment = .center
         self.textNode.lineSpacing = 0.1
-        self.textNode.attributedText = NSAttributedString(string: content.text, font: Font.regular(16.0), textColor: theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
+        self.textNode.attributedText = NSAttributedString(string: content.text, font: Font.regular(textScale.size(16.0)), textColor: theme.list.itemPrimaryTextColor, paragraphAlignment: .center)
         self.textNode.isAccessibilityElement = true
         self.textNode.accessibilityLabel = content.text
 
@@ -357,8 +377,10 @@ final class MattermostAuthScreenNode: ASDisplayNode, UITextFieldDelegate {
         self.fieldNodes = fieldNodes
 
         let buttonTheme = SolidRoundedButtonTheme(theme: theme)
+        let buttonFontSize = textScale.size(17.0)
+        let buttonHeight = max(50.0, ceil(buttonFontSize * 2.9))
         if let primaryTitle = content.primaryTitle {
-            let button = SolidRoundedButtonNode(title: primaryTitle, theme: buttonTheme, glass: false, height: 50.0, cornerRadius: 25.0)
+            let button = SolidRoundedButtonNode(title: primaryTitle, theme: buttonTheme, glass: false, fontSize: buttonFontSize, height: buttonHeight, cornerRadius: buttonHeight / 2.0)
             button.progressType = .embedded
             button.accessibilityLabel = primaryTitle
             self.primaryButton = button
@@ -367,10 +389,10 @@ final class MattermostAuthScreenNode: ASDisplayNode, UITextFieldDelegate {
         }
 
         if !content.alternatives.isEmpty {
-            self.dividerNode = content.primaryTitle != nil ? MattermostDividerNode(theme: theme) : nil
+            self.dividerNode = content.primaryTitle != nil ? MattermostDividerNode(theme: theme, strings: presentationData.strings, textScale: textScale) : nil
             let alternativeTheme = SolidRoundedButtonTheme(backgroundColor: theme.list.itemInputField.backgroundColor, foregroundColor: theme.list.itemAccentColor)
             self.alternativeButtons = content.alternatives.map { alternative in
-                let button = SolidRoundedButtonNode(title: alternative.title, theme: alternativeTheme, glass: false, font: .regular, height: 50.0, cornerRadius: 25.0)
+                let button = SolidRoundedButtonNode(title: alternative.title, theme: alternativeTheme, glass: false, font: .regular, fontSize: buttonFontSize, height: buttonHeight, cornerRadius: buttonHeight / 2.0)
                 button.accessibilityLabel = alternative.title
                 return button
             }
@@ -382,7 +404,7 @@ final class MattermostAuthScreenNode: ASDisplayNode, UITextFieldDelegate {
         self.footerNode = ImmediateTextNode()
         self.footerNode.maximumNumberOfLines = 0
         self.footerNode.textAlignment = .center
-        self.footerNode.attributedText = content.footer.flatMap { NSAttributedString(string: $0, font: Font.regular(13.0), textColor: theme.list.itemSecondaryTextColor, paragraphAlignment: .center) }
+        self.footerNode.attributedText = content.footer.flatMap { NSAttributedString(string: $0, font: Font.regular(textScale.size(13.0)), textColor: theme.list.itemSecondaryTextColor, paragraphAlignment: .center) }
         self.footerNode.isAccessibilityElement = content.footer != nil
         self.footerNode.accessibilityLabel = content.footer
 
@@ -437,12 +459,14 @@ final class MattermostAuthScreenNode: ASDisplayNode, UITextFieldDelegate {
 
         for (index, field) in self.content.fields.enumerated() {
             let textField = self.fieldNodes[index].textField
-            textField.font = Font.regular(17.0)
+            let fieldFont = Font.regular(self.textScale.size(17.0))
+            textField.font = fieldFont
             textField.textColor = theme.list.itemPrimaryTextColor
             textField.tintColor = theme.list.itemAccentColor
             textField.keyboardAppearance = theme.rootController.keyboardColor.keyboardAppearance
-            textField.attributedPlaceholder = NSAttributedString(string: field.placeholder, font: Font.regular(17.0), textColor: theme.list.itemInputField.placeholderColor)
-            textField.accessibilityLabel = field.placeholder
+            textField.attributedPlaceholder = NSAttributedString(string: field.placeholder, font: fieldFont, textColor: theme.list.itemInputField.placeholderColor)
+            // The server field's placeholder is an example address ("chat.example.com"), not a name for the field.
+            textField.accessibilityLabel = field.kind == .serverAddress ? self.presentationData.strings.Relay_Login_ServerAddress : field.placeholder
             textField.autocorrectionType = .no
             textField.autocapitalizationType = .none
             textField.spellCheckingType = .no
@@ -498,6 +522,8 @@ final class MattermostAuthScreenNode: ASDisplayNode, UITextFieldDelegate {
         if let id = id, let index = self.content.fields.firstIndex(where: { $0.id == id }) {
             self.fieldBackgroundNodes[index].layer.addShakeAnimation()
             self.fieldNodes[index].layer.addShakeAnimation()
+            // The shake is all a sighted user gets for an empty field: VoiceOver moves to the field instead.
+            UIAccessibility.post(notification: .layoutChanged, argument: self.fieldNodes[index].textField)
         }
     }
 
@@ -541,7 +567,7 @@ final class MattermostAuthScreenNode: ASDisplayNode, UITextFieldDelegate {
         let logoSize = self.content.showsLogo ? CGSize(width: 76.0, height: 76.0) : CGSize()
         let titleSize = self.titleNode.updateLayout(CGSize(width: contentWidth, height: .greatestFiniteMagnitude))
         let textSize = self.textNode.updateLayout(CGSize(width: contentWidth, height: .greatestFiniteMagnitude))
-        let fieldHeight: CGFloat = 52.0
+        let fieldHeight: CGFloat = max(52.0, ceil(Font.regular(self.textScale.size(17.0)).lineHeight) + 30.0)
         let fieldSpacing: CGFloat = 12.0
         let primaryHeight = self.primaryButton?.updateLayout(width: contentWidth, transition: transition) ?? 0.0
         let dividerSize = self.dividerNode?.updateLayout(width: contentWidth) ?? CGSize()
