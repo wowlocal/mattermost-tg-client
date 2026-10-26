@@ -1413,7 +1413,13 @@ public final class EmojiStatusSelectionController: ViewController {
                 case let .backgroundSelection(completion):
                     completion(item?.itemFile?._parse())
                 case let .customStatusSelection(completion):
-                    completion(item?.itemFile?._parse(), nil)
+                    if MattermostBackend.isEnabled, item?.itemFile == nil, case let .staticEmoji(emoji)? = item?.content {
+                        // MATTERMOST: a Unicode emoji for a Mattermost custom status (Phase 3F): a file without an
+                        // id whose `.CustomEmoji` alt is the emoji.
+                        completion(TelegramMediaFile(fileId: EngineMedia.Id(namespace: Namespaces.Media.CloudFile, id: 0), partialReference: nil, resource: LocalFileMediaResource(fileId: 0), previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil, mimeType: "image/webp", size: nil, attributes: [.CustomEmoji(isPremium: false, isSingleColor: false, alt: emoji, packReference: nil)], alternativeRepresentations: []), nil)
+                    } else {
+                        completion(item?.itemFile?._parse(), nil)
+                    }
                 case let .quickReactionSelection(completion):
                     if let item = item, let itemFile = item.itemFile {
                         var selectedReaction: MessageReaction.Reaction?

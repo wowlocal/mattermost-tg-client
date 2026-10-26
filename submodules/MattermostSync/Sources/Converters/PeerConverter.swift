@@ -36,7 +36,7 @@ enum PeerConverter {
             botInfo: user.isBot ? BotUserInfo(flags: [.hasAccessToChatHistory], inlinePlaceholder: nil) : nil,
             restrictionInfo: nil,
             flags: [],
-            emojiStatus: nil,
+            emojiStatus: PeerConverter.customStatusEmoji(user),
             usernames: [],
             storiesHidden: nil,
             nameColor: nil,
@@ -89,6 +89,26 @@ enum PeerConverter {
 
     static let archivedChannelRights = TelegramChatBannedRights(flags: [.banSendText, .banSendMedia, .banSendStickers, .banSendGifs, .banSendInline, .banSendPolls, .banSendPhotos, .banSendVideos, .banSendInstantVideos, .banSendMusic, .banSendVoice, .banSendFiles, .banSendReactions, .banPinMessages, .banChangeInfo, .banAddMembers], untilDate: Int32.max)
 
+    /// Phase 3F: the custom status's emoji in Telegram's emoji status slot (next to the name in the chat list, chat
+    /// title and profile). The emoji is the locally rendered static image of the reaction list (`MattermostReactionImages`;
+    /// a text-only status shows Mattermost's default 💬); its file must be stored (`customStatusEmojiFile`). Expired
+    /// statuses are left out (Mattermost doesn't announce the expiry; `scheduleCustomStatusExpiry` rewrites the user).
+    static func customStatusEmoji(_ user: User, now: Date = Date()) -> PeerEmojiStatus? {
+        guard let file = self.customStatusEmojiFile(user, now: now), let custom = user.customStatus else {
+            return nil
+        }
+        let expiration = custom.expiryDate.map { Int32(clamping: Int64($0.timeIntervalSince1970)) }
+        return PeerEmojiStatus(content: .emoji(fileId: file.fileId.id), expirationDate: expiration)
+    }
+
+    static func customStatusEmojiFile(_ user: User, now: Date = Date()) -> TelegramMediaFile? {
+        guard let custom = user.customStatus, !custom.isEmpty, !custom.isExpired(at: now) else {
+            return nil
+        }
+        let name = custom.emoji.isEmpty ? CustomStatusRules.defaultEmoji : custom.emoji
+        return MattermostReactionImages.file(for: MattermostCustomStatus.displayEmoji(name: name))
+    }
+
     static func presence(status: UserStatus.Status, lastActivityAt: Int64, dndEndTime: Int64?, now: Date) -> TelegramUserPresence {
         let mapped = PresenceMapper.presence(
             status: MattermostUserStatus(apiValue: status.rawValue),
@@ -98,15 +118,18 @@ enum PeerConverter {
         )
         // Mattermost refreshes statuses by events; keep an online user online until told otherwise.
         let onlineValidity: Int32 = 24 * 60 * 60
+        // Phase 3F: away and do not disturb are marked, so the presence texts say so.
+        let mark: MattermostPresenceStatus? = mapped.isDoNotDisturb ? .doNotDisturb : (mapped.isAway ? .away : nil)
+        let until = mapped.isDoNotDisturb ? mapped.doNotDisturbUntil : nil
         switch mapped.state {
         case .online:
-            return TelegramUserPresence(status: .present(until: Int32(clamping: Int64(now.timeIntervalSince1970) + Int64(onlineValidity))), lastActivity: 0)
+            return TelegramUserPresence(status: .present(until: Int32(clamping: Int64(now.timeIntervalSince1970) + Int64(onlineValidity))), lastActivity: 0, mattermostStatus: mark, mattermostStatusUntil: until)
         case .recently:
-            return TelegramUserPresence(status: .recently(isHidden: false), lastActivity: 0)
+            return TelegramUserPresence(status: .recently(isHidden: false), lastActivity: 0, mattermostStatus: mark, mattermostStatusUntil: until)
         case let .lastSeen(at):
-            return TelegramUserPresence(status: .present(until: at), lastActivity: at)
+            return TelegramUserPresence(status: .present(until: at), lastActivity: at, mattermostStatus: mark, mattermostStatusUntil: until)
         case .unknown:
-            return TelegramUserPresence(status: .none, lastActivity: 0)
+            return TelegramUserPresence(status: .none, lastActivity: 0, mattermostStatus: mark, mattermostStatusUntil: until)
         }
     }
 

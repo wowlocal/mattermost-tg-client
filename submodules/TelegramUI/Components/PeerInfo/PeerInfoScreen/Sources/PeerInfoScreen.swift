@@ -195,6 +195,10 @@ enum PeerInfoSettingsSection {
     case about // MATTERMOST: About Relay
     case mattermostMentions // MATTERMOST: Recent Mentions (Phase 3C)
     case mattermostSavedPosts // MATTERMOST: Saved Posts (Phase 3C)
+    case mattermostStatus // MATTERMOST: Status (Phase 3F)
+    case mattermostCustomStatus // MATTERMOST: Custom Status (Phase 3F)
+    case mattermostUsername // MATTERMOST: Edit Profile → Username (Phase 3F)
+    case mattermostEmail // MATTERMOST: Edit Profile → Email (Phase 3F)
 }
 
 enum PeerInfoReportType {
@@ -1617,6 +1621,10 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                         strongSelf.headerNode.navigationButtonContainer.performAction?(.cancel, nil, nil)
                         return
                     }
+                    if MattermostBackend.isEnabled, strongSelf.isSettings || strongSelf.isMyProfile, case .user = data.peer { // MATTERMOST: Mattermost profile fields (Phase 3F)
+                        strongSelf.mattermostSaveProfileEdits()
+                        return
+                    }
                     if case let .user(peer) = data.peer {
                         if strongSelf.isSettings || strongSelf.isMyProfile, let cachedData = data.cachedData as? CachedUserData {
                             let firstName = strongSelf.headerNode.editingContentNode.editingTextForKey(.firstName) ?? ""
@@ -2077,7 +2085,8 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                 return data?.hasSecretValues ?? false
             }
                         
-            screenData = peerInfoScreenSettingsData(context: context, peerId: peerId, accountsAndPeers: self.accountsAndPeers.get(), activeSessionsContextAndCount: self.activeSessionsContextAndCount.get(), notificationExceptions: self.notificationExceptions.get(), privacySettings: self.privacySettings.get(), archivedStickerPacks: self.archivedPacks.get(), hasPassport: hasPassport, starsContext: starsContext, tonContext: tonContext)
+            // MATTERMOST: re-rendered when the own status changes (Phase 3F).
+            screenData = mattermostSettingsScreenData(peerInfoScreenSettingsData(context: context, peerId: peerId, accountsAndPeers: self.accountsAndPeers.get(), activeSessionsContextAndCount: self.activeSessionsContextAndCount.get(), notificationExceptions: self.notificationExceptions.get(), privacySettings: self.privacySettings.get(), archivedStickerPacks: self.archivedPacks.get(), hasPassport: hasPassport, starsContext: starsContext, tonContext: tonContext), context: context)
             
             
             self.headerNode.displayCopyContextMenu = { [weak self] node, copyPhone, copyUsername in
@@ -2120,6 +2129,10 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             var previousTimestamp: Double?
             self.headerNode.displayPremiumIntro = { [weak self] sourceView, _, _, _ in
                 guard let strongSelf = self else {
+                    return
+                }
+                if MattermostBackend.isEnabled { // MATTERMOST: the status emoji is the custom status (Phase 3F)
+                    strongSelf.mattermostOpenCustomStatus()
                     return
                 }
                 let currentTimestamp = CACurrentMediaTime()
@@ -2192,6 +2205,9 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             var previousTimestamp: Double?
             self.headerNode.displayPremiumIntro = { [weak self] sourceView, peerStatus, emojiStatusFileAndPack, white in
                 guard let strongSelf = self, let peer = strongSelf.data?.peer else {
+                    return
+                }
+                if strongSelf.mattermostShowCustomStatus(peer: peer) { // MATTERMOST: a custom status (Phase 3F)
                     return
                 }
                 let currentTimestamp = CACurrentMediaTime()
@@ -7169,6 +7185,12 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
         let strings = self.presentationData.strings
         
         var items: [ContextMenuItem] = []
+        // MATTERMOST: the own status first (Phase 3F).
+        let statusItems = self.mattermostStatusMenuItems()
+        if !statusItems.isEmpty {
+            items.append(contentsOf: statusItems)
+            items.append(.separator)
+        }
         items.append(.action(ContextMenuActionItem(text: strings.Settings_AddAccount, icon: { theme in
             return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Add"), color: theme.contextMenu.primaryColor)
         }, action: { [weak self] _, f in

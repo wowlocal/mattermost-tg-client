@@ -742,7 +742,9 @@ extension PeerInfoScreenImpl {
                 }
             }
             let signal: Signal<UpdatePeerPhotoStatus, UploadPeerPhotoError>
-            if case .custom = mode {
+            if MattermostBackend.isEnabled, strongSelf.isSettings || strongSelf.isMyProfile { // MATTERMOST: DELETE /users/me/image (Phase 3F)
+                signal = mattermostRemoveAccountPhoto(context: strongSelf.context)
+            } else if case .custom = mode {
                 signal = strongSelf.context.engine.contacts.updateContactPhoto(peerId: strongSelf.avatarPeerId, resource: nil, videoResource: nil, videoStartTimestamp: nil, markup: nil, mode: .custom, mapResourceToAvatarSizes: { resource, representations in
                     return mapResourceToAvatarSizes(engine: strongSelf.context.engine, resource: resource, representations: representations)
                 })
@@ -837,7 +839,9 @@ extension PeerInfoScreenImpl {
         
         let signal: Signal<UpdatePeerPhotoStatus, UploadPeerPhotoError>
         if self.isSettings || self.isMyProfile {
-            if case .fallback = mode {
+            if MattermostBackend.isEnabled { // MATTERMOST: POST /users/me/image (Phase 3F)
+                signal = mattermostUploadAccountPhoto(context: self.context, image: image)
+            } else if case .fallback = mode {
                 signal = self.context.engine.accountData.updateFallbackPhoto(resource: EngineMediaResource(resource), videoResource: nil, videoStartTimestamp: nil, markup: nil, mapResourceToAvatarSizes: { resource, representations in
                     return mapResourceToAvatarSizes(engine: self.context.engine, resource: resource, representations: representations)
                 })
@@ -931,6 +935,10 @@ extension PeerInfoScreenImpl {
     }
         
     public func updateProfileVideo(_ image: UIImage, video: MediaEditorScreenImpl.MediaResult.VideoResult?, values: MediaEditorValues?, markup: UploadPeerPhotoMarkup?, mode: PeerInfoAvatarEditingMode, uploadStatus: Promise<PeerInfoAvatarUploadStatus>?) {
+        if MattermostBackend.isEnabled, self.isSettings || self.isMyProfile { // MATTERMOST: Mattermost pictures are stills (Phase 3F)
+            self.updateProfilePhoto(image, mode: mode, uploadStatus: uploadStatus)
+            return
+        }
         var uploadVideo = true
         if let _ = markup {
             if let data = self.context.currentAppConfiguration.with({ $0 }).data, let uploadVideoValue = data["upload_markup_video"] as? Bool, uploadVideoValue {

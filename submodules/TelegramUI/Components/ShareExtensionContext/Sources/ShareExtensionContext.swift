@@ -38,6 +38,8 @@ import ContextMenuScreen
 import NavigationBarImpl
 import ContextUI
 import ContextControllerImpl
+import MtProtoKit
+import MattermostSync
 
 private var installedSharedLogger = false
 
@@ -461,6 +463,9 @@ public class ShareRootControllerImpl {
                     )
                     |> mapToSignal { result -> Signal<(AccountRecordId, AccountStateManager, EnginePeer)?, NoError> in
                         if let result {
+                            if MattermostBackend.isEnabled { // MATTERMOST: the picker's avatars with the account's session (Phase 3F)
+                                MattermostShareExtension.prepareAccount(postbox: result.postbox, accountId: record.id, rootPath: rootPath)
+                            }
                             return result.postbox.transaction { transaction -> (AccountRecordId, AccountStateManager, EnginePeer)? in
                                 guard let peer = transaction.getPeer(result.accountPeerId) else {
                                     return nil
@@ -586,6 +591,10 @@ public class ShareRootControllerImpl {
                         let shareController = ShareController(environment: environment, currentContext: context, subject: .fromExternal(itemCount, { peerIds, threadIds, requireStars, additionalText, account, silently in
                             if let strongSelf = self, let inputItems = strongSelf.getExtensionContext()?.inputItems, !inputItems.isEmpty, !peerIds.isEmpty {
                                 let rawSignals = TGItemProviderSignals.itemSignals(forInputItems: inputItems)!
+                                // MATTERMOST: posts to Mattermost instead of Telegram's standalone uploads (Phase 3F).
+                                if MattermostBackend.isEnabled {
+                                    return mattermostShareExternalItems(rawSignals: rawSignals, account: account, rootPath: rootPath, peerIds: peerIds, threadIds: threadIds, comment: additionalText)
+                                }
                                 return preparedShareItems(postbox: account.stateManager.postbox, network: account.stateManager.network, to: peerIds[0], dataItems: rawSignals)
                                 |> map(Optional.init)
                                 |> `catch` { error -> Signal<PreparedShareItems?, ShareControllerError> in
@@ -627,7 +636,7 @@ public class ShareRootControllerImpl {
                             self?.getExtensionContext()?.completeRequest(returningItems: nil, completionHandler: nil)
                         }
                         
-                        var canShareToStory = true
+                        var canShareToStory = !MattermostBackend.isEnabled // MATTERMOST: no stories
                         var canSendInHighQuality = false
                         if let inputItems = self?.getExtensionContext()?.inputItems, inputItems.count == 1, let item = inputItems[0] as? NSExtensionItem, let attachments = item.attachments {
                             for attachment in attachments {
@@ -725,10 +734,21 @@ public class ShareRootControllerImpl {
                             }
                             strongSelf.currentShareController = shareController
                             strongSelf.mainWindow?.present(shareController, on: .root)
+                            #if DEBUG
+                            // MATTERMOST: debug builds only (Phase 3F). Simulator taps don't reach the extension's
+                            // windows, so `<root>/relay-debug/share-auto.json` names a chat; after a few seconds the
+                            // other app's items are posted there through what the Send button runs.
+                            if MattermostBackend.isEnabled, let inputItems = strongSelf.getExtensionContext()?.inputItems {
+                                mattermostShareDebugAutoSend(rootPath: rootPath, account: context, rawSignals: TGItemProviderSignals.itemSignals(forInputItems: inputItems) ?? [], dismiss: { [weak shareController] in
+                                    shareController?.dismiss()
+                                    self?.getExtensionContext()?.completeRequest(returningItems: nil, completionHandler: nil)
+                                })
+                            }
+                            #endif
                         }
                     }
                     
-                    if let strongSelf = self, let inputItems = strongSelf.getExtensionContext()?.inputItems, inputItems.count == 1, let item = inputItems[0] as? NSExtensionItem, let attachments = item.attachments {
+                    if !MattermostBackend.isEnabled, let strongSelf = self, let inputItems = strongSelf.getExtensionContext()?.inputItems, inputItems.count == 1, let item = inputItems[0] as? NSExtensionItem, let attachments = item.attachments { // MATTERMOST: no Telegram chat import
                         for attachment in attachments {
                             if attachment.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
                                 attachment.loadItem(forTypeIdentifier: UTType.fileURL.identifier, completionHandler: { result, error in
@@ -1419,3 +1439,106 @@ private func attemptChatImport(
         })
     })
 }
+
+// MATTERMOST: the other app's items (`TGItemProviderSignals`) shared to Mattermost chats (Phase 3F,
+// `MattermostShareExtension`): collected, then uploaded and posted with the account's session.
+private func mattermostShareExternalItems(rawSignals: [MTSignal], account: ShareControllerAccountContext, rootPath: String, peerIds: [EnginePeer.Id], threadIds: [EnginePeer.Id: Int64], comment: String) -> Signal<ShareControllerExternalStatus, ShareControllerError> {
+    var collected: Signal<[[String: Any]], NoError> = .single([])
+    for dataItem in rawSignals {
+        let values: Signal<[[String: Any]], NoError> = Signal { subscriber in
+            var items: [[String: Any]] = []
+            let disposable = dataItem.start(next: { value in
+                if let value = value as? [String: Any] {
+                    items.append(value)
+                }
+            }, error: { _ in
+                subscriber.putNext(items)
+                subscriber.putCompletion()
+            }, completed: {
+                subscriber.putNext(items)
+                subscriber.putCompletion()
+            })
+            return ActionDisposable {
+                disposable?.dispose()
+            }
+        }
+        collected = collected
+        |> mapToSignal { previous -> Signal<[[String: Any]], NoError> in
+            return values
+            |> map { items in
+                return previous + items
+            }
+        }
+    }
+    return .single(.preparing(true))
+    |> castError(ShareControllerError.self)
+    |> then(
+        collected
+        |> castError(ShareControllerError.self)
+        |> mapToSignal { items -> Signal<ShareControllerExternalStatus, ShareControllerError> in
+            let content = MattermostShareExtension.content(items: items)
+            return MattermostShareExtension.share(accountId: account.accountId, rootPath: rootPath, peerIds: peerIds, threadIds: threadIds, comment: comment, content: content)
+            |> mapError { error -> ShareControllerError in
+                if case let .fileTooBig(size) = error {
+                    return .fileTooBig(size)
+                }
+                return .generic
+            }
+            |> map { status -> ShareControllerExternalStatus in
+                switch status {
+                case .preparing:
+                    return .preparing(false)
+                case let .progress(value):
+                    return .progress(value)
+                case .done:
+                    return .done
+                }
+            }
+        }
+    )
+}
+
+#if DEBUG
+// MATTERMOST: debug builds only (Phase 3F). `{"peerId": <PeerId.toInt64()>, "comment": "…", "delay": 4}` in
+// `<root>/relay-debug/share-auto.json`: the request is removed, the items are shared to that chat with
+// `mattermostShareExternalItems` (the Send button's path), and the outcome goes to `share-result.json`.
+private func mattermostShareDebugAutoSend(rootPath: String, account: ShareControllerAccountContext, rawSignals: [MTSignal], dismiss: @escaping () -> Void) {
+    let directory = rootPath + "/relay-debug"
+    let requestPath = directory + "/share-auto.json"
+    guard let data = FileManager.default.contents(atPath: requestPath), let request = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], let peerIdValue = (request["peerId"] as? NSNumber)?.int64Value else {
+        return
+    }
+    try? FileManager.default.removeItem(atPath: requestPath)
+    let peerId = EnginePeer.Id(peerIdValue)
+    let started = CFAbsoluteTimeGetCurrent()
+    let writeResult: ([String: Any]) -> Void = { result in
+        var result = result
+        result["ms"] = Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
+        result["accountId"] = "\(account.accountId.int64)"
+        result["peerId"] = "\(peerIdValue)"
+        if let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: URL(fileURLWithPath: directory + "/share-result.json"))
+        }
+    }
+    Queue.mainQueue().after((request["delay"] as? Double) ?? 4.0, {
+        var statuses: [String] = []
+        let _ = (mattermostShareExternalItems(rawSignals: rawSignals, account: account, rootPath: rootPath, peerIds: [peerId], threadIds: [:], comment: (request["comment"] as? String) ?? "")
+        |> deliverOnMainQueue).start(next: { status in
+            switch status {
+            case let .preparing(long):
+                statuses.append("preparing(\(long))")
+            case let .progress(value):
+                statuses.append("progress(\(value))")
+            case .done:
+                statuses.append("done")
+            }
+        }, error: { error in
+            writeResult(["ok": false, "error": "\(error)", "statuses": statuses])
+            dismiss()
+        }, completed: {
+            writeResult(["ok": true, "statuses": statuses])
+            dismiss()
+        })
+    })
+}
+#endif

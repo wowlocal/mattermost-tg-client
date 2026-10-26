@@ -103,6 +103,7 @@ private final class NotificationsAndSoundsArguments {
 }
 
 private enum NotificationsAndSoundsSection: Int32 {
+    case mattermost = -1 // MATTERMOST: Push and Mentions (Phase 3F)
     case accounts
     case permission
     case categories
@@ -134,6 +135,10 @@ public enum NotificationsAndSoundsEntryTag: ItemListItemTag {
 }
 
 private enum NotificationsAndSoundsEntry: ItemListNodeEntry {
+    // MATTERMOST: the user's Mattermost notify props (Phase 3F, MattermostUI).
+    case mattermostHeader(PresentationTheme, String)
+    case mattermostPreferences(PresentationTheme, String)
+    
     case accountsHeader(PresentationTheme, String)
     case allAccounts(PresentationTheme, String, Bool)
     case accountsInfo(PresentationTheme, String)
@@ -169,6 +174,8 @@ private enum NotificationsAndSoundsEntry: ItemListNodeEntry {
     
     var section: ItemListSectionId {
         switch self {
+            case .mattermostHeader, .mattermostPreferences:
+                return NotificationsAndSoundsSection.mattermost.rawValue
             case .accountsHeader, .allAccounts, .accountsInfo:
                 return NotificationsAndSoundsSection.accounts.rawValue
             case .permissionInfo, .permissionEnable:
@@ -190,6 +197,10 @@ private enum NotificationsAndSoundsEntry: ItemListNodeEntry {
     
     var stableId: Int32 {
         switch self {
+            case .mattermostHeader:
+                return -2
+            case .mattermostPreferences:
+                return -1
             case .accountsHeader:
                 return 0
             case .allAccounts:
@@ -270,6 +281,18 @@ private enum NotificationsAndSoundsEntry: ItemListNodeEntry {
     
     static func ==(lhs: NotificationsAndSoundsEntry, rhs: NotificationsAndSoundsEntry) -> Bool {
         switch lhs {
+            case let .mattermostHeader(lhsTheme, lhsText):
+                if case let .mattermostHeader(rhsTheme, rhsText) = rhs, lhsTheme === rhsTheme, lhsText == rhsText {
+                    return true
+                } else {
+                    return false
+                }
+            case let .mattermostPreferences(lhsTheme, lhsText):
+                if case let .mattermostPreferences(rhsTheme, rhsText) = rhs, lhsTheme === rhsTheme, lhsText == rhsText {
+                    return true
+                } else {
+                    return false
+                }
             case let .accountsHeader(lhsTheme, lhsText):
                 if case let .accountsHeader(rhsTheme, rhsText) = rhs, lhsTheme === rhsTheme, lhsText == rhsText {
                     return true
@@ -430,6 +453,14 @@ private enum NotificationsAndSoundsEntry: ItemListNodeEntry {
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let arguments = arguments as! NotificationsAndSoundsArguments
         switch self {
+            case let .mattermostHeader(_, text):
+                return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
+            case let .mattermostPreferences(_, text):
+                return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: text, label: "", sectionId: self.section, style: .blocks, action: {
+                    if let controller = MattermostUIHooks.makeNotificationPreferencesController?(arguments.context) {
+                        arguments.pushController(controller)
+                    }
+                })
             case let .accountsHeader(_, text):
                 return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
             case let .allAccounts(_, text, value):
@@ -528,6 +559,12 @@ private func filteredGlobalSound(_ sound: PeerMessageSound) -> PeerMessageSound 
 
 private func notificationsAndSoundsEntries(authorizationStatus: AccessType, warningSuppressed: Bool, globalSettings: GlobalNotificationSettingsSet, inAppSettings: InAppNotificationSettings, exceptions: (users: NotificationExceptionMode, groups: NotificationExceptionMode, channels: NotificationExceptionMode, stories: NotificationExceptionMode), presentationData: PresentationData, hasMoreThanOneAccount: Bool) -> [NotificationsAndSoundsEntry] {
     var entries: [NotificationsAndSoundsEntry] = []
+    
+    // MATTERMOST: the server's push and mention settings come first (Phase 3F).
+    if MattermostUIHooks.makeNotificationPreferencesController != nil {
+        entries.append(.mattermostHeader(presentationData.theme, presentationData.strings.Relay_NotificationPrefs_EntryHeader))
+        entries.append(.mattermostPreferences(presentationData.theme, presentationData.strings.Relay_NotificationPrefs_Entry))
+    }
     
     if hasMoreThanOneAccount {
         entries.append(.accountsHeader(presentationData.theme, presentationData.strings.NotificationSettings_ShowNotificationsFromAccountsSection))

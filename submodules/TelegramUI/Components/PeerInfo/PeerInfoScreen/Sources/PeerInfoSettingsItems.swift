@@ -73,6 +73,11 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
         }))
     }
     
+    // MATTERMOST: the own status and custom status (Phase 3F, MattermostProfileSettings.swift).
+    if MattermostBackend.isEnabled {
+        items[.edit]!.append(contentsOf: mattermostSettingsStatusItems(context: context, presentationData: presentationData, interaction: interaction))
+    }
+    
     items[.edit]!.append(PeerInfoScreenActionItem(id: 2, text: setPhotoTitle, icon: UIImage(bundleImageName: "Settings/SetAvatar"), action: {
         interaction.openSettings(.avatar)
     }))
@@ -391,6 +396,10 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
 func settingsEditingItems(data: PeerInfoScreenData?, state: PeerInfoState, context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, isMyProfile: Bool) -> [(AnyHashable, [PeerInfoScreenItem])] {
     guard let data = data else {
         return []
+    }
+    // MATTERMOST: Mattermost's profile fields (Phase 3F, MattermostProfileSettings.swift).
+    if MattermostBackend.isEnabled {
+        return mattermostSettingsEditingItems(data: data, state: state, context: context, presentationData: presentationData, interaction: interaction)
     }
     
     enum Section: Int, CaseIterable {

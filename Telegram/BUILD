@@ -657,6 +657,24 @@ plist_fragment(
     ) + official_communication_notifications_fragment,
 )
 
+# MATTERMOST: the share extension on the simulator (Phase 3F): the app group (its container with the accounts and
+# the shared Keychain group with the session tokens), as NotificationServiceSimulatorEntitlements.
+plist_fragment(
+    name = "ShareSimulatorEntitlements",
+    extension = "entitlements",
+    template = """
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.{telegram_bundle_id}</string>
+    </array>
+    <key>application-identifier</key>
+    <string>{telegram_team_id}.{telegram_bundle_id}.Share</string>
+    """.format(
+        telegram_team_id = telegram_team_id,
+        telegram_bundle_id = telegram_bundle_id,
+    ),
+)
+
 genrule(
     name = "VersionInfoPlist",
     srcs = ["//:versions.json"],
@@ -1109,6 +1127,11 @@ ios_extension(
     provisioning_profile = select({
         ":disableProvisioningProfilesSetting": None,
         "//conditions:default": "@build_configuration//provisioning:Share.mobileprovision",
+    }),
+    # MATTERMOST: simulator only (see ShareSimulatorEntitlements).
+    entitlements = select({
+        ":disableProvisioningProfilesSetting": ":ShareSimulatorEntitlements.entitlements",
+        "//conditions:default": None,
     }),
     deps = [":ShareExtensionLib"],
     frameworks = [
