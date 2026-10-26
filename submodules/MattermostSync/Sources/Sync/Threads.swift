@@ -235,9 +235,36 @@ extension MattermostAccountSync {
         }
     }
 
+    /// The roots of the replies among `posts` get their reply count from `POST /posts/ids` (channel pages and
+    /// `since=` lists say 0 for every root), with the replies' authors in front of their latest repliers.
+    func refreshThreadRoots(channelId: String, posts: [Post]) async {
+        var repliesByRoot: [String: [Post]] = [:]
+        for post in posts where !post.rootId.isEmpty && post.deleteAt == 0 {
+            repliesByRoot[post.rootId, default: []].append(post)
+        }
+        if repliesByRoot.isEmpty {
+            return
+        }
+        var roots: [Post] = []
+        let rootIds = Array(repliesByRoot.keys)
+        for start in stride(from: 0, to: rootIds.count, by: 100) {
+            guard let chunk = try? await self.client.posts(ids: Array(rootIds[start ..< min(rootIds.count, start + 100)])) else {
+                return
+            }
+            roots.append(contentsOf: chunk)
+        }
+        await self.postbox.mmTransaction { transaction in
+            for root in roots where root.channelId == channelId && root.deleteAt == 0 {
+                let authors = (repliesByRoot[root.id] ?? []).sorted(by: { $0.createAt > $1.createAt }).map { $0.userId }
+                self.updateThreadRootSummary(channelId: channelId, rootPostId: root.id, replyCount: root.replyCount, latestUserIds: authors, mergingStoredUsers: true, transaction: transaction)
+            }
+        }
+    }
+
     /// Sets a root's "N replies" (count and the latest repliers' avatars, newest first). Channel pages carry no
-    /// participants, so these come from loaded threads and the threads list.
-    func updateThreadRootSummary(channelId: String, rootPostId: String, replyCount: Int64, latestUserIds: [String], transaction: Transaction) {
+    /// participants, so these come from loaded threads and the threads list. `mergingStoredUsers`: the given
+    /// users go in front of the stored latest repliers (they are only some of the thread's).
+    func updateThreadRootSummary(channelId: String, rootPostId: String, replyCount: Int64, latestUserIds: [String], mergingStoredUsers: Bool = false, transaction: Transaction) {
         guard let channelState = self.channelState(channelId), let entry = self.store.entries(channelId: channelId, postIds: [rootPostId])[rootPostId], !entry.isDeleted else {
             return
         }
@@ -253,6 +280,12 @@ extension MattermostAccountSync {
         let marker: PeerId? = self.isCollapsedThreads ? channelState.peerId : nil
         transaction.updateMessage(MessageId(peerId: channelState.peerId, namespace: Namespaces.Message.Cloud, id: entry.localId), update: { current in
             let existing = current.attributes.first(where: { $0 is ReplyThreadMessageAttribute }) as? ReplyThreadMessageAttribute
+            var latestUsers = latestUsers
+            if mergingStoredUsers, let existing = existing {
+                for peerId in existing.latestUsers where latestUsers.count < 3 && !latestUsers.contains(peerId) {
+                    latestUsers.append(peerId)
+                }
+            }
             if let existing = existing, Int64(existing.count) == replyCount, existing.latestUsers == latestUsers, existing.commentsPeerId == marker {
                 return .skip
             }

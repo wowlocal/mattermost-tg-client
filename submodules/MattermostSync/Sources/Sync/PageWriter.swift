@@ -185,6 +185,10 @@ extension MattermostAccountSync {
         context.authorOverride = { post in
             return overrides[post.id]
         }
+        let chatPeerId = context.chatPeerId
+        context.existingReplyThread = { localId in
+            return transaction.getMessage(MessageId(peerId: chatPeerId, namespace: Namespaces.Message.Cloud, id: localId))?.attributes.first(where: { $0 is ReplyThreadMessageAttribute }) as? ReplyThreadMessageAttribute
+        }
         var messages: [StoreMessage] = []
         var customEmojiFiles: [Int64: TelegramMediaFile] = [:]
         var threadRoots: [String: String] = [:]

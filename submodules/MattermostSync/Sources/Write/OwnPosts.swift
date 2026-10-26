@@ -382,6 +382,7 @@ extension MattermostAccountSync {
 
     /// A new reply: one more on the root's reply counter, with the author first among the latest repliers.
     func bumpThreadRoot(of post: Post, transaction: Transaction) {
+        let marker: PeerId? = self.isCollapsedThreads ? self.channelState(post.channelId)?.peerId : nil
         guard !post.rootId.isEmpty, let channelState = self.channelState(post.channelId), let rootEntry = self.store.entries(channelId: post.channelId, postIds: [post.rootId])[post.rootId], !rootEntry.isDeleted else {
             return
         }
@@ -400,7 +401,10 @@ extension MattermostAccountSync {
                 latestUsers.removeAll(where: { $0 == authorPeerId })
                 latestUsers.insert(authorPeerId, at: 0)
             }
-            attributes.append(ReplyThreadMessageAttribute(count: count + 1, latestUsers: Array(latestUsers.prefix(3)), commentsPeerId: self.isCollapsedThreads ? channelState.peerId : nil, maxMessageId: nil, maxReadMessageId: nil))
+            // A reply carries its thread's reply count: use it when present, so a `thread_updated` that came first
+            // isn't counted twice.
+            let updatedCount = post.replyCount > 0 ? Int32(clamping: post.replyCount) : count + 1
+            attributes.append(ReplyThreadMessageAttribute(count: updatedCount, latestUsers: Array(latestUsers.prefix(3)), commentsPeerId: marker, maxMessageId: nil, maxReadMessageId: nil))
             return .update(StoreMessage.mmCopy(of: current, id: current.id, threadId: current.threadId, attributes: attributes))
         })
     }

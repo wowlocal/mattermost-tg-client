@@ -37,6 +37,9 @@ struct PostConversionContext {
     /// Collapsed reply threads (3B): replies don't count as unread or as mentions in their chat (their thread
     /// does), and roots with replies carry the "N replies" button (`ReplyThreadMessageAttribute.commentsPeerId`).
     var collapsedThreads: Bool = false
+    /// The stored reply summary of a root (by local id): channel pages and `since=` lists say `reply_count: 0` for
+    /// every root, so a root rewritten from them keeps what threads told us.
+    var existingReplyThread: (Int32) -> ReplyThreadMessageAttribute? = { _ in nil }
 }
 
 /// The messages of one post (one per mapped part, in part order) and the custom emoji files their text
@@ -83,9 +86,17 @@ enum PostConverter {
         // The primary message's extras: reply count, reactions, pinned flag.
         var primaryAttributes: [MessageAttribute] = []
         var primaryTags: MessageTags = []
-        if post.rootId.isEmpty && post.replyCount > 0 {
-            let latestUsers = (post.participants ?? []).prefix(3).compactMap { context.userPeerId($0.id) }
-            primaryAttributes.append(PostConverter.replyThreadAttribute(count: Int32(clamping: post.replyCount), latestUsers: Array(latestUsers), context: context))
+        if post.rootId.isEmpty {
+            let existing = localIds[0].flatMap { context.existingReplyThread($0) }
+            if post.replyCount > 0 {
+                var latestUsers = Array((post.participants ?? []).reversed().prefix(3).compactMap { context.userPeerId($0.id) })
+                if latestUsers.isEmpty, let existing = existing {
+                    latestUsers = existing.latestUsers
+                }
+                primaryAttributes.append(PostConverter.replyThreadAttribute(count: Int32(clamping: post.replyCount), latestUsers: latestUsers, context: context))
+            } else if let existing = existing, existing.count > 0 {
+                primaryAttributes.append(PostConverter.replyThreadAttribute(count: existing.count, latestUsers: existing.latestUsers, context: context))
+            }
         }
         if let reactions = reactionsAttribute(post.metadata?.reactions ?? [], context: context) {
             primaryAttributes.append(reactions)

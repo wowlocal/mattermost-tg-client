@@ -63,6 +63,22 @@ extension ChatControllerImpl {
     }
 }
 
+extension ChatControllerImpl {
+    /// Reply (menu, swipe) in a chat whose history shows root posts only: the reply would vanish from it, so the
+    /// message's thread opens with the composer instead, as Mattermost does. False otherwise.
+    func mattermostReplyInThread(messageId: EngineMessage.Id) -> Bool {
+        guard MattermostBackend.isEnabled, case let .peer(peerId) = self.chatLocation, MattermostBackend.mainHistoryTag(accountPeerId: self.context.account.peerId, peerId: peerId) != nil else {
+            return false
+        }
+        guard messageId.namespace == Namespaces.Message.Cloud, let message = self.chatDisplayNode.historyNode.messageInCurrentHistoryView(messageId)?._asMessage(), let navigationController = self.effectiveNavigationController else {
+            return false
+        }
+        let (root, isReply) = mattermostThreadRoot(of: message)
+        mattermostOpenThread(context: self.context, navigationController: navigationController, peerId: root.peerId, threadId: Int64(root.id), messageId: isReply ? message.id : nil, activateInput: true)
+        return true
+    }
+}
+
 /// View Thread (on replies shown inline) and Follow / Unfollow Thread for a message's context menu.
 func mattermostThreadContextMenuItems(context: AccountContext, chatLocation: ChatLocation, message: Message, controllerInteraction: ChatControllerInteraction, strings: PresentationStrings) -> [ContextMenuItem] {
     guard MattermostBackend.isEnabled, message.id.namespace == Namespaces.Message.Cloud else {

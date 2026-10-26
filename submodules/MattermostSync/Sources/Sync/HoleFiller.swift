@@ -264,6 +264,7 @@ extension MattermostAccountSync {
         let result = await self.postbox.mmTransaction { transaction in
             return self.write(page, transaction: transaction)
         }
+        await self.refreshThreadRoots(channelId: channelId, posts: run)
         MMLog.log("page \(channelId) \(cursor): \(ordered.count) posts (\(run.count) in run, \(extra.count) extra), inserted \(result.insertedCount), island \(result.islandRange.map { "\($0)" } ?? "-"), renumbered \(result.renumberedCount)")
         return result
     }
@@ -296,6 +297,7 @@ extension MattermostAccountSync {
         let result = await self.postbox.mmTransaction { transaction in
             return self.write(page, transaction: transaction)
         }
+        await self.refreshThreadRoots(channelId: channelId, posts: run)
         MMLog.log("around \(postId) in \(channelId): \(run.count) posts, island \(result.islandRange.map { "\($0)" } ?? "-"), renumbered \(result.renumberedCount)")
         return result
     }

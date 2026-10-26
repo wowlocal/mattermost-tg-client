@@ -7,6 +7,7 @@ import TelegramCore
 import AccountContext
 import ChatMessageItemView
 import ChatMessageItem
+import ChatControllerInteraction
 import MattermostSync
 import MattermostUI
 
@@ -197,6 +198,34 @@ extension TelegramRootController {
             }
             after(1.5) {
                 completion(found, found ? nil : "message not visible", [:])
+            }
+        case "goto", "reply":
+            // `goto`: jump to a post in the visible chat (`navigateToMessage`, as a reply header or the pinned bar
+            // does); `reply`: Reply on it (`setupReplyMessage`, as the menu and the swipe do).
+            guard let chat = self.relayTopChat, let postId = command["post"] as? String, let messageId = MattermostSync.debugMessageId(accountId: accountId, postId: postId) else {
+                completion(false, "no chat or message", [:])
+                return true
+            }
+            if action == "goto" {
+                chat.navigateToMessage(from: nil, to: .id(messageId, NavigateToMessageParams(timestamp: nil, quote: nil)))
+            } else {
+                chat.interfaceInteraction?.setupReplyMessage(messageId, nil, { _, f in f() })
+            }
+            after(2.0) {
+                completion(true, nil, ["messageId": Int(messageId.id)])
+            }
+        case "send":
+            // Types `text` into the visible chat's composer and sends it, as the send button does.
+            guard let chat = self.relayTopChat, let text = command["text"] as? String else {
+                completion(false, "no chat or text", [:])
+                return true
+            }
+            chat.updateTextInputState(ChatTextInputState(inputText: NSAttributedString(string: text)))
+            after(0.5) {
+                chat.chatDisplayNode.sendCurrentMessage()
+                after(2.5) {
+                    completion(true, nil, [:])
+                }
             }
         case "check-thread":
             guard let postId = command["post"] as? String else {

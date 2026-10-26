@@ -23,10 +23,18 @@ public func mattermostThreadLocation(peerId: EnginePeer.Id, threadId: Int64) -> 
     return ChatReplyThreadMessage(peerId: peerId, threadId: threadId, channelMessageId: nil, isChannelPost: false, isForumPost: true, isMonoforumPost: false, maxMessage: nil, maxReadIncomingMessageId: nil, maxReadOutgoingMessageId: nil, unreadCount: 0, initialFilledHoles: IndexSet(), initialAnchor: .automatic, isNotAvailable: false)
 }
 
-/// Opens a Mattermost thread view, at `messageId` when given.
-public func mattermostOpenThread(context: AccountContext, navigationController: NavigationController, peerId: EnginePeer.Id, threadId: Int64, messageId: EngineMessage.Id?) {
+/// Opens a Mattermost thread view, at `messageId` when given, on top of the current screen (back returns to the
+/// channel). Telegram would switch an open chat of the same peer to a forum thread in place; only an open view of
+/// this very thread is reused.
+public func mattermostOpenThread(context: AccountContext, navigationController: NavigationController, peerId: EnginePeer.Id, threadId: Int64, messageId: EngineMessage.Id?, activateInput: Bool = false) {
     let subject: ChatControllerSubject? = messageId.map { .message(id: .id($0), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil, setupReply: false) }
-    context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .replyThread(mattermostThreadLocation(peerId: peerId, threadId: threadId)), subject: subject, keepStack: .always))
+    let isOpen = navigationController.viewControllers.contains(where: { controller in
+        guard let chat = controller as? ChatController, case let .replyThread(thread) = chat.chatLocation else {
+            return false
+        }
+        return thread.peerId == peerId && thread.threadId == threadId
+    })
+    context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .replyThread(mattermostThreadLocation(peerId: peerId, threadId: threadId)), subject: subject, activateInput: activateInput ? .text : nil, keepStack: .always, useExisting: isOpen))
 }
 
 private final class ThreadsArguments {

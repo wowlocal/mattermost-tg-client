@@ -116,6 +116,8 @@ extension MattermostAccountSync {
             self.applyServerReadState(channelId: channelId, transaction: transaction)
             return deleted.count + edited.count + fresh.count
         }
+        // Roots of new replies: their reply counts (the `since=` list says 0 for every root).
+        await self.refreshThreadRoots(channelId: channelId, posts: posts.filter { $0.createAt > since })
         if needsLatestPage.current {
             do {
                 try await self.loadPage(channelId: channelId, cursor: .latest, requestedRange: nil, resetReadState: true)

@@ -1700,6 +1700,11 @@ extension ChatControllerImpl {
                 return
             }
             
+            // MATTERMOST: with collapsed reply threads a reply opens the message's thread (`MattermostThreads.swift`).
+            if let messageId = messageId, strongSelf.mattermostReplyInThread(messageId: messageId) {
+                completion(.immediate, {})
+                return
+            }
             if let messageId = messageId {
                 let intrinsicCanSendMessagesHere = canSendMessagesToChat(strongSelf.presentationInterfaceState)
                 var canSendMessagesHere = intrinsicCanSendMessagesHere
