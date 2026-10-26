@@ -136,7 +136,9 @@ extension MattermostAccountSync {
             case let .range(start, end):
                 let requested = min(start.id, end.id) ... max(start.id, end.id)
                 let olderFirst = start.id >= end.id
-                if case let .tag(tag) = entry.space {
+                // Root posts (the main history with collapsed reply threads) page the main history like
+                // `.everywhere`: its fills clear the root tag space too.
+                if case let .tag(tag) = entry.space, tag != .mattermostRootPost {
                     if tag == .pinned {
                         // The pinned-message bar: Mattermost lists a channel's pinned posts in one call.
                         try await self.loadPinned(channelId: channelId, channelState: channelState)
@@ -406,7 +408,9 @@ extension MattermostAccountSync {
         MMLog.log("holes: files of \(channelId): \(seenFiles.count) file(s) in \(postIds.count) post(s) from \(page) search page(s), \(posts.count) post(s) and \(extra.count) root(s) loaded")
     }
 
-    /// Thread views (`threadId` = local id of the root): `GET /posts/{root}/thread`.
+    /// Thread views (`threadId` = local id of the root): the whole thread from `GET /posts/{root}/thread`, in
+    /// pages of `threadPageSize` from the root down (11.7 pages the thread; older servers return it at once and
+    /// say nothing about `has_next`). The thread's hole is then gone: new replies arrive live.
     private func fillThreadHole(channelId: String, channelState: ChannelState, threadId: Int64) async {
         let rootPostId: String? = await self.postbox.mmTransaction { _ in
             guard let localId = Int32(exactly: threadId), let entry = self.store.entries(channelId: channelId, fromLocalId: localId, ascending: true, limit: 1).first, entry.localId == localId else {
@@ -417,7 +421,22 @@ extension MattermostAccountSync {
         var posts: [Post] = []
         if let rootPostId = rootPostId {
             do {
-                posts = try await self.client.postThread(postId: rootPostId).orderedPosts
+                var seen = Set<String>()
+                var fromPost: Post?
+                var pages = 0
+                while pages < 100 {
+                    let options = PostThreadOptions(perPage: MattermostAccountSync.threadPageSize, fromPost: fromPost?.id, fromCreateAt: fromPost?.createAt, direction: .down)
+                    let list = try await self.client.postThread(postId: rootPostId, options: options)
+                    pages += 1
+                    let page = list.orderedPosts.filter { seen.insert($0.id).inserted }
+                    posts.append(contentsOf: page)
+                    let replies = page.filter { $0.id != rootPostId }
+                    guard list.hasNext == true, let newest = replies.max(by: { ($0.createAt, $0.id) < ($1.createAt, $1.id) }) else {
+                        break
+                    }
+                    fromPost = newest
+                }
+                MMLog.log("holes: thread \(rootPostId): \(posts.count) posts in \(pages) page(s)")
             } catch {
                 MMLog.log("holes: thread \(rootPostId) failed: \(error)")
                 return
@@ -429,11 +448,21 @@ extension MattermostAccountSync {
             if !posts.isEmpty {
                 self.write(PageWrite(channelId: channelId, kind: .singles, run: posts), transaction: transaction)
             }
+            if let rootPostId = rootPostId, !posts.isEmpty {
+                // The root's "N replies" with the latest repliers (channel pages carry no participants).
+                let replies = posts.filter { $0.id != rootPostId && $0.deleteAt == 0 }.sorted(by: { $0.createAt > $1.createAt })
+                self.updateThreadRootSummary(channelId: channelId, rootPostId: rootPostId, replyCount: Int64(replies.count), latestUserIds: replies.map { $0.userId }, transaction: transaction)
+            }
             // The whole thread is loaded (or the thread is unknown): nothing else to fill in its view.
             transaction.removeHole(peerId: peerId, threadId: threadId, namespace: Namespaces.Message.Cloud, space: .everywhere, range: 1 ... (Int32.max - 1))
         }
         MMLog.log("holes: thread \(threadId) of \(channelId): \(posts.count) posts")
     }
+}
+
+extension MattermostAccountSync {
+    /// Posts per page when loading a thread.
+    static let threadPageSize = 200
 }
 
 /// Drops the posts that share the page's outermost `create_at` when the page was cut by `per_page`.

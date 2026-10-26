@@ -34,10 +34,11 @@ extension MattermostAccountSync {
                 if self.channelState(channelId) == nil {
                     await self.refreshChannel(channelId)
                 } else {
+                    let mentionCount = self.memberMentionCount(member)
                     self.state.with { state in
                         state.channels[channelId]?.channel = item.channel
                         state.channels[channelId]?.member = member
-                        state.channels[channelId]?.mentionCount = Int32(clamping: member.mentionCount)
+                        state.channels[channelId]?.mentionCount = mentionCount
                     }
                 }
                 if self.channelState(channelId) != nil {

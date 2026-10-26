@@ -166,7 +166,7 @@ extension MattermostAccountSync {
             var rootId = ""
             if let reply = message.attributes.first(where: { $0 is ReplyMessageAttribute }) as? ReplyMessageAttribute, reply.messageId.peerId == messageId.peerId {
                 rootId = self.threadRootPostId(replyTarget: reply.messageId, transaction: transaction) ?? ""
-            } else if channelState.kind == .channel, let threadId = message.threadId, threadId != 1, let rootLocalId = Int32(exactly: threadId) {
+            } else if channelState.kind != .saved, let threadId = message.threadId, threadId != 1, let rootLocalId = Int32(exactly: threadId) {
                 rootId = self.postReference(for: MessageId(peerId: messageId.peerId, namespace: Namespaces.Message.Cloud, id: rootLocalId))?.postId ?? ""
             }
             let globallyUniqueId = message.globallyUniqueId ?? Int64(messageId.id)
@@ -352,20 +352,32 @@ extension MattermostAccountSync {
         }
     }
 
-    /// Posting marks the channel read in Mattermost.
+    /// Posting marks the channel read in Mattermost (with collapsed reply threads only a root post does: a reply
+    /// reads its thread).
     func markOwnPostRead(_ post: Post, transaction: Transaction) {
+        let isRoot = post.rootId.isEmpty
+        let marksRead = isRoot || !self.isCollapsedThreads
         self.state.with { state in
             guard var channelState = state.channels[post.channelId] else {
                 return
             }
             channelState.channel.lastPostAt = max(channelState.channel.lastPostAt, post.createAt)
             channelState.channel.totalMsgCount = max(channelState.channel.totalMsgCount, channelState.member.msgCount + 1)
-            channelState.member.msgCount = channelState.channel.totalMsgCount
-            channelState.member.lastViewedAt = max(channelState.member.lastViewedAt, post.createAt)
-            channelState.mentionCount = 0
+            if isRoot {
+                channelState.channel.lastRootPostAt = max(channelState.channel.lastRootPostAt, post.createAt)
+                channelState.channel.totalMsgCountRoot = max(channelState.channel.totalMsgCountRoot, channelState.member.msgCountRoot + 1)
+            }
+            if marksRead {
+                channelState.member.msgCount = channelState.channel.totalMsgCount
+                channelState.member.msgCountRoot = channelState.channel.totalMsgCountRoot
+                channelState.member.lastViewedAt = max(channelState.member.lastViewedAt, post.createAt)
+                channelState.mentionCount = 0
+            }
             state.channels[post.channelId] = channelState
         }
-        self.applyServerReadState(channelId: post.channelId, transaction: transaction)
+        if marksRead {
+            self.applyServerReadState(channelId: post.channelId, transaction: transaction)
+        }
     }
 
     /// A new reply: one more on the root's reply counter, with the author first among the latest repliers.
@@ -388,7 +400,7 @@ extension MattermostAccountSync {
                 latestUsers.removeAll(where: { $0 == authorPeerId })
                 latestUsers.insert(authorPeerId, at: 0)
             }
-            attributes.append(ReplyThreadMessageAttribute(count: count + 1, latestUsers: Array(latestUsers.prefix(3)), commentsPeerId: nil, maxMessageId: nil, maxReadMessageId: nil))
+            attributes.append(ReplyThreadMessageAttribute(count: count + 1, latestUsers: Array(latestUsers.prefix(3)), commentsPeerId: self.isCollapsedThreads ? channelState.peerId : nil, maxMessageId: nil, maxReadMessageId: nil))
             return .update(StoreMessage.mmCopy(of: current, id: current.id, threadId: current.threadId, attributes: attributes))
         })
     }

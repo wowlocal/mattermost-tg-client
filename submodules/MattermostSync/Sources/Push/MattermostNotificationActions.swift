@@ -259,7 +259,8 @@ extension MattermostSync {
         let peerId = channelState.peerId
         var threadId: Int64?
         var messageId: MessageId?
-        if channelState.kind == .channel, let rootId = target.replyRootId, let rootLocalId = await sync.notificationLocalId(postId: rootId, channelId: target.channelId) {
+        // A reply opens in its thread with collapsed reply threads, else in its chat (where it shows inline).
+        if channelState.kind != .saved, sync.isCollapsedThreads, let rootId = target.replyRootId, let rootLocalId = await sync.notificationLocalId(postId: rootId, channelId: target.channelId) {
             threadId = Int64(rootLocalId)
         }
         if let postId = target.postId, let localId = await sync.notificationLocalId(postId: postId, channelId: target.channelId) {
@@ -421,10 +422,11 @@ extension MattermostAccountSync {
     func refreshReadState(channelId: String) async {
         do {
             let member = try await self.client.channelMember(channelId: channelId)
+            let mentionCount = self.memberMentionCount(member)
             await self.postbox.mmTransaction { transaction in
                 self.state.with { state in
                     state.channels[channelId]?.member = member
-                    state.channels[channelId]?.mentionCount = Int32(clamping: member.mentionCount)
+                    state.channels[channelId]?.mentionCount = mentionCount
                 }
                 self.applyServerReadState(channelId: channelId, transaction: transaction)
             }

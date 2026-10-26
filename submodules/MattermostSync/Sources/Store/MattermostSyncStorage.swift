@@ -211,4 +211,8 @@ public final class MattermostSyncStore: MessageIdStore {
     public func threadReplies(rootPostIds: [String], channelId: String) -> [String: [MessageIdEntry]] {
         return self.attempt("threadReplies", [:]) { try self.base.threadReplies(rootPostIds: rootPostIds, channelId: channelId) }
     }
+
+    public func threadRootId(postId: String, channelId: String) -> String? {
+        return self.attempt("threadRootId", nil) { try self.base.threadRootId(postId: postId, channelId: channelId) }
+    }
 }

@@ -350,7 +350,7 @@ extension MattermostAccountSync {
             return newIdByOldId[id] ?? id
         }
         func remapThreadId(_ threadId: Int64?) -> Int64? {
-            guard let threadId = threadId, channelState.kind == .channel, threadId != 1, let id = Int32(exactly: threadId) else {
+            guard let threadId = threadId, channelState.kind != .saved, threadId != 1, let id = Int32(exactly: threadId) else {
                 return threadId
             }
             return Int64(remap(id))

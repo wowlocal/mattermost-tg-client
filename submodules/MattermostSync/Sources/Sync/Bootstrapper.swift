@@ -49,6 +49,10 @@ extension MattermostAccountSync {
         // 1. REST.
         let me = try await self.client.me()
         let preferences = try await self.client.preferences()
+        // Collapsed reply threads (3B): decided before anything is written, since read states and messages
+        // depend on it. Without the config (an old server), the last known server setting stays.
+        let collapsedThreadsSetting = (try? await self.client.clientConfig())?.collapsedThreads ?? self.state.with { $0.collapsedThreadsSetting }
+        let collapsedThreadsChanged = self.updateCollapsedThreads(setting: collapsedThreadsSetting, preferences: preferences)
         let teams = try await self.client.teams().filter { $0.deleteAt == 0 }
         let snapshot = try await self.loadChannels(teams: teams, categories: true)
 
@@ -139,6 +143,7 @@ extension MattermostAccountSync {
         MMLog.log("bootstrap: structure written in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms: \(teams.count) teams, \(included.count) chats, \(users.count) users, \(favoriteChannelIds.count) favorites")
 
         if !isFirstSync {
+            await self.finishCollapsedThreadsBootstrap(changed: collapsedThreadsChanged, isFirstSync: false)
             self.state.with { $0.newestPagesLoaded = true }
             MMLog.log("bootstrap: already synced before; catch-up follows")
             return
@@ -167,6 +172,7 @@ extension MattermostAccountSync {
             MMLog.log("bootstrap: \(failures.current) newest pages failed")
         }
 
+        await self.finishCollapsedThreadsBootstrap(changed: collapsedThreadsChanged, isFirstSync: true)
         self.state.with { $0.newestPagesLoaded = true }
 
         // 4. Live updates take over from here.
@@ -175,6 +181,27 @@ extension MattermostAccountSync {
             self.store.setCursor(MattermostCursorKey.bootstrapped, "1")
         }
         MMLog.log("bootstrap: done in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
+    }
+
+    /// After the bootstrap wrote its data: re-renders stored messages when collapsed reply threads changed while
+    /// the app was not running (or data from before 3B needs the root tags), publishes the state, loads threads.
+    func finishCollapsedThreadsBootstrap(changed: Bool, isFirstSync: Bool) async {
+        if isFirstSync {
+            // Everything was just written in the current state.
+            await self.postbox.mmTransaction { _ in
+                self.store.setCursor(MattermostAccountSync.threadLayoutCursor, MattermostAccountSync.threadLayoutVersion)
+            }
+        } else if changed {
+            await self.reapplyCollapsedThreads()
+        } else {
+            await self.upgradeThreadLayoutIfNeeded()
+        }
+        self.publishCollapsedThreads()
+        if self.isCollapsedThreads {
+            self.addTask(Task { [weak self] in
+                await self?.reloadAllThreads()
+            })
+        }
     }
 
     /// Runs `body` for every item with at most `limit` running at once.

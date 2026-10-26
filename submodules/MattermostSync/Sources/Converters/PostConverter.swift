@@ -34,6 +34,9 @@ struct PostConversionContext {
     var mediaId: (String) -> Int64
     /// The author shown instead of the poster (webhook and bot `override_username`), see `OverridePeers`.
     var authorOverride: (Post) -> PeerId? = { _ in nil }
+    /// Collapsed reply threads (3B): replies don't count as unread or as mentions in their chat (their thread
+    /// does), and roots with replies carry the "N replies" button (`ReplyThreadMessageAttribute.commentsPeerId`).
+    var collapsedThreads: Bool = false
 }
 
 /// The messages of one post (one per mapped part, in part order) and the custom emoji files their text
@@ -55,7 +58,7 @@ enum PostConverter {
         let authorId = context.authorOverride(post) ?? context.userPeerId(post.userId)
 
         // Threads: channel messages use thread 1 like Telegram's supergroups, replies the local id of their
-        // root; Saved Messages use the own peer id as thread; DMs have no threads.
+        // root (in DMs too, so their threads open as thread views); Saved Messages use the own peer id as thread.
         var threadId: Int64?
         switch context.kind {
         case .channel:
@@ -68,10 +71,10 @@ enum PostConverter {
         var commonAttributes: [MessageAttribute] = []
         if !post.rootId.isEmpty, let rootLocalId = context.localId(post.rootId) {
             let rootMessageId = MessageId(peerId: context.chatPeerId, namespace: Namespaces.Message.Cloud, id: rootLocalId)
-            if context.kind == .channel {
+            if context.kind != .saved {
                 threadId = Int64(rootLocalId)
             }
-            commonAttributes.append(ReplyMessageAttribute(messageId: rootMessageId, threadMessageId: context.kind == .channel ? rootMessageId : nil, quote: nil, isQuote: false, innerSubject: nil))
+            commonAttributes.append(ReplyMessageAttribute(messageId: rootMessageId, threadMessageId: context.kind != .saved ? rootMessageId : nil, quote: nil, isQuote: false, innerSubject: nil))
         }
         if post.editAt > 0 {
             commonAttributes.append(EditedMessageAttribute(date: mmSeconds(post.editAt), isHidden: false))
@@ -82,7 +85,7 @@ enum PostConverter {
         var primaryTags: MessageTags = []
         if post.rootId.isEmpty && post.replyCount > 0 {
             let latestUsers = (post.participants ?? []).prefix(3).compactMap { context.userPeerId($0.id) }
-            primaryAttributes.append(ReplyThreadMessageAttribute(count: Int32(clamping: post.replyCount), latestUsers: Array(latestUsers), commentsPeerId: nil, maxMessageId: nil, maxReadMessageId: nil))
+            primaryAttributes.append(PostConverter.replyThreadAttribute(count: Int32(clamping: post.replyCount), latestUsers: Array(latestUsers), context: context))
         }
         if let reactions = reactionsAttribute(post.metadata?.reactions ?? [], context: context) {
             primaryAttributes.append(reactions)
@@ -133,7 +136,9 @@ enum PostConverter {
             }
             // Mention badges only in channels: DMs and GMs show the unread count alone (Mattermost counts every
             // DM/GM message as a mention).
-            if isIncoming && context.showsMentionBadge && post.createAt > context.lastViewedAt && mentionsMe(formatted, kind: context.kind, ownUsername: context.ownUsername) {
+            // With collapsed reply threads a mention in a reply counts in its thread, not in the chat.
+            let countsInChat = !(context.collapsedThreads && !post.rootId.isEmpty)
+            if isIncoming && countsInChat && context.showsMentionBadge && post.createAt > context.lastViewedAt && mentionsMe(formatted, kind: context.kind, ownUsername: context.ownUsername) {
                 textTags.insert(.unseenPersonalMessage)
             }
 
@@ -171,6 +176,16 @@ enum PostConverter {
                 attributes.append(contentsOf: primaryAttributes)
                 tags.formUnion(primaryTags)
             }
+            // A root post (every part of it): the history of a chat with collapsed reply threads.
+            if post.rootId.isEmpty && context.kind != .saved {
+                tags.insert(.mattermostRootPost)
+            }
+            var messageFlags = flags
+            if isIncoming && (index != 0 || (context.collapsedThreads && !post.rootId.isEmpty)) {
+                // Mattermost counts a post once (the album's other messages don't count as unread), and with
+                // collapsed reply threads a reply counts in its thread only.
+                messageFlags.insert(.NotCountedAsUnread)
+            }
             result.messages.append(StoreMessage(
                 id: MessageId(peerId: context.chatPeerId, namespace: Namespaces.Message.Cloud, id: localId),
                 customStableId: nil,
@@ -178,8 +193,7 @@ enum PostConverter {
                 groupingKey: part.groupingKey,
                 threadId: threadId,
                 timestamp: mmSeconds(post.createAt),
-                // Mattermost counts a post once: the album's other messages don't count as unread.
-                flags: index == 0 || !isIncoming ? flags : [.Incoming, .NotCountedAsUnread],
+                flags: messageFlags,
                 tags: tags,
                 globalTags: [],
                 localTags: [],
@@ -191,6 +205,13 @@ enum PostConverter {
             ))
         }
         return result
+    }
+
+    /// The reply count and latest repliers of a root post ("N replies"). With collapsed reply threads on,
+    /// `commentsPeerId` is the chat itself: TelegramUI then shows the count as a button that opens the thread
+    /// (`hasCommentButton`) instead of the small count next to the time.
+    static func replyThreadAttribute(count: Int32, latestUsers: [PeerId], context: PostConversionContext) -> ReplyThreadMessageAttribute {
+        return ReplyThreadMessageAttribute(count: count, latestUsers: latestUsers, commentsPeerId: context.collapsedThreads ? context.chatPeerId : nil, maxMessageId: nil, maxReadMessageId: nil)
     }
 
     /// A system post as a service message (centered bubble): Telegram's custom-text action, with the users
@@ -362,7 +383,7 @@ enum PostConverter {
 
 extension StoreMessage {
     /// Rebuilds a stored message under a new id (renumbering) or with changed thread references.
-    static func mmCopy(of message: Message, id: MessageId, threadId: Int64?, attributes: [MessageAttribute]) -> StoreMessage {
+    static func mmCopy(of message: Message, id: MessageId, threadId: Int64?, attributes: [MessageAttribute], flags: StoreMessageFlags? = nil, tags: MessageTags? = nil) -> StoreMessage {
         return StoreMessage(
             id: id,
             customStableId: nil,
@@ -370,8 +391,8 @@ extension StoreMessage {
             groupingKey: message.groupingKey,
             threadId: threadId,
             timestamp: message.timestamp,
-            flags: StoreMessageFlags(message.flags),
-            tags: message.tags,
+            flags: flags ?? StoreMessageFlags(message.flags),
+            tags: tags ?? message.tags,
             globalTags: message.globalTags,
             localTags: message.localTags,
             forwardInfo: message.forwardInfo.flatMap(StoreMessageForwardInfo.init),

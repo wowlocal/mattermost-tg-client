@@ -290,6 +290,7 @@ extension MattermostAccountSync {
             return [
                 "chats": chats.sorted(by: { ($0["name"] as? String ?? "") < ($1["name"] as? String ?? "") }),
                 "totalUnreadMessages": Int(total.absoluteCounters.values.reduce(0, { $0 + $1.messageCount })),
+                "collapsedThreads": self.isCollapsedThreads,
                 "folders": self.state.with { $0.teams.map { $0.displayName } }
             ]
         }
