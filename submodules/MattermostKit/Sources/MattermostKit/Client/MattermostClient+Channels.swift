@@ -162,6 +162,91 @@ extension MattermostClient {
     }
 }
 
+// MARK: - Directory and channel management (Phase 3D-2)
+
+extension MattermostClient {
+    private struct TermBody: Encodable {
+        var term: String
+    }
+
+    /// `POST /teams/{team_id}/channels/search`: public channels of a team whose name or display name matches
+    /// `term` (members and non-members; archived channels are left out).
+    public func searchChannels(teamId: String, term: String) async throws -> [Channel] {
+        try await send(APIRequest.json(.post, apiPath("teams", teamId, "channels", "search"), body: TermBody(term: term)))
+    }
+
+    /// `POST /teams/{team_id}/channels/search_archived`: archived channels of a team matching `term` (the
+    /// public ones and the private ones the user is a member of).
+    public func searchArchivedChannels(teamId: String, term: String) async throws -> [Channel] {
+        try await send(APIRequest.json(.post, apiPath("teams", teamId, "channels", "search_archived"), body: TermBody(term: term)))
+    }
+
+    /// `GET /teams/{team_id}/channels/deleted`: archived public channels of a team (and the private ones the
+    /// user is a member of).
+    public func archivedChannels(teamId: String, page: Int? = nil, perPage: Int? = nil) async throws -> [Channel] {
+        var query = QueryBuilder()
+        query.add("page", page)
+        query.add("per_page", perPage)
+        return try await send(APIRequest(.get, apiPath("teams", teamId, "channels", "deleted"), query: query.items))
+    }
+
+    /// `GET /teams/{team_id}/channels/name/{channel_name}`: a channel by its URL name.
+    public func channel(teamId: String, name: String, includeDeleted: Bool = false) async throws -> Channel {
+        var query = QueryBuilder()
+        query.addFlag("include_deleted", includeDeleted)
+        return try await send(APIRequest(.get, apiPath("teams", teamId, "channels", "name", name), query: query.items))
+    }
+
+    /// `POST /channels/stats/member_count`: member counts of several channels (also for channels the user is
+    /// not a member of), keyed by channel id.
+    public func channelMemberCounts(channelIds: [String]) async throws -> [String: Int64] {
+        try await send(APIRequest.json(.post, "/channels/stats/member_count", body: channelIds))
+    }
+
+    /// `PUT /channels/{channel_id}/patch`: changes the given fields (nil fields are kept).
+    @discardableResult
+    public func patchChannel(id: String, patch: ChannelPatch) async throws -> Channel {
+        try await send(APIRequest.json(.put, apiPath("channels", id, "patch"), body: patch))
+    }
+
+    /// `DELETE /channels/{channel_id}`: archives a channel (members keep it, read-only).
+    public func archiveChannel(id: String) async throws {
+        try await sendIgnoringResponse(APIRequest(.delete, apiPath("channels", id)))
+    }
+
+    /// `POST /channels/{channel_id}/restore`: unarchives a channel.
+    @discardableResult
+    public func restoreChannel(id: String) async throws -> Channel {
+        try await send(APIRequest(.post, apiPath("channels", id, "restore")))
+    }
+
+    private struct PrivacyBody: Encodable {
+        var privacy: String
+    }
+
+    /// `PUT /channels/{channel_id}/privacy`: converts a channel to private (`.privateChannel`) or public.
+    @discardableResult
+    public func updateChannelPrivacy(id: String, type: ChannelType) async throws -> Channel {
+        try await send(APIRequest.json(.put, apiPath("channels", id, "privacy"), body: PrivacyBody(privacy: type.rawValue)))
+    }
+
+    private struct SchemeRolesBody: Encodable {
+        var schemeAdmin: Bool
+        var schemeUser: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case schemeAdmin = "scheme_admin"
+            case schemeUser = "scheme_user"
+        }
+    }
+
+    /// `PUT /channels/{channel_id}/members/{user_id}/schemeRoles`: makes a member a channel admin or a plain
+    /// member.
+    public func updateChannelMemberSchemeRoles(channelId: String, userId: String, isAdmin: Bool) async throws {
+        try await sendIgnoringResponse(APIRequest.json(.put, apiPath("channels", channelId, "members", userId, "schemeRoles"), body: SchemeRolesBody(schemeAdmin: isAdmin, schemeUser: true)))
+    }
+}
+
 // MARK: - Sidebar categories
 
 extension MattermostClient {

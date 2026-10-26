@@ -43,6 +43,12 @@ public enum WebSocketEventType: Sendable, Hashable, RawRepresentable {
     case openDialog
     case configChanged
     case licenseChanged
+    /// A role's permissions changed (system console, schemes).
+    case roleUpdated
+    /// The user's team roles changed.
+    case memberRoleUpdated
+    /// A channel got another scheme.
+    case channelSchemeUpdated
     case unknown(String)
 
     public init(rawValue: String) {
@@ -88,6 +94,9 @@ public enum WebSocketEventType: Sendable, Hashable, RawRepresentable {
         case "open_dialog": self = .openDialog
         case "config_changed": self = .configChanged
         case "license_changed": self = .licenseChanged
+        case "role_updated": self = .roleUpdated
+        case "memberrole_updated": self = .memberRoleUpdated
+        case "channel_scheme_updated": self = .channelSchemeUpdated
         default: self = .unknown(rawValue)
         }
     }
@@ -135,6 +144,9 @@ public enum WebSocketEventType: Sendable, Hashable, RawRepresentable {
         case .openDialog: return "open_dialog"
         case .configChanged: return "config_changed"
         case .licenseChanged: return "license_changed"
+        case .roleUpdated: return "role_updated"
+        case .memberRoleUpdated: return "memberrole_updated"
+        case .channelSchemeUpdated: return "channel_scheme_updated"
         case .unknown(let name): return name
         }
     }

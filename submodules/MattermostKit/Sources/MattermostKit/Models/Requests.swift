@@ -130,6 +130,52 @@ public struct ChannelDraft: Codable, Sendable, Equatable {
     }
 }
 
+/// Body of `PUT /channels/{channel_id}/patch`. Nil fields are left unchanged.
+public struct ChannelPatch: Codable, Sendable, Equatable {
+    public var displayName: String?
+    /// URL name.
+    public var name: String?
+    public var purpose: String?
+    public var header: String?
+
+    public init(displayName: String? = nil, name: String? = nil, purpose: String? = nil, header: String? = nil) {
+        self.displayName = displayName
+        self.name = name
+        self.purpose = purpose
+        self.header = header
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case displayName = "display_name"
+        case name, purpose, header
+    }
+}
+
+/// Query of `GET /users` (the user directory). Nil fields are omitted.
+public struct UserListOptions: Sendable, Equatable {
+    public var inTeamId: String?
+    public var notInTeamId: String?
+    public var inChannelId: String?
+    /// With `inTeamId`: the team's users who are not members of this channel.
+    public var notInChannelId: String?
+    public var active: Bool?
+    /// `""` (by username), `"last_activity_at"`, `"create_at"`, `"status"` (with `inChannelId`).
+    public var sort: String?
+    public var page: Int
+    public var perPage: Int
+
+    public init(inTeamId: String? = nil, notInTeamId: String? = nil, inChannelId: String? = nil, notInChannelId: String? = nil, active: Bool? = nil, sort: String? = nil, page: Int = 0, perPage: Int = 60) {
+        self.inTeamId = inTeamId
+        self.notInTeamId = notInTeamId
+        self.inChannelId = inChannelId
+        self.notInChannelId = notInChannelId
+        self.active = active
+        self.sort = sort
+        self.page = page
+        self.perPage = perPage
+    }
+}
+
 /// Body of `POST /teams/{team_id}/posts/search`.
 public struct PostSearchOptions: Codable, Sendable, Equatable {
     /// Search terms, including modifiers such as `from:` and `in:`.
