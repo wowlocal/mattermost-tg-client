@@ -59,7 +59,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | # | Workstream | Status |
 |---|---|---|
 | 2A | Write path: send (text, replies, files) via PendingMessageManager seam, edit, delete, reactions (+ reaction list), typing out, mute/favorite consumers, synthetic AppConfiguration (Phase 1 step 1) | Done (2026‑10‑26); screenshots `docs/research/phase2a-*.png` |
-| 2B | Login UI (server URL → password/SSO → MFA), root swap (Phase 1 step 13), Add server, logout, session expiry | Agent working (own worktree + simulator) |
+| 2B | Login UI (server URL → password/SSO → MFA), root swap (Phase 1 step 13), Add server, logout, session expiry | Done on branch `worktree-agent-a9d3edda1bc80d75a` (screenshots `docs/research/phase2b-*.png`); 2C agent merging into main |
 | 2C | Rendering gaps: multi-file posts (grouped messages), Slack-style attachments + interactive buttons/menus, webhook name/icon overrides, Mattermost service messages, custom emoji, channel member counts | Agent working (main checkout) |
 | 2D | Media tabs via file search, notification extension encodables, skip Telegram special user ids, ATS local-networking only, DM mention-badge decision; Devices → Mattermost sessions; remove "Auto-Login via Telegram"; Notifications/Reactions subtitle; theme carousel | Later |
 
@@ -116,3 +116,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   - Gaps: albums go out as one post per item (multi-file posts are 2C); no timed mute on Mattermost (any mute is indefinite); favorites order not pushed; upload file ids live in memory (restart between upload and post re-uploads); `pending_post_id` dedupe across restarts relies on the server's short pending-post cache; "delete for me" is local only; admins can't delete others' posts from the UI yet (no admin rights on peers); forwards are re-posted without attribution; only text typing is sent.
 
 - 2B asked to merge main (with 2A) into its branch before final checks. 2C started on main.
+- **Phase 2B done** (branch `worktree-agent-a9d3edda1bc80d75a`, contains main up to `ae224eb0`): MattermostUI login (server URL → credentials → MFA; SSO implemented but **unverified** — unlicensed Team Edition never reports GitLab SSO enabled), minimum server 11.7 (`ServerCompatibility.minimumVersion`), Add Account (distinct own-user PeerIds verified), logout (record, files, Keychain, server session), session expiry with re-login (same user keeps data; different user wipes after confirmation). Debug remote `tools/relay-remote.py` (`#if DEBUG` only) and `tools/mm-dev-auth.py` (MFA/TOTP/session revoke).
+  - Gaps: login strings are English literals (not in Relay.strings); Telegram's 3-account limit screen still applies; expired session shows "Connecting…"; Keychain tokens app-only (extensions need a shared access group).
+  - Dev server: MFA active for carol; dave's sessions revoked.
+- **Pre-release audit item (Phase 4):** confirm every `RELAY_DEBUG_*` hook, the debug remote and debug screens are compiled out of release builds (`#if DEBUG`), and remove `NSAllowsArbitraryLoads`.
