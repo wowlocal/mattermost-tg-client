@@ -117,8 +117,38 @@ extension MattermostAccountSync {
                 state.rolesLoaded = true
             }
             MMLog.log("roles: \(roles.count) roles for \(teamRoles.count) teams loaded")
+            await self.writeDirectMessageDeletePermission(systemRoles: me.roles)
         } catch {
             MMLog.log("roles: could not load the user's roles (\(error)); channel access unknown")
+        }
+    }
+
+    /// Phase 4G: a DM has no channel admins, so deleting the other person's posts there takes `delete_others_posts`
+    /// from the user's system roles (system admins). Telegram offers "delete for both" on an incoming message in a
+    /// private chat only with `LimitsConfiguration.canRemoveIncomingMessagesInPrivateChats`; it follows the permission.
+    func writeDirectMessageDeletePermission(systemRoles: String) async {
+        let roles = self.state.with { $0.roles }
+        var permissions = Set<String>()
+        for name in ChannelAccessRules.roleNames(systemRoles) {
+            if let role = roles[name] {
+                permissions.formUnion(role.permissions)
+            }
+        }
+        let canDelete = permissions.contains("delete_others_posts") || permissions.contains("manage_system")
+        let changed: Bool = await self.postbox.mmTransaction { transaction in
+            var limits = currentLimitsConfiguration(transaction: transaction)
+            let updated = limits.canRemoveIncomingMessagesInPrivateChats != canDelete || limits.maxMessageRevokeIntervalInPrivateChats != LimitsConfiguration.timeIntervalForever
+            guard updated else {
+                return false
+            }
+            limits.canRemoveIncomingMessagesInPrivateChats = canDelete
+            // Mattermost has no time limit on deleting one's own posts (Telegram's default is two days in DMs).
+            limits.maxMessageRevokeIntervalInPrivateChats = LimitsConfiguration.timeIntervalForever
+            transaction.setPreferencesEntry(key: PreferencesKeys.limitsConfiguration, value: PreferencesEntry(limits))
+            return true
+        }
+        if changed {
+            MMLog.log("roles: deleting others' posts in DMs \(canDelete ? "allowed" : "not allowed")")
         }
     }
 

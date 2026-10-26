@@ -1527,6 +1527,17 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                     } else {
                         result += chatMainPeer.displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder)
                     }
+                    // MATTERMOST: the status dot in words (online, away, do not disturb; Phase 4G for the dots of 4F).
+                    if MattermostBackend.isEnabled, !self.onlineIsVoiceChat, self.currentOnline == true {
+                        switch self.mattermostStatus {
+                        case .away:
+                            result += "\n\(item.presentationData.strings.Relay_Status_Away)"
+                        case .doNotDisturb:
+                            result += "\n\(item.presentationData.strings.Relay_Status_DoNotDisturb)"
+                        case nil:
+                            result += "\n\(item.presentationData.strings.Relay_Status_Online)"
+                        }
+                    }
                     if let combinedReadState = peerData.combinedReadState, combinedReadState.count > 0 {
                         result += "\n\(item.presentationData.strings.VoiceOver_Chat_UnreadMessages(combinedReadState.count))"
                     }

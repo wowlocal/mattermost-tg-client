@@ -237,7 +237,7 @@ extension ChatControllerImpl {
             case let .peer(peer, imageOverride, contextActionIsEnabled, accessibilityLabel):
                 (self.chatInfoNavigationButton?.buttonItem.customDisplayNode as? ChatAvatarNavigationNode)?.setPeer(context: self.context, theme: self.presentationData.theme, peer: peer, overrideImage: imageOverride, synchronousLoad: synchronous)
                 // MATTERMOST: a DM partner's status dot on the avatar (4F).
-                (self.chatInfoNavigationButton?.buttonItem.customDisplayNode as? ChatAvatarNavigationNode)?.setMattermostPresence(theme: self.presentationData.theme, presence: MattermostBackend.isEnabled && peer.id != self.context.account.peerId ? contentData.state.peerView?.peerPresences[peer.id] as? TelegramUserPresence : nil)
+                (self.chatInfoNavigationButton?.buttonItem.customDisplayNode as? ChatAvatarNavigationNode)?.setMattermostPresence(theme: self.presentationData.theme, strings: self.presentationData.strings, presence: MattermostBackend.isEnabled && peer.id != self.context.account.peerId ? contentData.state.peerView?.peerPresences[peer.id] as? TelegramUserPresence : nil)
                 (self.chatInfoNavigationButton?.buttonItem.customDisplayNode as? ChatAvatarNavigationNode)?.contextActionIsEnabled = contextActionIsEnabled
                 self.chatInfoNavigationButton?.buttonItem.accessibilityLabel = accessibilityLabel
             case let .emojiStatus(content, contextActionIsEnabled):

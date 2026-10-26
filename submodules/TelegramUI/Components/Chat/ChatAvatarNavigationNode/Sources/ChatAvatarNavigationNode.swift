@@ -95,23 +95,31 @@ public final class ChatAvatarNavigationNode: ASDisplayNode {
     // MATTERMOST: a DM partner's Mattermost status as a dot on the avatar (4F), as the chat list shows it: online
     // (green), away (yellow), do not disturb (red with a bar); nothing for offline users and other chats.
     private var mattermostStatusView: UIView?
+    /// The dot in words, for VoiceOver (Phase 4G): the value of the bar button that hosts this node.
+    private var mattermostStatusAccessibilityValue: String?
 
-    public func setMattermostPresence(theme: PresentationTheme, presence: TelegramUserPresence?) {
+    public func setMattermostPresence(theme: PresentationTheme, strings: PresentationStrings, presence: TelegramUserPresence?) {
         var color: UIColor?
         var isDoNotDisturb = false
+        var statusText: String?
         if let presence = presence {
             switch presence.mattermostStatus {
             case .doNotDisturb:
                 color = UIColor(rgb: 0xD24B4E)
                 isDoNotDisturb = true
+                statusText = strings.Relay_Status_DoNotDisturb
             case .away:
                 color = UIColor(rgb: 0xFFBC1F)
+                statusText = strings.Relay_Status_Away
             case nil:
                 if case let .present(until) = presence.status, until > Int32(Date().timeIntervalSince1970) {
                     color = theme.chatList.onlineDotColor
+                    statusText = strings.Relay_Status_Online
                 }
             }
         }
+        self.mattermostStatusAccessibilityValue = statusText
+        self.applyMattermostStatusAccessibility()
         guard let color = color else {
             self.mattermostStatusView?.removeFromSuperview()
             self.mattermostStatusView = nil
@@ -138,6 +146,26 @@ public final class ChatAvatarNavigationNode: ASDisplayNode {
         let size = CGSize(width: 13.0, height: 13.0)
         statusView.frame = CGRect(origin: CGPoint(x: self.avatarNode.frame.maxX - size.width + 1.0, y: self.avatarNode.frame.maxY - size.height + 1.0), size: size)
         self.containerNode.view.bringSubviewToFront(statusView)
+    }
+
+    /// The bar button item node hosting this avatar is the accessibility element VoiceOver reads ("Info"); the
+    /// status goes into its value. Stored on the node, since touch exploration doesn't ask a Swift getter.
+    private func applyMattermostStatusAccessibility() {
+        var node = self.supernode
+        while let current = node {
+            if current.isAccessibilityElement {
+                current.accessibilityValue = self.mattermostStatusAccessibilityValue
+                return
+            }
+            node = current.supernode
+        }
+    }
+
+    override public func didEnterHierarchy() {
+        super.didEnterHierarchy()
+        if self.mattermostStatusAccessibilityValue != nil {
+            self.applyMattermostStatusAccessibility()
+        }
     }
 
     public func setStatus(context: AccountContext, content: EmojiStatusComponent.Content) {
