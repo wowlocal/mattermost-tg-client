@@ -79,9 +79,9 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 
 | # | Workstream | Status |
 |---|---|---|
-| 4A | Release & security hygiene: release build, debug code compiled out (strings audit), ATS, About source URL + licenses, privacy manifest, release/signing guide, Relay versioning | Agent working (own worktree) |
+| 4A | Release & security hygiene: release build, debug code compiled out (strings audit), ATS, About source URL + licenses, privacy manifest, release/signing guide, Relay versioning | Done on branch `worktree-agent-a821d22060f58adf8` (screenshots `docs/research/phase4a-*.png`); 4B agent merging into main |
 | 4B | Runtime hygiene: gate Telegram managers that still park requests (memory), performance on a large server, offline/background refresh, cache eviction | Agent working (main checkout) |
-| 4C | Accessibility (VoiceOver, Dynamic Type) on new screens, localization readiness | Next |
+| 4C | Accessibility (VoiceOver, Dynamic Type) on new screens, localization readiness | Agent working (own worktree) |
 | 4D | Release: TestFlight build — **needs the user's Apple Developer account** (see docs/release/RELEASE.md once written) | Blocked on user |
 
 ## Log
@@ -253,3 +253,6 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   - Dev server state left by 3F: channels `relay-3f-share` ("3F Share", dave; alice, bob) with shared posts (texts, images, files, a thread reply, dave's extension share) and `relay-3f-unjoined` ("3F Unjoined", bob, 2 posts; alice not a member); DM alice↔bob "DM share (3F)", DM dave↔carol test post; alice and bob back to their names, positions, pictures (re-uploaded originals), no custom status, online; dave's custom status "OOO until Monday" kept, his picture removed (he had none). Simulator: alice (current), dave, bob; a test photo in Photos.
 
 - **Phase 3 complete** (3F done on main: own status/DND/custom status, profile + picture editing, global and per-chat notification prefs, share extension via new `MattermostShare` package; picker/share-sheet taps verified only via debug paths — taps don't reach app windows on this setup). 4B (parked requests, large-server performance, offline/background, cache eviction) started on main.
+- **4A done** (branch `worktree-agent-a821d22060f58adf8`): release_sim build verified over HTTPS; debug types/fields/call sites fully `#if DEBUG` (release audit `tools/relay-release-audit.sh`: 20 → 0 markers); Telegram's 10-tap debug menu and deliberate-crash gesture off in release; **RecaptchaEnterprise (closed-source) removed**; ATS: no `NSAllowsArbitraryLoads` (web content only), debug adds `NSAllowsLocalNetworking`; privacy manifests in app + 3 extensions; About → GitHub source + generated Open Source Licenses; version 0.1.0 (build = commit count); `docs/release/RELEASE.md` + `privacy.md`.
+  - **User actions:** team ID in both build configs; App IDs + capabilities; APNs key + hosted push proxy; distribution cert + 4 profiles; decisions D1/D6; legal review of GPL terms; push-proxy log policy (privacy answers).
+- README rewritten for Relay (Telegram's moved to `docs/upstream/TELEGRAM-README.md`). 4C (accessibility, Dynamic Type, dark mode, RTL, localization mechanism) started in a worktree.
