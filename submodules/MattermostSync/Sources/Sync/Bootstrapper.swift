@@ -360,6 +360,12 @@ extension MattermostAccountSync {
         let _ = await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let _ = engine.peers.updateChatListFiltersInteractively({ filters in
                 var filters = filters
+                // The "All Chats" tab: Telegram's server always lists it among the folders, and the chat list shows
+                // a tab only for listed filters. Without it the tab strip held only the teams, and once a team was
+                // selected the unfiltered list had no tab to return to (4E).
+                if !filters.contains(where: { if case .allChats = $0 { return true } else { return false } }) {
+                    filters.insert(.allChats, at: 0)
+                }
                 for team in teams {
                     var include = ChatListFilterIncludePeers()
                     include.setPeers((channelPeersByTeam[team.id] ?? []) + groupPeers)
