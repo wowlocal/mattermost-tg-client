@@ -111,53 +111,141 @@ public enum ServiceAction: Hashable, Sendable {
     /// English fallback text for chat-list previews and notifications. `name` turns a user
     /// reference into a display name (e.g. `@username` or the full name).
     public func fallbackText(name: (ServiceUserRef) -> String) -> String {
+        return formattedText(name: name).text
+    }
+
+    /// The service-message text with the ranges of the user names (for mention entities) and of
+    /// quoted values such as a new header (for emphasis).
+    public func formattedText(name: (ServiceUserRef) -> String) -> ServiceMessageText {
+        var builder = ServiceMessageText()
+        func user(_ ref: ServiceUserRef) {
+            builder.appendMention(name(ref), user: ref)
+        }
+        func text(_ value: String) {
+            builder.append(value)
+        }
+        func quoted(_ value: String) {
+            builder.appendEmphasized(value)
+        }
         switch self {
-        case let .joinedChannel(user, isGuest):
-            return isGuest ? "\(name(user)) joined the channel as a guest." : "\(name(user)) joined the channel."
-        case let .leftChannel(user):
-            return "\(name(user)) left the channel."
+        case let .joinedChannel(ref, isGuest):
+            user(ref)
+            text(isGuest ? " joined the channel as a guest." : " joined the channel.")
+        case let .leftChannel(ref):
+            user(ref)
+            text(" left the channel.")
         case let .addedToChannel(actor, added, isGuest):
-            return isGuest ? "\(name(added)) was added to the channel as a guest by \(name(actor))." : "\(name(added)) was added to the channel by \(name(actor))."
+            user(added)
+            text(isGuest ? " was added to the channel as a guest by " : " was added to the channel by ")
+            user(actor)
+            text(".")
         case let .removedFromChannel(_, removed):
-            return "\(name(removed)) was removed from the channel."
-        case let .joinedTeam(user):
-            return "\(name(user)) joined the team."
-        case let .leftTeam(user):
-            return "\(name(user)) left the team."
+            user(removed)
+            text(" was removed from the channel.")
+        case let .joinedTeam(ref):
+            user(ref)
+            text(" joined the team.")
+        case let .leftTeam(ref):
+            user(ref)
+            text(" left the team.")
         case let .addedToTeam(actor, added):
-            return "\(name(added)) was added to the team by \(name(actor))."
+            user(added)
+            text(" was added to the team by ")
+            user(actor)
+            text(".")
         case let .removedFromTeam(_, removed):
-            return "\(name(removed)) was removed from the team."
+            user(removed)
+            text(" was removed from the team.")
         case let .headerChanged(actor, oldHeader, newHeader):
+            user(actor)
             if newHeader.isEmpty {
-                return "\(name(actor)) removed the channel header (was: \(oldHeader))"
+                text(" removed the channel header (was: ")
+                quoted(oldHeader)
+                text(")")
+            } else if oldHeader.isEmpty {
+                text(" updated the channel header to: ")
+                quoted(newHeader)
+            } else {
+                text(" updated the channel header from: ")
+                quoted(oldHeader)
+                text(" to: ")
+                quoted(newHeader)
             }
-            if oldHeader.isEmpty {
-                return "\(name(actor)) updated the channel header to: \(newHeader)"
-            }
-            return "\(name(actor)) updated the channel header from: \(oldHeader) to: \(newHeader)"
         case let .purposeChanged(actor, oldPurpose, newPurpose):
+            user(actor)
             if newPurpose.isEmpty {
-                return "\(name(actor)) removed the channel purpose (was: \(oldPurpose))"
+                text(" removed the channel purpose (was: ")
+                quoted(oldPurpose)
+                text(")")
+            } else if oldPurpose.isEmpty {
+                text(" updated the channel purpose to: ")
+                quoted(newPurpose)
+            } else {
+                text(" updated the channel purpose from: ")
+                quoted(oldPurpose)
+                text(" to: ")
+                quoted(newPurpose)
             }
-            if oldPurpose.isEmpty {
-                return "\(name(actor)) updated the channel purpose to: \(newPurpose)"
-            }
-            return "\(name(actor)) updated the channel purpose from: \(oldPurpose) to: \(newPurpose)"
         case let .displayNameChanged(actor, oldName, newName):
-            return "\(name(actor)) updated the channel display name from: \(oldName) to: \(newName)"
+            user(actor)
+            text(" updated the channel display name from: ")
+            quoted(oldName)
+            text(" to: ")
+            quoted(newName)
         case let .channelArchived(actor):
-            return "\(name(actor)) archived the channel."
+            user(actor)
+            text(" archived the channel.")
         case let .channelRestored(actor):
-            return "\(name(actor)) unarchived the channel."
+            user(actor)
+            text(" unarchived the channel.")
         case let .convertedToPrivate(actor):
-            return "\(name(actor)) converted the channel to a private channel."
+            user(actor)
+            text(" converted the channel to a private channel.")
         case let .privacyChanged(_, message), let .channelMoved(_, message), let .convertedFromGroupMessage(_, message):
-            return message
-        case let .generic(text):
-            return text
-        case let .unsupported(_, text):
-            return text
+            text(message)
+        case let .generic(value):
+            text(value)
+        case let .unsupported(_, value):
+            text(value)
+        }
+        return builder
+    }
+}
+
+/// Service-message text with the user names and quoted values marked. Ranges are UTF-16 offsets,
+/// like `TextEntity` ranges.
+public struct ServiceMessageText: Hashable, Sendable {
+    public struct Mention: Hashable, Sendable {
+        public var range: Range<Int>
+        public var user: ServiceUserRef
+    }
+
+    public private(set) var text: String = ""
+    public private(set) var mentions: [Mention] = []
+    public private(set) var emphasized: [Range<Int>] = []
+    private var length = 0
+
+    public init() {
+    }
+
+    mutating func append(_ value: String) {
+        text += value
+        length += value.utf16.count
+    }
+
+    mutating func appendMention(_ value: String, user: ServiceUserRef) {
+        let start = length
+        append(value)
+        if length > start {
+            mentions.append(Mention(range: start ..< length, user: user))
+        }
+    }
+
+    mutating func appendEmphasized(_ value: String) {
+        let start = length
+        append(value)
+        if length > start {
+            emphasized.append(start ..< length)
         }
     }
 }
