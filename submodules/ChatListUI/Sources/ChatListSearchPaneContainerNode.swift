@@ -120,6 +120,14 @@ func defaultAvailableSearchPanes(isForum: Bool, hasDownloads: Bool, hasPublicPos
         result.removeAll(where: { $0 == .downloads })
     }
     
+    // MATTERMOST: Telegram's public posts, channel directory, bot apps and global posts search.
+    if !MattermostFeatures.broadcastChannels {
+        result.removeAll(where: { $0 == .publicPosts || $0 == .channels || $0 == .globalPosts })
+    }
+    if !MattermostFeatures.botWebApps {
+        result.removeAll(where: { $0 == .apps })
+    }
+    
     return result
 }
 

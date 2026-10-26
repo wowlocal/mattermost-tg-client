@@ -2102,7 +2102,7 @@ public final class ChatListNode: ListViewImpl {
         let currentPeerId: EnginePeer.Id = context.account.peerId
         
         let contacts: Signal<[ChatListContactPeer], NoError>
-        if case .chatList(groupId: .root) = location, chatListFilter == nil, case .chatList = mode {
+        if MattermostFeatures.contacts, case .chatList(groupId: .root) = location, chatListFilter == nil, case .chatList = mode { // MATTERMOST: no phone contacts
             contacts = ApplicationSpecificNotice.displayChatListContacts(accountManager: context.sharedContext.accountManager)
             |> distinctUntilChanged
             |> mapToSignal { value -> Signal<[ChatListContactPeer], NoError> in
