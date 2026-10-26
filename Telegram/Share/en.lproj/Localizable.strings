@@ -1,3 +1,4 @@
 "Common.OK" = "OK";
-"Share.AuthTitle" = "Log in to Telegram";
-"Share.AuthDescription" = "Open Telegram and log in to share.";
+/* MATTERMOST: Relay */
+"Share.AuthTitle" = "Log in to Relay";
+"Share.AuthDescription" = "Open Relay and log in to share.";

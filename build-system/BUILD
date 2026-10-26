@@ -22,4 +22,5 @@ config_setting(
 
 exports_files([
     "GenerateStrings/GenerateStrings.py",
+    "GenerateStrings/MergeStrings.py", # MATTERMOST: Relay's string overlay
 ])

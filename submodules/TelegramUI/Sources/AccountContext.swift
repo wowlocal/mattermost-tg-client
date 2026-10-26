@@ -342,9 +342,11 @@ public final class AccountContextImpl: AccountContext {
             self.wallpaperUploadManager = WallpaperUploadManagerImpl(sharedContext: sharedContext, account: account, presentationData: sharedContext.presentationData)
             self.themeUpdateManager = ThemeUpdateManagerImpl(sharedContext: sharedContext, account: account)
             
-            self.inAppPurchaseManager = InAppPurchaseManager(engine: .authorized(self.engine))
-            self.starsContext = self.engine.payments.peerStarsContext()
-            self.tonContext = self.engine.payments.peerTonContext()
+            // MATTERMOST: no Premium, Stars, TON, wallet or gift auctions. The UI hides what has no context, and
+            // nothing registers a StoreKit observer or polls Stars/TON.
+            self.inAppPurchaseManager = MattermostFeatures.premium ? InAppPurchaseManager(engine: .authorized(self.engine)) : nil
+            self.starsContext = MattermostFeatures.premium ? self.engine.payments.peerStarsContext() : nil
+            self.tonContext = MattermostFeatures.premium ? self.engine.payments.peerTonContext() : nil
             let accountIsCurrent = sharedContext.activeAccountContexts
             |> map { primary, _, _ in
                 return primary?.account.id == account.id
@@ -360,15 +362,19 @@ public final class AccountContextImpl: AccountContext {
             }
             |> distinctUntilChanged
             let environment = account.testingEnvironment ? "test" : "production"
-            self.walletContext = WalletContext(
-                engine: self.engine,
-                storageNamespace: "telegram.\(environment).\(UInt64(bitPattern: account.peerId.toInt64()))",
-                applicationInForeground: sharedContext.applicationBindings.applicationInForeground,
-                accountIsCurrent: accountIsCurrent,
-                networkAvailable: networkAvailable,
-                applicationIsPasscodeLocked: sharedContext.appLockContext.isPasscodeLocked
-            )
-            self.giftAuctionsManager = GiftAuctionsManager(account: account)
+            if MattermostFeatures.premium {
+                self.walletContext = WalletContext(
+                    engine: self.engine,
+                    storageNamespace: "telegram.\(environment).\(UInt64(bitPattern: account.peerId.toInt64()))",
+                    applicationInForeground: sharedContext.applicationBindings.applicationInForeground,
+                    accountIsCurrent: accountIsCurrent,
+                    networkAvailable: networkAvailable,
+                    applicationIsPasscodeLocked: sharedContext.appLockContext.isPasscodeLocked
+                )
+            } else {
+                self.walletContext = nil
+            }
+            self.giftAuctionsManager = MattermostFeatures.premium ? GiftAuctionsManager(account: account) : nil
         } else {
             self.prefetchManager = nil
             self.wallpaperUploadManager = nil

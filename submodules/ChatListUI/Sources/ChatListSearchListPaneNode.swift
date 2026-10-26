@@ -3468,7 +3468,7 @@ final class ChatListSearchListPaneNode: ASDisplayNode, ChatListSearchPaneNode {
                     }
                 }
 
-                if case .chats = key, !peersFilter.contains(.excludeRecent), isViablePhoneNumber(finalQuery) {
+                if MattermostFeatures.contacts, case .chats = key, !peersFilter.contains(.excludeRecent), isViablePhoneNumber(finalQuery) { // MATTERMOST: no phone contacts
                     entries.append(.addContact(finalQuery, presentationData.theme, presentationData.strings))
                 }
 

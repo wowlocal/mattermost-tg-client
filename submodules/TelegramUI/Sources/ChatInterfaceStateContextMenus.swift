@@ -1464,6 +1464,10 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
                 if let peerId = chatPresentationInterfaceState.chatLocation.peerId, peerId.namespace == Namespaces.Peer.SecretChat {
                     canTranslate = false
                 }
+                // MATTERMOST: no Telegram server translation (`showTranslateIfTopical` bypasses the config).
+                if !MattermostFeatures.translation {
+                    canTranslate = false
+                }
                 if canTranslate {
                     actions.append(.action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.Conversation_ContextMenuTranslate, icon: { theme in
                         return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Translate"), color: theme.actionSheet.primaryTextColor)
@@ -1806,7 +1810,8 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             }
         }
         
-        if let message = messages.first, message.id.namespace == Namespaces.Message.Cloud, let channel = message.peers[message.id.peerId] as? TelegramChannel, !channel.isMonoForum, !(message.media.first is TelegramMediaAction), !isReplyThreadHead, !isMigrated {
+        // MATTERMOST: "Copy Link" exports a t.me link (Phase 3 replaces it with a Mattermost permalink).
+        if MattermostFeatures.tmeLinks, let message = messages.first, message.id.namespace == Namespaces.Message.Cloud, let channel = message.peers[message.id.peerId] as? TelegramChannel, !channel.isMonoForum, !(message.media.first is TelegramMediaAction), !isReplyThreadHead, !isMigrated {
             actions.append(.action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.Conversation_ContextMenuCopyLink, icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Link"), color: theme.actionSheet.primaryTextColor)
             }, action: { _, f in
@@ -2842,6 +2847,20 @@ func chatAvailableMessageActionsImpl(engine: TelegramEngine, accountPeerId: Engi
             }
             if hadPersonalIncoming && optionsMap.values.contains(where: { $0.contains(.deleteGlobally) }) && !reducedOptions.contains(.deleteGlobally) {
                 reducedOptions.insert(.unsendPersonal)
+            }
+
+            // MATTERMOST: Telegram-only message actions (sticker packs, call rating, gifts, reporting).
+            if !MattermostFeatures.stickersAndGifs {
+                reducedOptions.remove(.viewStickerPack)
+            }
+            if !MattermostFeatures.calls {
+                reducedOptions.remove(.rateCall)
+            }
+            if !MattermostFeatures.premium {
+                reducedOptions.remove(.sendGift)
+            }
+            if !MattermostFeatures.reporting {
+                reducedOptions.remove(.report)
             }
             
             if !isPremium {

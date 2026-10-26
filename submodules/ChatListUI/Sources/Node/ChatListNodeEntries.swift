@@ -651,6 +651,10 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
     }
     
     let filteredAdditionalItemEntries = view.additionalItems.filter { item -> Bool in
+        // MATTERMOST: no Telegram promo rows (proxy sponsor, PSA).
+        if !MattermostFeatures.ads {
+            return false
+        }
         return item.item.renderedPeer.peerId != state.hiddenPsaPeerId
     }
     
@@ -755,7 +759,7 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
             forumTopicData: entry.forumTopicData,
             topForumTopicItems: entry.topForumTopicItems,
             revealed: threadId == 1 && (state.hiddenItemShouldBeTemporaryRevealed || state.editing),
-            storyState: entry.renderedPeer.peerId == accountPeerId ? nil : entry.storyStats.flatMap { stats -> ChatListNodeState.StoryState in
+            storyState: (entry.renderedPeer.peerId == accountPeerId || !MattermostFeatures.stories) ? nil : entry.storyStats.flatMap { stats -> ChatListNodeState.StoryState in // MATTERMOST: no stories
                 return ChatListNodeState.StoryState(
                     stats: stats,
                     hasUnseenCloseFriends: stats.hasUnseenCloseFriends

@@ -1,0 +1,83 @@
+/* MATTERMOST: Relay's overrides of and additions to en.lproj/Localizable.strings.
+   Merged at build time by the RelayLocalizableStrings genrule (Telegram/BUILD, build-system/GenerateStrings/MergeStrings.py);
+   a key here replaces the upstream value. Upstream's file stays untouched so cherry-picks don't conflict.
+   Only strings on surfaces Relay keeps are overridden: hidden Telegram features keep their text. */
+
+/* Kept surfaces: the app's name. */
+"Application.Name" = "Relay";
+"Update.Title" = "Relay Update";
+"Update.AppVersion" = "Relay %@";
+"Update.UpdateApp" = "Update Relay";
+"Conversation.UnsupportedMedia.Text" = "Update Relay to view this message";
+"Share.AuthTitle" = "Log in to Relay";
+"Share.AuthDescription" = "Open Relay and log in to share.";
+"AppUpgrade.Running" = "Optimizing Relay...\nThis may take a while, depending on the size of the database. Please keep the app open until the process is finished.\n\nSorry for the inconvenience.";
+"EnterPasscode.EnterTitle" = "Enter your Relay Passcode";
+"EnterPasscode.EnterPasscode" = "Enter your Relay Passcode";
+"EnterPasscode.TouchId" = "Unlock Relay";
+"DialogList.PasscodeLockHelp" = "Tap to lock Relay";
+"Passcode.AppLockedAlert" = "Relay\nLocked";
+"PasscodeSettings.LockTelegram" = "Lock Relay";
+"PasscodeSettings.EncryptDataHelp" = "Experimental feature, use with caution. Encrypt your local Relay data, using a derivative of your passcode as the key.";
+"AccessDenied.VoiceMicrophone" = "Relay needs access to your microphone to send voice messages.\n\nPlease go to Settings > Privacy > Microphone and set Relay to ON.";
+"AccessDenied.VideoMicrophone" = "Relay needs access to your microphone to record sound in videos recording.\n\nPlease go to Settings > Privacy > Microphone and set Relay to ON.";
+"AccessDenied.MicrophoneRestricted" = "Microphone access is restricted for Relay.\n\nPlease go to Settings > General > Restrictions > Microphone and set Relay to ON.";
+"AccessDenied.Camera" = "Relay needs access to your camera to take photos and videos.\n\nPlease go to Settings > Privacy > Camera and set Relay to ON.";
+"AccessDenied.CameraRestricted" = "Camera access is restricted for Relay.\n\nPlease go to Settings > General > Restrictions > Camera and set Relay to ON.";
+"AccessDenied.PhotosAndVideos" = "Relay needs access to your photo library to send photos and videos.\n\nPlease go to Settings > Privacy > Photos and set Relay to ON.";
+"AccessDenied.SaveMedia" = "Relay needs access to your photo library to save photos and videos.\n\nPlease go to Settings > Privacy > Photos and set Relay to ON.";
+"AccessDenied.PhotosRestricted" = "Photo access is restricted for Relay.\n\nPlease go to Settings > General > Restrictions > Photos and set Relay to ON.";
+"AccessDenied.LocationDenied" = "Relay needs access to your location so that you can share it with your contacts.\n\nPlease go to Settings > Privacy > Location Services and set Relay to ON.";
+"AccessDenied.LocationDisabled" = "Relay needs access to your location so that you can share it with your contacts.\n\nPlease go to Settings > Privacy > Location Services and set it to ON.";
+"AccessDenied.LocationTracking" = "Relay needs access to your location to show you on the map.\n\nPlease go to Settings > Privacy > Location Services and set it to ON.";
+"AccessDenied.LocationAlwaysDenied" = "If you'd like to share your Live Location with friends, Relay needs location access when the app is in the background.\n\nPlease go to Settings > Privacy > Location Services and set Relay to Always.";
+"AccessDenied.LocationPreciseDenied" = "To share your specific location in this chat, please go to Settings > Privacy > Location Services > Relay and set Precise Location to On.";
+"AccessDenied.Wallpapers" = "Relay needs access to your photo library to set a custom chat background.\n\nPlease go to Settings > Privacy > Photos and set Relay to ON.";
+"AccessDenied.QrCode" = "Relay needs access to your photo library to scan QR codes.\n\nOpen your device's Settings > Privacy > Photos and set Relay to ON.";
+"AccessDenied.QrCamera" = "Relay needs access to your camera to scan QR codes.\n\nOpen your device's Settings > Privacy > Camera and set Relay to ON.";
+"Media.LimitedAccessText" = "You've given Relay access only to select number of photos.";
+"Attachment.LimitedMediaAccessText" = "You have limited Relay from accessing all of your photos.";
+"Attachment.CameraAccessText" = "Relay needs camera access so that you can take photos and videos.";
+"Permissions.CellularDataText.v0" = "Don't worry, Relay keeps network usage to a minimum. You can further control this in Settings > Data and Storage.";
+"Notifications.PermissionsSuppressWarningText" = "You may miss important messages on Relay due to your current settings.\n\nFor better results, enable alerts or banners and try muting certain chats or chat types in Relay settings.";
+"ShareFileTip.Text" = "You can share **uncompressed** media files from your Camera Roll here.\n\nTo share files of any other type, open them on your %@ (e.g. in your browser), tap **Open in...** or the action button and choose Relay.";
+"Conversation.FileHowToText" = "To share files of any type, open them on your %@ (e.g. in your browser), tap **Open in...** or the action button and choose Relay.";
+"ClearCache.StorageCache" = "Relay Cache";
+"ClearCache.StorageServiceFiles" = "Relay Service Files";
+"ClearCache.ClearCache" = "Clear Relay Cache";
+"Cache.Indexing" = "Relay is calculating current cache size.\nThis can take a few minutes.";
+"StorageManagement.DescriptionChatUsage" = "This chat uses %1$@% of your Relay cache.";
+"StorageManagement.DescriptionAppUsage" = "Relay uses %1$@% of your free disk space.";
+"Map.HomeAndWorkInfo" = "Relay uses the Home and Work addresses from your Contact Card.\n\nKeep your Contact Card up to date for quick access to sending Home and Work addresses.";
+"PowerSavingScreen.OptionAutoplayEffectsText" = "Various effects and animations that make Relay look amazing.";
+"Notifications.UploadSuccess.Text" = "The sound **%@** was added to your Relay tones.";
+"WebBrowser.Telegram" = "Relay";
+"WebBrowser.ClearCookies.Info" = "Delete all cookies in the Relay in-app browser. This action will sign you out of most websites.";
+"WebBrowser.OpenLinksInfo" = "Open links inside Relay instead of your default browser for more privacy.";
+"InfoPlist.NSLocationWhenInUseUsageDescription" = "When you send your location to your friends, Relay needs access to show them a map.";
+"InfoPlist.NSLocationAlwaysAndWhenInUseUsageDescription" = "When you choose to share your Live Location with friends in a chat, Relay needs background access to your location to keep them updated for the duration of the live sharing.";
+"InfoPlist.NSLocationAlwaysUsageDescription" = "When you choose to share your live location with friends in a chat, Relay needs background access to your location to keep them updated for the duration of the live sharing. You also need this to send locations from an Apple Watch.";
+
+/* Kept surfaces: rewritten where Telegram's text does not hold for Relay. */
+"Conversation.UnsupportedMedia" = "This message is not supported by your version of Relay. Update the app to view it.";
+"Conversation.UnsupportedMediaPlaceholder" = "This message is not supported by your version of Relay. Please update to the latest version.";
+"Settings.LogoutConfirmationText" = "\nNote that you can use Relay on all your devices at once.";
+"Cache.Help" = "Photos, videos and other files from chats that you have **not accessed** during this period will be removed from this device to save disk space.\n\nAll media will stay on your server and can be re-downloaded if you need it again.";
+"Cache.MaximumCacheSizeHelp" = "If your cache size exceeds this limit, the oldest media will be deleted.\n\nAll media will stay on your server and can be re-downloaded if you need it again.";
+"ClearCache.ClearDescription" = "All media will stay on your server and can be re-downloaded if you need them again.";
+"StorageManagement.DescriptionCleared" = "All media can be re-downloaded from your server if you need it again.";
+"StorageManagement.SectionsDescription" = "All media will stay on your server and can be re-downloaded if you need it again.";
+"DownloadList.ClearAlertText" = "All received and sent documents stay\non your server, so you can save storage\nspace on your device.";
+"Conversation.ClearPrivateHistory" = "This will delete all messages and media in this chat for you. Your chat partner will still have them.";
+"Conversation.ClearGroupHistory" = "This will delete all messages and media in this chat for you. Other members of the group will still have them.";
+"Conversation.ClearSelfHistory" = "This will delete all messages and media in this chat.";
+"AccessDenied.Contacts" = "Relay needs access to your contacts so that you can share them in chats.\n\nPlease go to Settings > Privacy > Contacts and set Relay to ON.";
+"Chat.Context.Username.NotOnTelegram" = "This user doesn't exist on this server.";
+"InfoPlist.NSContactsUsageDescription" = "Relay uses your contacts only when you choose one to share in a chat.";
+
+/* Relay's own screens. */
+"Relay.About.Title" = "About Relay";
+"Relay.About.Version" = "Version";
+"Relay.About.SourceCode" = "Source Code";
+"Relay.About.SourceCodeInfo" = "Relay is built from the open-source Telegram-iOS project. Its complete source code, including Relay's changes, is published at the address above.";
+"Relay.About.Disclaimer" = "Relay is an independent app. It is not affiliated with or endorsed by Telegram or Mattermost.";

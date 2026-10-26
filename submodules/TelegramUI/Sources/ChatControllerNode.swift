@@ -790,7 +790,8 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
                 break
             }
         }
-        if let displayAdPeer {
+        // MATTERMOST: no sponsored messages.
+        if MattermostFeatures.ads, let displayAdPeer {
             self.adMessagesContext = context.engine.messages.adMessages(peerId: displayAdPeer, activateManually: true)
         } else {
             self.adMessagesContext = nil
@@ -964,7 +965,7 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
         }
         self.textInputPanelNode?.formulaRenderer = chatInputFormulaRenderResult
         if let data = self.context.currentAppConfiguration.with({ $0 }).data, let value = data["ios_disable_ai_chat"] as? Double, value == 1.0 {
-        } else if let peerId = self.chatPresentationInterfaceState.chatLocation.peerId, peerId.namespace != Namespaces.Peer.SecretChat {
+        } else if MattermostFeatures.aiCompose, let peerId = self.chatPresentationInterfaceState.chatLocation.peerId, peerId.namespace != Namespaces.Peer.SecretChat { // MATTERMOST: no Telegram AI compose
             self.textInputPanelNode?.isAIEnabled = true
         }
         self.textInputPanelNode?.textInputAccessoryPanel = textInputAccessoryPanel
@@ -4119,6 +4120,10 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
                     chatPeerId: self.chatLocation.peerId,
                     areCustomEmojiEnabled: self.chatPresentationInterfaceState.customEmojiAvailable,
                     hasEdit: true,
+                    // MATTERMOST: no Telegram stickers, GIFs or trending packs.
+                    hasTrending: MattermostFeatures.stickersAndGifs,
+                    hasStickers: MattermostFeatures.stickersAndGifs,
+                    hasGifs: MattermostFeatures.stickersAndGifs,
                     hideBackground: true,
                     maskEdge: .clip,
                     sendGif: { [weak self] fileReference, sourceView, sourceRect, silentPosting, schedule in

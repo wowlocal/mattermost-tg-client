@@ -990,7 +990,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         }, dismissNativeController: {
             self.window?.rootViewController?.dismiss(animated: true, completion: nil)
         }, getAvailableAlternateIcons: {
-            if #available(iOS 10.3, *) {
+            // MATTERMOST: Telegram's alternate icons are not shipped.
+            if #available(iOS 10.3, *), MattermostFeatures.alternateAppIcons {
                 var icons = [
                     PresentationAppIcon(name: "BlueIcon", imageName: "BlueIcon", isDefault: buildConfig.isAppStoreBuild),
                     PresentationAppIcon(name: "New2", imageName: "New2"),
@@ -1096,7 +1097,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         }
 
         let pushRegistry = PKPushRegistry(queue: .main)
-        if #available(iOS 9.0, *) {
+        // MATTERMOST: no calls, so no VoIP pushes (and no `voip` background mode).
+        if #available(iOS 9.0, *), MattermostFeatures.calls {
             pushRegistry.desiredPushTypes = Set([.voIP])
         }
         self.pushRegistry = pushRegistry

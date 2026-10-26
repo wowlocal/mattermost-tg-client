@@ -443,6 +443,11 @@ extension PeerInfoScreenNode {
                     }
                 }
                 
+                // MATTERMOST: no Telegram auto-delete timers.
+                if !MattermostFeatures.telegramChatSettings {
+                    canSetupAutoremoveTimeout = false
+                }
+                
                 if filteredButtons.contains(.call) {
                     items.append(.action(ContextMenuActionItem(text: presentationData.strings.PeerInfo_ButtonCall, icon: { theme in
                         generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Call"), color: theme.contextMenu.primaryColor)
@@ -551,7 +556,7 @@ extension PeerInfoScreenNode {
                         }
                     }
                     
-                    if strongSelf.peerId.namespace == Namespaces.Peer.CloudUser && user.botInfo == nil && !user.flags.contains(.isSupport) {
+                    if MattermostFeatures.secretChats && strongSelf.peerId.namespace == Namespaces.Peer.CloudUser && user.botInfo == nil && !user.flags.contains(.isSupport) { // MATTERMOST: no secret chats
                         if let cachedUserData = strongSelf.data?.cachedData as? CachedUserData, let _ = cachedUserData.sendPaidMessageStars {
                             
                         } else {
@@ -565,7 +570,7 @@ extension PeerInfoScreenNode {
                         }
                     }
                     
-                    if user.botInfo == nil && data.isContact, case let .user(peer) = strongSelf.data?.peer, let phone = peer.phone {
+                    if MattermostFeatures.contacts && user.botInfo == nil && data.isContact, case let .user(peer) = strongSelf.data?.peer, let phone = peer.phone { // MATTERMOST: no phone contacts
                         items.append(.action(ContextMenuActionItem(text: presentationData.strings.Profile_ShareContactButton, icon: { theme in
                             generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Forward"), color: theme.contextMenu.primaryColor)
                         }, action: { [weak self] _, f in
@@ -633,7 +638,7 @@ extension PeerInfoScreenNode {
                         })))
                     }
                     
-                    if strongSelf.peerId.namespace == Namespaces.Peer.CloudUser, !user.isDeleted && user.botInfo == nil && !user.flags.contains(.isSupport) {
+                    if MattermostFeatures.premium, strongSelf.peerId.namespace == Namespaces.Peer.CloudUser, !user.isDeleted && user.botInfo == nil && !user.flags.contains(.isSupport) { // MATTERMOST: no gifts
                         if let cachedData = data.cachedData as? CachedUserData, cachedData.disallowedGifts == .All {
                         } else {
                             items.append(.action(ContextMenuActionItem(text: presentationData.strings.Profile_SendGift, icon: { theme in
@@ -794,7 +799,7 @@ extension PeerInfoScreenNode {
                         })))
                     }
                     
-                    if case let .user(user) = data.peer, let cachedData = data.cachedData as? CachedUserData, user.botInfo == nil && !user.flags.contains(.isSupport) && user.id != strongSelf.context.account.peerId && strongSelf.peerId.namespace != Namespaces.Peer.SecretChat {
+                    if MattermostFeatures.telegramChatSettings, case let .user(user) = data.peer, let cachedData = data.cachedData as? CachedUserData, user.botInfo == nil && !user.flags.contains(.isSupport) && user.id != strongSelf.context.account.peerId && strongSelf.peerId.namespace != Namespaces.Peer.SecretChat { // MATTERMOST: no copy protection
                         let copyProtectionEnabled = cachedData.flags.contains(.myCopyProtectionEnabled) || cachedData.flags.contains(.copyProtectionEnabled)
                         items.append(.action(ContextMenuActionItem(text: !copyProtectionEnabled ? strongSelf.presentationData.strings.PeerInfo_DisableSharing : strongSelf.presentationData.strings.PeerInfo_EnableSharing, icon: { theme in
                             generateTintedImage(image: UIImage(bundleImageName: !copyProtectionEnabled ? "Chat/Context Menu/ForwardDisable" : "Chat/Context Menu/ForwardEnable"), color: theme.contextMenu.primaryColor)
@@ -883,7 +888,7 @@ extension PeerInfoScreenNode {
                     }
                     
                     if strongSelf.peerId.namespace == Namespaces.Peer.CloudUser && user.botInfo == nil && !user.flags.contains(.isSupport) {
-                        if data.isContact {
+                        if data.isContact && MattermostFeatures.telegramChatSettings { // MATTERMOST: Mattermost has no user blocking
                             if let cachedData = data.cachedData as? CachedUserData, cachedData.isBlocked {
                             } else {
                                 items.append(.action(ContextMenuActionItem(text: presentationData.strings.Conversation_BlockUser, textColor: .destructive, icon: { theme in
@@ -915,7 +920,7 @@ extension PeerInfoScreenNode {
                     }
                 } else if case let .channel(channel) = peer {
                     if let cachedData = strongSelf.data?.cachedData as? CachedChannelData {
-                        if case .broadcast = channel.info, cachedData.flags.contains(.starGiftsAvailable) {
+                        if MattermostFeatures.premium, case .broadcast = channel.info, cachedData.flags.contains(.starGiftsAvailable) { // MATTERMOST: no gifts
                             items.append(.action(ContextMenuActionItem(text: presentationData.strings.Profile_SendGift, badge: nil, icon: { theme in
                                 generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Gift"), color: theme.contextMenu.primaryColor)
                             }, action: { [weak self] _, f in
@@ -932,15 +937,18 @@ extension PeerInfoScreenNode {
                         case .broadcast:
                             boostTitle = presentationData.strings.PeerInfo_Channel_Boost
                         }
-                        items.append(.action(ContextMenuActionItem(text: boostTitle, badge: nil, icon: { theme in
-                            generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Boost"), color: theme.contextMenu.primaryColor)
-                        }, action: { [weak self] _, f in
-                            f(.dismissWithoutContent)
+                        // MATTERMOST: no boosts.
+                        if MattermostFeatures.premium {
+                            items.append(.action(ContextMenuActionItem(text: boostTitle, badge: nil, icon: { theme in
+                                generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Boost"), color: theme.contextMenu.primaryColor)
+                            }, action: { [weak self] _, f in
+                                f(.dismissWithoutContent)
                             
-                            self?.openBoost()
-                        })))
+                                self?.openBoost()
+                            })))
+                        }
                                                 
-                        if channel.hasPermission(.editStories) {
+                        if MattermostFeatures.stories && channel.hasPermission(.editStories) { // MATTERMOST: no stories
                             items.append(.action(ContextMenuActionItem(text: presentationData.strings.PeerInfo_Channel_ArchivedStories, icon: { theme in
                                 generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Archive"), color: theme.contextMenu.primaryColor)
                             }, action: { [weak self] _, f in
@@ -987,7 +995,7 @@ extension PeerInfoScreenNode {
                     if channel.flags.contains(.isCreator) {
                         canReport = false
                     }
-                    if canReport {
+                    if canReport && MattermostFeatures.reporting { // MATTERMOST: no Telegram reports
                         items.append(.action(ContextMenuActionItem(text: presentationData.strings.ReportPeer_Report, icon: { theme in
                             generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Report"), color: theme.contextMenu.primaryColor)
                         }, action: { [weak self] c, f in
@@ -1242,7 +1250,7 @@ extension PeerInfoScreenNode {
                     if case .creator = group.role {
                         canReport = false
                     }
-                    if canReport {
+                    if canReport && MattermostFeatures.reporting { // MATTERMOST: no Telegram reports
                         items.append(.action(ContextMenuActionItem(text: presentationData.strings.ReportPeer_Report, icon: { theme in
                             generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Report"), color: theme.contextMenu.primaryColor)
                         }, action: { [weak self] c, f in

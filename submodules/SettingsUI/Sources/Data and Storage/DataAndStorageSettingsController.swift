@@ -624,13 +624,19 @@ private func dataAndStorageControllerEntries(context: AccountContext, state: Dat
     
     entries.append(.autoSaveItem(index: 0, type: .privateChats, title: presentationData.strings.Notifications_PrivateChats, label: privateLabelAndValue.label, value: privateLabelAndValue.value))
     entries.append(.autoSaveItem(index: 1, type: .groups, title: presentationData.strings.Notifications_GroupChats, label: groupsLabelAndValue.label, value: groupsLabelAndValue.value))
-    entries.append(.autoSaveItem(index: 2, type: .channels, title: presentationData.strings.Notifications_Channels, label: channelsLabelAndValue.label, value: channelsLabelAndValue.value))
+    // MATTERMOST: Mattermost channels are groups here; no broadcast channels.
+    if MattermostFeatures.broadcastChannels {
+        entries.append(.autoSaveItem(index: 2, type: .channels, title: presentationData.strings.Notifications_Channels, label: channelsLabelAndValue.label, value: channelsLabelAndValue.value))
+    }
     entries.append(.autoSaveInfo(presentationData.strings.Settings_SaveToCameraRollInfo))
     
     
-    let dataSaving = effectiveDataSaving(for: data.voiceCallSettings, autodownloadSettings: data.autodownloadSettings)
-    entries.append(.useLessVoiceData(presentationData.theme, presentationData.strings.ChatSettings_UseLessDataForCalls, dataSaving != .never))
-    entries.append(.useLessVoiceDataInfo(presentationData.theme, presentationData.strings.CallSettings_UseLessDataLongDescription))
+    // MATTERMOST: no calls.
+    if MattermostFeatures.calls {
+        let dataSaving = effectiveDataSaving(for: data.voiceCallSettings, autodownloadSettings: data.autodownloadSettings)
+        entries.append(.useLessVoiceData(presentationData.theme, presentationData.strings.ChatSettings_UseLessDataForCalls, dataSaving != .never))
+        entries.append(.useLessVoiceDataInfo(presentationData.theme, presentationData.strings.CallSettings_UseLessDataLongDescription))
+    }
     
     entries.append(.otherHeader(presentationData.theme, presentationData.strings.ChatSettings_Other))
     if #available(iOSApplicationExtension 13.2, iOS 13.2, *) {
@@ -659,8 +665,11 @@ private func dataAndStorageControllerEntries(context: AccountContext, state: Dat
     } else {
         proxyValue = presentationData.strings.GroupInfo_SharedMediaNone
     }
-    entries.append(.connectionHeader(presentationData.theme, presentationData.strings.ChatSettings_ConnectionType_Title.uppercased()))
-    entries.append(.connectionProxy(presentationData.theme, presentationData.strings.SocksProxySetup_Title, proxyValue))
+    // MATTERMOST: no MTProto proxy (a Mattermost HTTP proxy row would go here).
+    if MattermostFeatures.mtprotoProxy {
+        entries.append(.connectionHeader(presentationData.theme, presentationData.strings.ChatSettings_ConnectionType_Title.uppercased()))
+        entries.append(.connectionProxy(presentationData.theme, presentationData.strings.SocksProxySetup_Title, proxyValue))
+    }
         
     return entries
 }

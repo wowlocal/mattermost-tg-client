@@ -4576,6 +4576,10 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         
         var hideMicButton = false
         var hideMicButtonBackground = false
+        // MATTERMOST: no voice or round video messages yet; fades the mic button out like `businessLinkSetup`.
+        if !MattermostFeatures.voiceMessages && !MattermostFeatures.videoMessages {
+            hideMicButton = true
+        }
         
         if self.customRightAction != nil {
             self.mediaActionButtons.isHidden = true
@@ -4999,7 +5003,8 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
                 }
             }
         } else if action == makeSelectorFromString("_translate:") {
-            if let richTextInputNode = self.richTextInputNode, richTextInputNode.selectedRange.length > 0 {
+            // MATTERMOST: no Telegram translation.
+            if MattermostFeatures.translation, let richTextInputNode = self.richTextInputNode, richTextInputNode.selectedRange.length > 0 {
                 return ASEditableTextNodeTargetForAction(target: self)
             } else {
                 return ASEditableTextNodeTargetForAction(target: nil)

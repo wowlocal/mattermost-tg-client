@@ -2294,10 +2294,11 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                     }
                 }
                 
+                // MATTERMOST: no Telegram voice-to-text (the free-trial branch in the bubbles reads the app config).
                 let alwaysDisplayTranscribeButton = ChatMessageItemAssociatedData.DisplayTranscribeButton(
-                    canBeDisplayed: suggestAudioTranscription.0 < 2,
-                    displayForNotConsumed: suggestAudioTranscription.1,
-                    providedByGroupBoost: audioTranscriptionProvidedByBoost
+                    canBeDisplayed: MattermostFeatures.voiceToText && suggestAudioTranscription.0 < 2,
+                    displayForNotConsumed: MattermostFeatures.voiceToText && suggestAudioTranscription.1,
+                    providedByGroupBoost: MattermostFeatures.voiceToText && audioTranscriptionProvidedByBoost
                 )
                 
                 var translateToLanguage: (fromLang: String, toLang: String)?

@@ -11,6 +11,10 @@ public struct CallListSettings: Codable, Equatable {
     
     public var showTab: Bool {
         get {
+            // MATTERMOST: no calls, so no Calls tab (launch, live updates and the CallListUI toggle all read this).
+            if !MattermostFeatures.calls {
+                return false
+            }
             if let value = self._showTab {
                 return value
             } else {

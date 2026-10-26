@@ -16,6 +16,10 @@ private let sharedProviderDelegate: CallKitProviderDelegate? = {
 
 public final class CallKitIntegration {
     public static var isAvailable: Bool {
+        // MATTERMOST: no calls.
+        if !MattermostFeatures.calls {
+            return false
+        }
         #if targetEnvironment(simulator)
         return false
         #else

@@ -201,17 +201,23 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         if let sharedContext = self.context.sharedContext as? SharedAccountContextImpl {
             chatListController.tabBarItem.badgeValue = sharedContext.switchingData.chatListBadge
         }
-        let callListController = CallListController(context: self.context, mode: .tab)
+        // MATTERMOST: the Calls and Contacts tabs are Telegram-only. Their controllers subscribe to calls and
+        // device contacts on load, so they are not constructed at all when hidden.
+        let callListController: CallListController? = MattermostFeatures.calls ? CallListController(context: self.context, mode: .tab) : nil
         
         var controllers: [ViewController] = []
         
-        let contactsController = ContactsController(context: self.context)
-        contactsController.switchToChatsController = {  [weak self] in
-            self?.openChatsController(activateSearch: false)
+        var contactsController: ContactsController?
+        if MattermostFeatures.contacts {
+            let controller = ContactsController(context: self.context)
+            controller.switchToChatsController = {  [weak self] in
+                self?.openChatsController(activateSearch: false)
+            }
+            controllers.append(controller)
+            contactsController = controller
         }
-        controllers.append(contactsController)
         
-        if showCallsTab {
+        if showCallsTab, let callListController {
             controllers.append(callListController)
         }
         controllers.append(chatListController)
@@ -235,7 +241,9 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         accountSettingsController.parentController = self
         controllers.append(accountSettingsController)
                 
-        tabBarController.setControllers(controllers, selectedIndex: restoreSettignsController != nil ? (controllers.count - 1) : (controllers.count - 2))
+        // MATTERMOST: select Chats by identity, not by `count - 2`, so the tab list can change.
+        let chatListIndex = controllers.firstIndex(where: { $0 === chatListController }) ?? (controllers.count - 2)
+        tabBarController.setControllers(controllers, selectedIndex: restoreSettignsController != nil ? (controllers.count - 1) : chatListIndex)
         
         self.contactsController = contactsController
         self.callListController = callListController
@@ -243,6 +251,8 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         self.accountSettingsController = accountSettingsController
         self.rootTabController = tabBarController
         self.pushViewController(tabBarController, animated: false)
+        
+        self.relayDebugOpenScreenIfRequested() // MATTERMOST: debug only (RelayDebugScreens.swift)
     }
         
     public func updateRootControllers(showCallsTab: Bool) {
@@ -250,9 +260,12 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
             return
         }
         var controllers: [ViewController] = []
-        controllers.append(self.contactsController!)
-        if showCallsTab {
-            controllers.append(self.callListController!)
+        // MATTERMOST: the Contacts and Calls controllers are nil when their features are hidden.
+        if let contactsController = self.contactsController {
+            controllers.append(contactsController)
+        }
+        if showCallsTab, let callListController = self.callListController {
+            controllers.append(callListController)
         }
         controllers.append(self.chatListController!)
         controllers.append(self.accountSettingsController!)

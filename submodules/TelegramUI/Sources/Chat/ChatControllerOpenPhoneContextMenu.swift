@@ -41,7 +41,9 @@ extension ChatControllerImpl: MFMessageComposeViewControllerDelegate {
         
         params.progress?.set(.single(true))
         
-        let _ = (self.context.engine.peers.resolvePeerByPhone(phone: number)
+        // MATTERMOST: phone numbers are not Telegram accounts here; the lookup would wait on Telegram's server.
+        let resolvedPeer: Signal<EnginePeer?, NoError> = MattermostFeatures.contacts ? self.context.engine.peers.resolvePeerByPhone(phone: number) : .single(nil)
+        let _ = (resolvedPeer
         |> deliverOnMainQueue).start(next: { [weak self] peer in
             guard let self else {
                 return
@@ -92,28 +94,30 @@ extension ChatControllerImpl: MFMessageComposeViewControllerDelegate {
                             self.openPeer(peer: peer, navigation: .chat(textInputState: nil, subject: nil, peekData: nil), fromMessage: nil)
                         }))
                     )
-                    items.append(
-                        .action(ContextMenuActionItem(text: self.presentationData.strings.Chat_Context_Phone_TelegramVoiceCall, icon: { theme in return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Call"), color: theme.contextMenu.primaryColor) }, action: { [weak self]  _, f in
-                            f(.default)
+                    if MattermostFeatures.calls { // MATTERMOST: no calls
+                        items.append(
+                            .action(ContextMenuActionItem(text: self.presentationData.strings.Chat_Context_Phone_TelegramVoiceCall, icon: { theme in return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Call"), color: theme.contextMenu.primaryColor) }, action: { [weak self]  _, f in
+                                f(.default)
                             
-                            guard let self else {
-                                return
-                            }
-                            self.controllerInteraction?.callPeer(peer.id, false)
-                        }))
-                    )
-                    items.append(
-                        .action(ContextMenuActionItem(text: self.presentationData.strings.Chat_Context_Phone_TelegramVideoCall, icon: { theme in return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/VideoCall"), color: theme.contextMenu.primaryColor) }, action: { [weak self]  _, f in
-                            f(.default)
+                                guard let self else {
+                                    return
+                                }
+                                self.controllerInteraction?.callPeer(peer.id, false)
+                            }))
+                        )
+                        items.append(
+                            .action(ContextMenuActionItem(text: self.presentationData.strings.Chat_Context_Phone_TelegramVideoCall, icon: { theme in return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/VideoCall"), color: theme.contextMenu.primaryColor) }, action: { [weak self]  _, f in
+                                f(.default)
                             
-                            guard let self else {
-                                return
-                            }
-                            self.controllerInteraction?.callPeer(peer.id, true)
-                        }))
-                    )
+                                guard let self else {
+                                    return
+                                }
+                                self.controllerInteraction?.callPeer(peer.id, true)
+                            }))
+                        )
+                    }
                 }
-            } else {
+            } else if MattermostFeatures.contacts { // MATTERMOST: no "Invite to Telegram"
                 items.append(
                     .action(ContextMenuActionItem(text: self.presentationData.strings.Chat_Context_Phone_InviteToTelegram, icon: { theme in return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Telegram"), color: theme.contextMenu.primaryColor) }, action: { [weak self]  _, f in
                         f(.default)

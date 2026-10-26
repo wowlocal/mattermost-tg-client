@@ -27,6 +27,7 @@ enum SettingsSection: Int, CaseIterable {
     case payment
     case extra
     case support
+    case about // MATTERMOST: About Relay
 }
 
 func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, isExpanded: Bool) -> [(AnyHashable, [PeerInfoScreenItem])] {
@@ -61,7 +62,8 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
         displaySetStatus = false
     }
     
-    if displaySetStatus {
+    // MATTERMOST: emoji status and profile colour are Premium features.
+    if displaySetStatus && MattermostFeatures.premium {
         items[.edit]!.append(PeerInfoScreenActionItem(id: 0, text: setStatusTitle, icon: UIImage(bundleImageName: hasEmojiStatus ? "Settings/EditEmojiStatus" : "Settings/SetEmojiStatus"), action: {
             interaction.openSettings(.emojiStatus)
         }))
@@ -75,7 +77,8 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
         interaction.openSettings(.avatar)
     }))
     
-    if let peer = data.peer, (peer.addressName ?? "").isEmpty {
+    // MATTERMOST: usernames are t.me links here; Mattermost usernames are managed by the server.
+    if MattermostFeatures.tmeLinks, let peer = data.peer, (peer.addressName ?? "").isEmpty {
         items[.edit]!.append(PeerInfoScreenActionItem(id: 3, text: presentationData.strings.Settings_SetUsername, icon: UIImage(bundleImageName: "Settings/SetUsername"), action: {
             interaction.openSettings(.username)
         }))
@@ -225,9 +228,12 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 1, text: presentationData.strings.Settings_SavedMessages, icon: PresentationResourcesSettings.savedMessages, action: {
         interaction.openSettings(.savedMessages)
     }))
-    items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 2, text: presentationData.strings.CallSettings_RecentCalls, icon: PresentationResourcesSettings.recentCalls, action: {
-        interaction.openSettings(.recentCalls)
-    }))
+    // MATTERMOST: no calls.
+    if MattermostFeatures.calls {
+        items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 2, text: presentationData.strings.CallSettings_RecentCalls, icon: PresentationResourcesSettings.recentCalls, action: {
+            interaction.openSettings(.recentCalls)
+        }))
+    }
     
     let devicesLabel: String
     if let settings = data.globalSettings, let otherSessionsCount = settings.otherSessionsCount {
@@ -271,9 +277,12 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     }))
     
     let languageName = presentationData.strings.primaryComponent.localizedName
-    items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 4, label: .text(languageName.isEmpty ? presentationData.strings.Localization_LanguageName : languageName), text: presentationData.strings.Settings_AppLanguage, icon: PresentationResourcesSettings.language, action: {
-        interaction.openSettings(.language)
-    }))
+    // MATTERMOST: the language list is Telegram's server language packs; Relay ships English only for now.
+    if MattermostFeatures.languagePacks {
+        items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 4, label: .text(languageName.isEmpty ? presentationData.strings.Localization_LanguageName : languageName), text: presentationData.strings.Settings_AppLanguage, icon: PresentationResourcesSettings.language, action: {
+            interaction.openSettings(.language)
+        }))
+    }
     
     let premiumConfiguration = PremiumConfiguration.with(appConfiguration: context.currentAppConfiguration.with { $0 })
     let isPremiumDisabled = premiumConfiguration.isPremiumDisabled
@@ -351,9 +360,18 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.support]!.append(PeerInfoScreenDisclosureItem(id: 2, text: presentationData.strings.Settings_Tips, icon: PresentationResourcesSettings.tips, action: {
         interaction.openSettings(.tips)
     }))
+
+    // MATTERMOST: About Relay (version, where the source code is published) in place of Telegram's help rows.
+    if MattermostFeatures.relayScreens {
+        items[.about]!.append(PeerInfoScreenDisclosureItem(id: 0, text: presentationData.strings.Relay_About_Title, icon: PresentationResourcesSettings.faq, action: {
+            interaction.openSettings(.about)
+        }))
+    }
     
     var result: [(AnyHashable, [PeerInfoScreenItem])] = []
-    for section in SettingsSection.allCases {
+    // MATTERMOST: Telegram-only sections (phone/password suggestions, wallet, proxy, bot apps, Premium and
+    // Stars, Passport, Telegram support) are dropped here in one place.
+    for section in SettingsSection.allCases where !MattermostFeatures.hiddenSettingsSections.contains(section) {
         if let sectionItems = items[section], !sectionItems.isEmpty {
             result.append((section, sectionItems))
         }

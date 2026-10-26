@@ -3627,6 +3627,10 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         }, presentGlobalOverlayController: { [weak self] controller, arguments in
             self?.presentInGlobalOverlay(controller, with: arguments)
         }, callPeer: { [weak self] peerId, isVideo in
+            // MATTERMOST: no calls (call bubbles, phone-number menu, `beginCall`).
+            if !MattermostFeatures.calls {
+                return
+            }
             if let strongSelf = self {
                 let _ = strongSelf.presentVoiceMessageDiscardAlert(action: {
                     strongSelf.commitPurposefulAction()

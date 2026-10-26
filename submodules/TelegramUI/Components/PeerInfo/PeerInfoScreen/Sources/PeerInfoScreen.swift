@@ -192,6 +192,7 @@ enum PeerInfoSettingsSection {
     case stars
     case ton
     case wallet
+    case about // MATTERMOST: About Relay
 }
 
 enum PeerInfoReportType {
@@ -5878,7 +5879,10 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                 rightNavigationButtons.append(PeerInfoHeaderNavigationButtonSpec(key: .done, isForExpandedView: false))
             } else {
                 if self.isSettings {
-                    leftNavigationButtons.append(PeerInfoHeaderNavigationButtonSpec(key: .qrCode, isForExpandedView: false))
+                    // MATTERMOST: the QR code is a t.me link.
+                    if MattermostFeatures.tmeLinks {
+                        leftNavigationButtons.append(PeerInfoHeaderNavigationButtonSpec(key: .qrCode, isForExpandedView: false))
+                    }
                     rightNavigationButtons.append(PeerInfoHeaderNavigationButtonSpec(key: .search, isForExpandedView: false))
                     rightNavigationButtons.append(PeerInfoHeaderNavigationButtonSpec(key: .edit, isForExpandedView: false))
                 } else if self.isMyProfile {
@@ -5886,7 +5890,9 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                 } else if peerInfoCanEdit(peer: self.data?.peer, chatLocation: self.chatLocation, threadData: self.data?.threadData, cachedData: self.data?.cachedData, isContact: self.data?.isContact) {
                     rightNavigationButtons.append(PeerInfoHeaderNavigationButtonSpec(key: .edit, isForExpandedView: false))
                 }
-                if let data = self.data, !data.isPremiumRequiredForStoryPosting || data.accountIsPremium, case let .channel(channel) = data.peer, channel.hasPermission(.postStories) {
+                if !MattermostFeatures.stories {
+                    // MATTERMOST: no stories.
+                } else if let data = self.data, !data.isPremiumRequiredForStoryPosting || data.accountIsPremium, case let .channel(channel) = data.peer, channel.hasPermission(.postStories) {
                     rightNavigationButtons.insert(PeerInfoHeaderNavigationButtonSpec(key: .postStory, isForExpandedView: false), at: 0)
                 } else if self.isMyProfile {
                     rightNavigationButtons.insert(PeerInfoHeaderNavigationButtonSpec(key: .postStory, isForExpandedView: false), at: 0)

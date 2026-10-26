@@ -268,11 +268,15 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
         var chatListNotices = false
         switch self.location {
         case let .chatList(groupId):
-            if case .root = groupId {
+            // MATTERMOST: Telegram's chat-list notices are server suggestions.
+            if case .root = groupId, MattermostFeatures.chatListSuggestions {
                 chatListNotices = true
             }
         case let .forum(peerId):
-            groupCallPanelSource = peerId
+            // MATTERMOST: no group calls.
+            if MattermostFeatures.calls {
+                groupCallPanelSource = peerId
+            }
         case .savedMessagesChats:
             break
         }
@@ -318,6 +322,10 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             containerNode: self.chatListDisplayNode.mainContainerNode,
             isReorderingTabs: self.isReorderingTabsValue.get(),
             storyPostingAvailable: self.storyPostingAvailabilityValue.get() |> map { availability -> Bool in
+                // MATTERMOST: no stories.
+                if !MattermostFeatures.stories {
+                    return false
+                }
                 switch availability {
                 case .enabled, .premium:
                     return true
@@ -1235,7 +1243,8 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                                             })))
                                         }
                                         
-                                        if !data.includePeers.peers.isEmpty && data.categories.isEmpty && !data.excludeRead && !data.excludeMuted && !data.excludeArchived && data.excludePeers.isEmpty {
+                                        // MATTERMOST: shared folders are t.me links.
+                                        if MattermostFeatures.tmeLinks, !data.includePeers.peers.isEmpty && data.categories.isEmpty && !data.excludeRead && !data.excludeMuted && !data.excludeArchived && data.excludePeers.isEmpty {
                                             items.append(.action(ContextMenuActionItem(text: self.presentationData.strings.ChatList_ContextMenuShare, textColor: .primary, badge: nil, icon: { theme in
                                                 return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Link"), color: theme.contextMenu.primaryColor)
                                             }, action: { [weak self] c, f in
@@ -2186,7 +2195,8 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                 }
             })
             
-            if self.previewing {
+            // MATTERMOST: no stories; the root list still waits on `storiesReady`.
+            if self.previewing || !MattermostFeatures.stories {
                 self.storiesReady.set(.single(true))
             } else {
                 self.storySubscriptionsDisposable = (self.context.engine.messages.storySubscriptions(isHidden: self.location == .chatList(groupId: .archive))
@@ -2517,7 +2527,8 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                 }))
         }
         
-        if !self.didSuggestLocalization {
+        // MATTERMOST: Telegram's first-run popups come from server suggestions.
+        if !self.didSuggestLocalization && MattermostFeatures.chatListSuggestions {
             self.didSuggestLocalization = true
             
             let context = self.context
@@ -2776,7 +2787,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             })
         }
                 
-        if !self.processedFeaturedFilters {
+        if !self.processedFeaturedFilters && MattermostFeatures.chatListSuggestions { // MATTERMOST: server-recommended folders
             let initializedFeatured = self.context.engine.data.subscribe(TelegramEngine.EngineData.Item.Configuration.ApplicationSpecificPreference(key: PreferencesKeys.chatListFiltersFeaturedState))
             |> mapToSignal { view -> Signal<Bool, NoError> in
                 if let entry = view?.get(ChatListFiltersFeaturedState.self) {
@@ -6695,6 +6706,10 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
         guard !self.context.isFrozen else {
             return false
         }
+        // MATTERMOST: no stories.
+        guard MattermostFeatures.stories else {
+            return false
+        }
         switch self.storyPostingAvailability {
         case .enabled:
             return true
@@ -6873,6 +6888,10 @@ private final class ChatListLocationContext {
         
         let hasProxy = context.sharedContext.accountManager.sharedData(keys: [SharedDataKeys.proxySettings])
         |> map { sharedData -> (Bool, Bool) in
+            // MATTERMOST: no MTProto proxy.
+            if !MattermostFeatures.mtprotoProxy {
+                return (false, false)
+            }
             if let settings = sharedData.entries[SharedDataKeys.proxySettings]?.get(ProxySettings.self) {
                 return (!settings.servers.isEmpty, settings.enabled)
             } else {
@@ -6895,6 +6914,10 @@ private final class ChatListLocationContext {
             peerStatus = context.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.Peer(id: context.account.peerId))
             |> map { peer -> NetworkStatusTitle.Status? in
                 guard case let .user(user) = peer else {
+                    return nil
+                }
+                // MATTERMOST: no emoji status or Premium (later: Mattermost custom status).
+                if !MattermostFeatures.premium {
                     return nil
                 }
                 if let emojiStatus = user.emojiStatus {

@@ -1242,7 +1242,8 @@ final class PeerInfoHeaderNode: ASDisplayNode {
                 var subtitle = formatPhoneNumber(context: self.context, number: user.phone ?? "")
                 
                 if let mainUsername = user.addressName, !mainUsername.isEmpty {
-                    subtitle = "\(subtitle) • @\(mainUsername)"
+                    // MATTERMOST: users without a phone number get no separator in front of the username.
+                    subtitle = subtitle.isEmpty ? "@\(mainUsername)" : "\(subtitle) • @\(mainUsername)"
                 }
                 subtitleStringText = subtitle
                 subtitleAttributes = MultiScaleTextState.Attributes(font: Font.regular(17.0), color: .white)

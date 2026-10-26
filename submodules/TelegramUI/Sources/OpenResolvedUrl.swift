@@ -89,6 +89,12 @@ func openResolvedUrlImpl(
         updatedPresentationData = nil
     }
     let presentationData = updatedPresentationData?.initial ?? context.sharedContext.currentPresentationData.with { $0 }
+    // MATTERMOST: links into hidden Telegram-only features (stories, stickers, Premium, Stars, gifts, boosts,
+    // proxy, calls, bot apps, invoices, …) do nothing.
+    guard MattermostFeatures.allows(resolvedUrl) else {
+        completion?()
+        return
+    }
     switch resolvedUrl {
         case let .externalUrl(url):
             context.sharedContext.openExternalUrl(context: context, urlContext: urlContext, url: url, forceExternal: forceExternal, presentationData: context.sharedContext.currentPresentationData.with { $0 }, navigationController: navigationController, dismissInput: dismissInput)
