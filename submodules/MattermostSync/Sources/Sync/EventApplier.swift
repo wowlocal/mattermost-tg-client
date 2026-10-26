@@ -220,6 +220,9 @@ extension MattermostAccountSync {
             guard let entry = self.store.entries(channelId: channelId, postIds: [reaction.postId])[reaction.postId], !entry.isDeleted else {
                 return false
             }
+            if added {
+                self.noteReactionEmoji(names: [reaction.emojiName], transaction: transaction)
+            }
             let messageId = MessageId(peerId: channelState.peerId, namespace: Namespaces.Message.Cloud, id: entry.localId)
             var found = false
             transaction.updateMessage(messageId, update: { current in

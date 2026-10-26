@@ -11,6 +11,8 @@ import MattermostSyncCore
 enum SyntheticConfiguration {
     /// Mattermost's default `MaxPostSize`.
     static let defaultMaxPostSize = 16383
+    /// Sync-store cursor: the built-in emoji (outside the picker) that reactions used, space-separated.
+    static let usedEmojiCursor = "reaction_emoji"
 
     static func appConfigurationData(maxPostSize: Int) -> [String: Any] {
         let maxPostSize = Double(max(1, maxPostSize))
@@ -77,8 +79,12 @@ enum SyntheticConfiguration {
     ]
 
     /// The reaction list: picker emoji first (enabled), then the server's custom emoji (enabled, `:name:`),
-    /// then every other built-in emoji (disabled).
-    static func availableReactions(customEmojiNames: [String]) -> AvailableReactions {
+    /// then the other built-in emoji that reactions use (disabled: listed so those reactions render).
+    ///
+    /// Only emoji seen in reactions are listed, not the whole table (1,900 emoji, about 4.4 MB encoded, which
+    /// Postbox would decode whenever the list is read): `usedEmoji` grows as posts with new reactions arrive
+    /// (`noteReactionEmoji`) and is kept in the stored list itself.
+    static func availableReactions(customEmojiNames: [String], usedEmoji: [String]) -> AvailableReactions {
         var reactions: [AvailableReactions.Reaction] = []
         var seen = Set<String>()
         func add(_ value: String, title: String, isEnabled: Bool) {
@@ -108,8 +114,8 @@ enum SyntheticConfiguration {
         for name in customEmojiNames.sorted() {
             add(":\(name):", title: name, isEnabled: true)
         }
-        for (name, emoji) in EmojiTable.allEmoji {
-            add(emoji, title: name, isEnabled: false)
+        for emoji in usedEmoji {
+            add(emoji, title: EmojiTable.name(forUnicode: emoji) ?? emoji, isEnabled: false)
         }
         return AvailableReactions(hash: 0, reactions: reactions)
     }
@@ -122,6 +128,7 @@ enum SyntheticConfiguration {
             return
         }
         transaction.putItemCacheEntry(id: ItemCacheEntryId(collectionId: Namespaces.CachedItemCollection.availableReactions, key: key), entry: entry)
+        MMLog.log("config: reaction list with \(reactions.reactions.count) reactions (\(entry.data.count / 1024) KB)")
 
         // The context menu's reaction bar takes its items from the "top reactions" list when every reaction is
         // allowed (Telegram's server fills it); use the picker emoji, in order.
@@ -171,8 +178,43 @@ extension MattermostAccountSync {
                     }
                 }
             }
-            SyntheticConfiguration.writeAvailableReactions(SyntheticConfiguration.availableReactions(customEmojiNames: customNames), transaction: transaction)
+            // Kept in the sync store, not read back from the list: lists written before 2D held every emoji.
+            let usedEmoji = (self.store.cursor(SyntheticConfiguration.usedEmojiCursor) ?? "").split(separator: " ").map(String.init)
+            self.writeReactionList(customNames: customNames, usedEmoji: usedEmoji, transaction: transaction)
         }
+    }
+
+    /// Writes the reaction list and remembers what it holds.
+    func writeReactionList(customNames: [String], usedEmoji: [String], transaction: Transaction) {
+        let reactions = SyntheticConfiguration.availableReactions(customEmojiNames: customNames, usedEmoji: usedEmoji)
+        SyntheticConfiguration.writeAvailableReactions(reactions, transaction: transaction)
+        var listed = Set<String>()
+        for reaction in reactions.reactions {
+            if case let .builtin(value) = reaction.value {
+                listed.insert(value)
+            }
+        }
+        self.reactionList.with { $0 = (customNames, usedEmoji, listed) }
+    }
+
+    /// Reactions with emoji the list doesn't have yet (posts, live `reaction_added`): adds them, disabled, so
+    /// they render. Called inside the transaction that writes them.
+    func noteReactionEmoji(names: [String], transaction: Transaction) {
+        let current = self.reactionList.with { $0 }
+        var added: [String] = []
+        for name in names {
+            guard let emoji = EmojiTable.unicode(forName: name), !current.listed.contains(emoji), !added.contains(emoji) else {
+                continue
+            }
+            added.append(emoji)
+        }
+        if added.isEmpty {
+            return
+        }
+        MMLog.log("config: \(added.count) more emoji in the reaction list: \(added.joined())")
+        let usedEmoji = current.usedEmoji + added
+        self.store.setCursor(SyntheticConfiguration.usedEmojiCursor, usedEmoji.joined(separator: " "))
+        self.writeReactionList(customNames: current.customNames, usedEmoji: usedEmoji, transaction: transaction)
     }
 
     /// After bootstrap: limits from the server's client config, custom emoji in the reaction list.
@@ -200,7 +242,7 @@ extension MattermostAccountSync {
         }
         let changed: Bool = await self.postbox.mmTransaction { transaction in
             let changed = SyntheticConfiguration.writeAppConfiguration(maxPostSize: maxPostSize, transaction: transaction)
-            SyntheticConfiguration.writeAvailableReactions(SyntheticConfiguration.availableReactions(customEmojiNames: customNames), transaction: transaction)
+            self.writeReactionList(customNames: customNames, usedEmoji: self.reactionList.with { $0.usedEmoji }, transaction: transaction)
             return changed
         }
         MMLog.log("config: MaxPostSize \(maxPostSize)\(changed ? " (updated)" : ""), \(customNames.count) custom emoji in the reaction list")

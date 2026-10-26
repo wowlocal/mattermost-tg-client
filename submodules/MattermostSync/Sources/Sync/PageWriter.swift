@@ -188,6 +188,7 @@ extension MattermostAccountSync {
         var messages: [StoreMessage] = []
         var customEmojiFiles: [Int64: TelegramMediaFile] = [:]
         var threadRoots: [String: String] = [:]
+        var reactionNames: [String] = []
         for (post, layout) in zip(unique, layouts) {
             guard post.deleteAt == 0, let entry = entries[post.id], !entry.isDeleted else {
                 continue
@@ -203,11 +204,15 @@ extension MattermostAccountSync {
             }
             let converted = PostConverter.storeMessages(post: post, localIds: localIds, context: context)
             messages.append(contentsOf: converted.messages)
+            reactionNames.append(contentsOf: (post.metadata?.reactions ?? []).map { $0.emojiName })
             for file in converted.customEmojiFiles {
                 customEmojiFiles[file.fileId.id] = file
             }
         }
         self.store.setThreadRootIds(threadRoots, channelId: channelId)
+        if !reactionNames.isEmpty {
+            self.noteReactionEmoji(names: reactionNames, transaction: transaction)
+        }
         for file in customEmojiFiles.values {
             transaction.storeMediaIfNotPresent(media: file)
         }
