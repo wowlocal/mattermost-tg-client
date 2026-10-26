@@ -79,6 +79,13 @@ What the person who owns the Apple Developer account does once:
 5. **Team id in the app build**: `build-config/development-configuration.json` still has Telegram's
    `team_id` (`C67CF9S4VU`); set it to your Team ID so device builds are signed by the team that owns the
    App ID and the key (APNs only accepts a token for a topic of the key's team).
+   **Device builds** (not needed for the simulator): `Telegram/BUILD` takes `aps-environment` from the
+   provisioning profiles (`Make.py` resolves it), and `--xcodeManagedCodesigning` resolves none, so build
+   devices with a profile-based codesigning source whose app profile has Push Notifications. Communication
+   notifications on a device also need `org.relaychat.Relay` added to the bundle ids that get
+   `com.apple.developer.usernotifications.communication` in `Telegram/BUILD`
+   (`communication_notifications_fragment`) once the App ID has the capability; without it notifications show
+   without the sender's picture.
 6. Check end to end: run a **development** build on a device or the simulator (Apple silicon; the simulator
    gets real sandbox tokens), log in, send the account a DM from another user, and expect in the proxy log
    "Sending apple push notification … target_type=relay_apple_sandbox" without a following "Failed to send
