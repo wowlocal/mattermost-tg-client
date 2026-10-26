@@ -69,10 +69,10 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 |---|---|---|
 | 3A | Push notifications: push proxy infra, device registration, Notification Service Extension rewrite, reply/mark-read actions, open-on-tap | Done; merged into main by the 2D agent (`10298703`); screenshots `docs/research/phase3a-*.png`. **Real APNs needs the user's key** (steps in `infra/push-proxy/README.md`) |
 | 3B | Collapsed reply threads: channel history without replies, thread view, Threads list per team, follow/unfollow, thread read state, `_root` unread counts | Done; merged into main at `1df8fec4` (branch deleted); design: mattermost-sync.md "Collapsed reply threads (3B)"; screenshots `docs/research/phase3b-*.png` |
-| 3C | Search (posts, people, channels), recent mentions, saved posts, pin/unpin, files search | Agent working (own worktree; merges 3B first) |
+| 3C | Search (posts, people, channels), recent mentions, saved posts, pin/unpin, files search | Done on branch `worktree-agent-a7bcc05a1994a3f13` (screenshots `docs/research/phase3c-*.png`); 3D-2 agent merging into main |
 | 3D-1 | Member lists, composer autocomplete (@ ~ :), slash commands, interactive dialogs | Done (main checkout, 3B merged in at `1df8fec4`); screenshots `docs/research/phase3d1-*.png` |
 | 3D-2 | Directory & membership: browse/join/create channels, DM/GM creation from compose, channel info edit/archive/leave, add/remove members | Agent working (main checkout) |
-| 3E | Link previews, markdown block bubble (headings/lists/tables/code), permalinks & deep links | Next |
+| 3E | Link previews, markdown block bubble (headings/lists/tables/code), permalinks & deep links | Agent working (own worktree; merges 3C first) |
 | 3F | Own status (online/away/DND/offline, custom status), profile editing + avatar, share extension | Next |
 
 ## Log
@@ -194,3 +194,6 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   - Dev server state left by 3D-1: ~sandbox (3D check post, /me, /shrug, /echo, two header changes, a path post, a plain post after the merge, replies with an `@bob` mention, an /echo and an integration "Echo:" in the `tetugt35…` thread), ~integrations (the `/relaydemo button` post with an "Open form" button whose responder is gone, the integration's "Deploy form submitted" post by buildbot), ~ios (System Admin added/removed messages), channel `relay-3d-join` (bob; alice joined and left).
 
 - **Disk incident:** the Bazel disk cache on /Volumes/X5 grew to 136 GB and filled the drive (it also holds the user's own data). Emptied it (X5 back to 136 GB free) and capped it in `.bazelrc` (`--experimental_disk_cache_gc_max_size=40G`, max age 14d). 3D-1 done; 3D-2 started on main; 3C asked to merge main for the cap.
+- **3C done** (branch `worktree-agent-a7bcc05a1994a3f13`): message search (global/team/in-chat/thread/hashtag/file panes; Mattermost modifiers passed through; results stored via page-write path; opening goes to the post or its thread), people/channel search (+ join prompt), Recent Mentions and Saved Posts (Settings rows), Save/Remove-from-Saved, pin/unpin/unpin-all, live updates. Verified: search = REST for 9 queries, mentions 104/104, round trips, localhost only. Fixed: chat-list search spinner (sponsored-peers request parked forever; gated).
+  - Gaps: database search max 100 posts/team/query; in-chat search finds roots only under CRT; Links tab only URLs in text, Voice empty; unjoined channel → join prompt (no preview yet); mentions list not live; DM pinning flag needs re-login for old accounts.
+- 3C worktree removed. 3E (link previews, markdown blocks, permalinks/deep links) started in a worktree.
