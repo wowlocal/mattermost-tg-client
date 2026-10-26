@@ -67,7 +67,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 
 | # | Workstream | Status |
 |---|---|---|
-| 3A | Push notifications: push proxy infra, device registration, Notification Service Extension rewrite, reply/mark-read actions, open-on-tap | Agent working (own worktree; merged 2B branch first) |
+| 3A | Push notifications: push proxy infra, device registration, Notification Service Extension rewrite, reply/mark-read actions, open-on-tap | Done on branch `worktree-agent-a53718b0b6fd32339` (screenshots `docs/research/phase3a-*.png`); 2D agent merging into main. **Real APNs needs the user's key** (steps in `infra/push-proxy/README.md`) |
 
 ## Log
 
@@ -140,3 +140,6 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   - Gaps: a file removed by an edit and re-added later at the same position stays hidden (tombstoned part); Postbox counts every message of an album as unread once the user reads locally (Mattermost counts one post); a post with images and other files shows two bubbles; attachment colour, `thumb_url`, `author_icon`/`footer_icon` not shown; images not on the server are not loaded (no image proxy); markdown in a new header/purpose shows raw in the service message; some emoji shortcodes are missing from `EmojiTable` (`:floppy_disk:` stays text); interactive dialogs (`trigger_id`) unsupported; ephemeral answers are toasts, not chat messages; the group info Members pane and @-mention suggestions still need a TelegramCore seam in `_internal_channelMembers` (`GET /channels/{id}/members`); an override's profile shows "Send Message", which fails.
   - Dev server state left by 2C: test posts in ~integrations (responder posts 3.0.0/3.0.1/3.0.2, `deploy-bot` and `backup-cron` webhook posts) and ~media (bob's live album, edited); ~sandbox header changed by bob.
 - 2B merged into main by the 2C agent (`3e28a5ef`); 2B branch deleted. **Decision (D11-like, made by me as default):** DMs/GMs show unread count only, no "@" badge (Mattermost counts every DM/GM message as a mention). 2D started.
+- **3A done** (branch `worktree-agent-a53718b0b6fd32339`): push proxy 6.6.0 (`relay_apple` / `relay_apple_sandbox`), registration per account (permission asked after login), tokens moved to the shared Keychain group `group.org.relaychat.Relay`, NSE logic in `MattermostPushService` (routing via server DiagnosticId + membership/mention heuristics, communication notifications with avatars, ack), reply/mark-read actions, open-on-tap (thread aware), `clear`/`update_badge`/`session`.
+  - **Not yet exercised:** the real NSE — `simctl push` never launches service extensions; verified via a debug in-app `simulate-push` path instead. Needs the user's APNs key: see `infra/push-proxy/README.md` (App IDs + capabilities, .p8 key, Team ID in `build-config/development-configuration.json`).
+  - Gaps: grouping by channel only (two accounts in one channel stack together); a DM `clear` with two local accounts may clear the other's; sender shown as @username; ID-only push untested (needs a license); `clear`/`update_badge` don't reach a force-quit app.
