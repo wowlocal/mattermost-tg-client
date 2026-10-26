@@ -238,6 +238,13 @@ extension MattermostAccountSync {
             return result
         }
         MMLog.log("live: posted \(post.id) in \(post.channelId) → \(result.writtenCount) message(s) written \(Int((CFAbsoluteTimeGetCurrent() - received) * 1000)) ms after the event (create_at \(post.createAt))")
+        // Recent Mentions (4F): a post with one of the user's mention keys joins an open list.
+        if !isOwn, !post.type.hasPrefix("system_"), let me = self.state.with({ $0.me }), SearchQuery.textMentions(post.message, keys: SearchQuery.mentionKeys(username: me.username, firstName: me.firstName, notifyProps: me.notifyProps)) {
+            let entries = await self.postMessageIds(of: [post], tags: nil)
+            if !entries.isEmpty {
+                self.newMentionsPipe.putNext(entries)
+            }
+        }
     }
 
     func applyEdited(_ post: Post) async {

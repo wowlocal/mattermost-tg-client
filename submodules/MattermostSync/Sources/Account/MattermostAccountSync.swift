@@ -132,6 +132,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
     /// Changes of the saved posts (`SavedPosts.swift`), for the saved posts list and the message menu.
     let savedPostsVersion = MMLocked<Int>(0)
     let savedPostsVersionPromise = ValuePromise<Int>(0, ignoreRepeated: true)
+    /// New posts that mention the user (4F): an open Recent Mentions list adds them at the top.
+    let newMentionsPipe = ValuePipe<[(postId: String, messageId: MessageId)]>()
     /// Message search, people search and pinning for Telegram's search UI (Phase 3C); TelegramCore keeps it weakly.
     private var searchProvider: SearchProvider?
     /// Threads whose read state is being pushed.

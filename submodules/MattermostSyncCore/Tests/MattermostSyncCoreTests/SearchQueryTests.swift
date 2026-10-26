@@ -65,4 +65,23 @@ final class SearchQueryTests: XCTestCase {
         )
         XCTAssertEqual(SearchQuery.mentionKeys(username: "", firstName: "", notifyProps: [:]), [])
     }
+
+    func testTextMentions() {
+        let keys = SearchQuery.mentionKeys(username: "alice", firstName: "Alice", notifyProps: ["first_name": "true", "mention_keys": "relay, release team"])
+        XCTAssertTrue(SearchQuery.textMentions("@alice can you look?", keys: keys))
+        XCTAssertTrue(SearchQuery.textMentions("thanks @Alice.", keys: keys))
+        XCTAssertTrue(SearchQuery.textMentions("ping (@alice), please", keys: keys))
+        XCTAssertTrue(SearchQuery.textMentions("Alice: done", keys: keys))
+        XCTAssertTrue(SearchQuery.textMentions("the relay build is green", keys: keys))
+        XCTAssertTrue(SearchQuery.textMentions("for the Release Team only", keys: keys))
+        XCTAssertFalse(SearchQuery.textMentions("@alice2 and @alicex", keys: keys))
+        XCTAssertFalse(SearchQuery.textMentions("@alice.dev is another user", keys: keys))
+        XCTAssertFalse(SearchQuery.textMentions("relays and malice", keys: keys))
+        XCTAssertFalse(SearchQuery.textMentions("@channel please", keys: keys))
+        XCTAssertFalse(SearchQuery.textMentions("anything", keys: []))
+        // Without the first-name setting a plain "alice" is not a mention key.
+        let plain = SearchQuery.mentionKeys(username: "alice", firstName: "Alice", notifyProps: [:])
+        XCTAssertFalse(SearchQuery.textMentions("alice was here", keys: plain))
+        XCTAssertTrue(SearchQuery.textMentions("hey @alice", keys: plain))
+    }
 }

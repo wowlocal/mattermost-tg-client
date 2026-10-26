@@ -206,6 +206,7 @@ public final class MattermostPostList {
     private let contents = MMLocked(Contents())
     private let statePromise = ValuePromise<MattermostPostListState>(MattermostPostListState(messageIds: [], isLoading: true, hasMore: false, failed: false), ignoreRepeated: true)
     private let savedDisposable = MetaDisposable()
+    private let mentionsDisposable = MetaDisposable()
     private static let savedPageSize = 60
 
     init(accountId: AccountRecordId, kind: MattermostPostListKind) {
@@ -215,6 +216,7 @@ public final class MattermostPostList {
 
     deinit {
         self.savedDisposable.dispose()
+        self.mentionsDisposable.dispose()
     }
 
     public var state: Signal<MattermostPostListState, NoError> {
@@ -233,7 +235,39 @@ public final class MattermostPostList {
         self.loadMore()
         if self.kind == .saved {
             self.observeSaved()
+        } else {
+            self.observeNewMentions()
         }
+    }
+
+    /// Recent mentions (4F): new posts that mention the user arrive at the top while the list is open, as in
+    /// Mattermost's Recent Mentions.
+    private func observeNewMentions() {
+        let accountId = self.accountId
+        let signal: Signal<[(postId: String, messageId: MessageId)], NoError> = MattermostSync.asyncSignal {
+            return await MattermostSync.waitForRunningSync(accountId: accountId)
+        }
+        |> mapToSignal { sync -> Signal<[(postId: String, messageId: MessageId)], NoError> in
+            guard let sync = sync else {
+                return .complete()
+            }
+            return sync.newMentionsPipe.signal()
+        }
+        self.mentionsDisposable.set(signal.start(next: { [weak self] entries in
+            guard let self = self else {
+                return
+            }
+            let added = self.contents.with { contents -> Bool in
+                let known = Set(contents.entries.map(\.postId))
+                let new = entries.filter { !known.contains($0.postId) }
+                contents.entries.insert(contentsOf: new, at: 0)
+                return !new.isEmpty
+            }
+            if added {
+                MMLog.log("mentions: \(entries.count) new mention(s) added to the open list")
+                self.publish()
+            }
+        }))
     }
 
     public func loadMore() {

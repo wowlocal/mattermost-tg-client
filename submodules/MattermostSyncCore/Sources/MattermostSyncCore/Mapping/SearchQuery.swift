@@ -176,6 +176,39 @@ public enum SearchQuery {
         return keys
     }
 
+    /// Whether `text` mentions one of `keys` (4F: a new post joins the open Recent Mentions list): the key as a
+    /// whole word, case-insensitively, as the server's search matches it (`@alice` also in `@alice,`, not in
+    /// `@alice2` or `@alice.dev`'s other words; `release team` across one space).
+    public static func textMentions(_ text: String, keys: [String]) -> Bool {
+        let lowered = text.lowercased()
+        func isWordCharacter(_ character: Character) -> Bool {
+            return character.isLetter || character.isNumber || character == "_" || character == "-"
+        }
+        for key in keys {
+            let needle = key.lowercased()
+            if needle.isEmpty {
+                continue
+            }
+            var searchStart = lowered.startIndex
+            while let range = lowered.range(of: needle, range: searchStart ..< lowered.endIndex) {
+                let before = range.lowerBound == lowered.startIndex ? nil : lowered[lowered.index(before: range.lowerBound)]
+                let after = range.upperBound == lowered.endIndex ? nil : lowered[range.upperBound]
+                // A dot ends a word only when nothing word-like follows it (`@alice.` yes, `@alice.dev` no).
+                var afterIsWord = after.map(isWordCharacter) ?? false
+                if after == ".", range.upperBound < lowered.endIndex {
+                    let next = lowered.index(after: range.upperBound)
+                    afterIsWord = next < lowered.endIndex && isWordCharacter(lowered[next])
+                }
+                let beforeIsWord = before.map { isWordCharacter($0) || $0 == "@" } ?? false
+                if !beforeIsWord && !afterIsWord {
+                    return true
+                }
+                searchStart = range.upperBound
+            }
+        }
+        return false
+    }
+
     /// Terms of the mention search (`is_or_search: true`); multi-word keys are quoted.
     public static func mentionTerms(username: String, firstName: String, notifyProps: [String: String]) -> String {
         return self.mentionKeys(username: username, firstName: firstName, notifyProps: notifyProps).map { key in
