@@ -115,7 +115,8 @@ public enum ServiceAction: Hashable, Sendable {
     }
 
     /// The service-message text with the ranges of the user names (for mention entities) and of
-    /// quoted values such as a new header (for emphasis).
+    /// quoted values such as a new header (for emphasis). Quoted values are Mattermost markdown (a header
+    /// may have links, bold, emoji…): they are rendered, their formatting goes to `entities`.
     public func formattedText(name: (ServiceUserRef) -> String) -> ServiceMessageText {
         var builder = ServiceMessageText()
         func user(_ ref: ServiceUserRef) {
@@ -125,7 +126,7 @@ public enum ServiceAction: Hashable, Sendable {
             builder.append(value)
         }
         func quoted(_ value: String) {
-            builder.appendEmphasized(value)
+            builder.appendEmphasizedMarkdown(value)
         }
         switch self {
         case let .joinedChannel(ref, isGuest):
@@ -223,6 +224,9 @@ public struct ServiceMessageText: Hashable, Sendable {
     public private(set) var text: String = ""
     public private(set) var mentions: [Mention] = []
     public private(set) var emphasized: [Range<Int>] = []
+    /// Formatting of rendered markdown values (links, bold, code, mentions…), in text offsets. Block
+    /// formatting (quotes, code blocks) and custom emoji are left out: a service message is one line of text.
+    public private(set) var entities: [TextEntity] = []
     private var length = 0
 
     public init() {
@@ -246,6 +250,23 @@ public struct ServiceMessageText: Hashable, Sendable {
         append(value)
         if length > start {
             emphasized.append(start ..< length)
+        }
+    }
+
+    /// Appends a markdown value rendered (`**a** [b](u)` → "a b" with bold and a link), emphasized as a
+    /// whole. Line breaks become spaces (same UTF-16 length, so entity ranges hold).
+    mutating func appendEmphasizedMarkdown(_ value: String) {
+        let formatted = MattermostMarkdown.parse(value)
+        let flat = formatted.text.replacingOccurrences(of: "\r\n", with: "  ").replacingOccurrences(of: "\n", with: " ")
+        let start = length
+        appendEmphasized(flat)
+        for entity in formatted.entities {
+            switch entity.type {
+            case .blockQuote, .pre, .customEmoji:
+                continue
+            default:
+                entities.append(TextEntity(range: (entity.range.lowerBound + start) ..< (entity.range.upperBound + start), type: entity.type))
+            }
         }
     }
 }

@@ -216,6 +216,16 @@ final class ServiceActionTests: XCTestCase {
         XCTAssertEqual(removed.text, "@a removed the channel purpose (was: x)")
         XCTAssertEqual(removed.emphasized.map { substring(removed.text, $0) }, ["x"])
 
+        // Markdown in a header is rendered, not shown raw.
+        let markdown = map("system_header_change", props: ["username": "bob", "old_header": "", "new_header": "**Deploys** in [the runbook](https://example.com/run) by @alice :rocket:\nsecond line"])!.formattedText(name: name)
+        XCTAssertEqual(markdown.text, "@bob updated the channel header to: Deploys in the runbook by @alice 🚀 second line")
+        XCTAssertEqual(markdown.emphasized.map { substring(markdown.text, $0) }, ["Deploys in the runbook by @alice 🚀 second line"])
+        XCTAssertEqual(markdown.entities.map { $0.type }, [.bold, .textUrl(url: "https://example.com/run"), .mention(username: "alice")])
+        XCTAssertEqual(markdown.entities.map { substring(markdown.text, $0.range) }, ["Deploys", "the runbook", "@alice"])
+        let quote = map("system_purpose_change", props: ["username": "a", "old_purpose": "> quoted `code`", "new_purpose": ""])!.formattedText(name: name)
+        XCTAssertEqual(quote.text, "@a removed the channel purpose (was: quoted code)")
+        XCTAssertEqual(quote.entities.map { $0.type }, [.code])
+
         let generic = map("system_generic", message: "Server text")!.formattedText(name: name)
         XCTAssertEqual(generic.text, "Server text")
         XCTAssertEqual(generic.mentions, [])

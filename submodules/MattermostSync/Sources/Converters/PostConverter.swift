@@ -221,6 +221,12 @@ enum PostConverter {
         for range in formatted.emphasized {
             entities.append(MessageTextEntity(range: range, type: .Bold))
         }
+        // Markdown inside values (a new header with links, code, mentions) is rendered, not shown raw.
+        for entity in formatted.entities {
+            if let converted = textEntity(entity, context: context) {
+                entities.append(converted)
+            }
+        }
         return TelegramMediaAction(action: .customText(text: formatted.text, entities: entities, additionalAttributes: nil))
     }
 
