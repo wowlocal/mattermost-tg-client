@@ -713,6 +713,11 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         let logsPath = rootPath + "/logs/app-logs"
         let _ = try? FileManager.default.createDirectory(atPath: logsPath, withIntermediateDirectories: true, attributes: nil)
         Logger.setSharedLogger(Logger(rootPath: rootPath, basePath: logsPath))
+        // MATTERMOST: managed app configuration (Phase 4G): the certificate pins and the server restriction are in
+        // place before any account connects; the extensions get their copy in the app group.
+        if MattermostBackend.isEnabled {
+            MattermostManagedSettings.startInApp(sharedDirectory: URL(fileURLWithPath: rootPath))
+        }
 
         setManagedAudioSessionLogger({ s in
             Logger.shared.log("ManagedAudioSession", s)
@@ -1363,6 +1368,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                         authorizeNotifications = false
                     }
                     self.registerForNotifications(context: context.context, authorize: authorizeNotifications)
+                    // MATTERMOST: Reply / Mark as Read need the device unlocked while a passcode is set (Phase 4G).
+                    self.observeMattermostNotificationAuthentication(context: context.context)
                     
                     self.resetIntentsIfNeeded(context: context.context)
                     
@@ -3107,16 +3114,21 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     
     private func registerForNotifications(context: AccountContextImpl, authorize: Bool = true, completion: @escaping (Bool) -> Void = { _ in }) {
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        let _ = (context.sharedContext.accountManager.transaction { transaction -> Bool in
+        let _ = (context.sharedContext.accountManager.transaction { transaction -> (Bool, Bool) in
             let settings = transaction.getSharedData(ApplicationSpecificSharedDataKeys.inAppNotificationSettings)?.get(InAppNotificationSettings.self) ?? InAppNotificationSettings.defaultSettings
-            return settings.displayNameOnLockscreen
+            // MATTERMOST: with a passcode, notification actions need the device unlocked (Phase 4G).
+            var hasPasscode = true
+            if case .none = transaction.getAccessChallengeData() {
+                hasPasscode = false
+            }
+            return (settings.displayNameOnLockscreen, hasPasscode)
         }
-        |> deliverOnMainQueue).start(next: { displayNames in
-            self.registerForNotifications(replyString: presentationData.strings.Notification_Reply, messagePlaceholderString: presentationData.strings.Conversation_InputTextPlaceholder, hiddenContentString: presentationData.strings.Watch_MessageView_Title, hiddenReactionContentString: presentationData.strings.Notification_LockScreenReactionPlaceholder, hiddenStoryContentString: presentationData.strings.Notification_LockScreenStoryPlaceholder, hiddenStoryReactionContentString: presentationData.strings.PUSH_REACT_STORY_HIDDEN, includeNames: displayNames, authorize: authorize, completion: completion)
+        |> deliverOnMainQueue).start(next: { displayNames, hasPasscode in
+            self.registerForNotifications(replyString: presentationData.strings.Notification_Reply, messagePlaceholderString: presentationData.strings.Conversation_InputTextPlaceholder, hiddenContentString: presentationData.strings.Watch_MessageView_Title, hiddenReactionContentString: presentationData.strings.Notification_LockScreenReactionPlaceholder, hiddenStoryContentString: presentationData.strings.Notification_LockScreenStoryPlaceholder, hiddenStoryReactionContentString: presentationData.strings.PUSH_REACT_STORY_HIDDEN, includeNames: displayNames, actionsRequireAuthentication: hasPasscode, authorize: authorize, completion: completion)
         })
     }
 
-    private func registerForNotifications(replyString: String, messagePlaceholderString: String, hiddenContentString: String, hiddenReactionContentString: String, hiddenStoryContentString: String, hiddenStoryReactionContentString: String, includeNames: Bool, authorize: Bool = true, completion: @escaping (Bool) -> Void = { _ in }) {
+    private func registerForNotifications(replyString: String, messagePlaceholderString: String, hiddenContentString: String, hiddenReactionContentString: String, hiddenStoryContentString: String, hiddenStoryReactionContentString: String, includeNames: Bool, actionsRequireAuthentication: Bool = false, authorize: Bool = true, completion: @escaping (Bool) -> Void = { _ in }) {
         let notificationCenter = UNUserNotificationCenter.current()
         Logger.shared.log("App \(self.episodeId)", "register for notifications: get settings (authorize: \(authorize))")
         notificationCenter.getNotificationSettings(completionHandler: { settings in
@@ -3165,7 +3177,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                                 storyReactionCategory = UNNotificationCategory(identifier: "str", actions: [], intentIdentifiers: [], hiddenPreviewsBodyPlaceholder: hiddenStoryReactionContentString, options: options)
                                 
                                 // MATTERMOST: Reply and Mark as Read on Mattermost message notifications (the strings' "Mark as Read", 4C).
-                                let mattermostCategories = MattermostSync.notificationCategories(replyTitle: replyString, replyPlaceholder: messagePlaceholderString, markReadTitle: defaultPresentationStrings.ChatList_Context_MarkAsRead, hiddenPreviewsBodyPlaceholder: hiddenContentString, options: carPlayOptions)
+                                let mattermostCategories = MattermostSync.notificationCategories(replyTitle: replyString, replyPlaceholder: messagePlaceholderString, markReadTitle: defaultPresentationStrings.ChatList_Context_MarkAsRead, hiddenPreviewsBodyPlaceholder: hiddenContentString, options: carPlayOptions, actionsRequireAuthentication: actionsRequireAuthentication)
                                 UNUserNotificationCenter.current().setNotificationCategories(Set(mattermostCategories).union([
                                     unknownMessageCategory,
                                     repliableMessageCategory,
@@ -3503,7 +3515,36 @@ final class UpdateSettings: Codable, Equatable {
 // MATTERMOST: Mattermost notifications (Phase 3A, docs/plan/04 "Notification actions"). The notification
 // service extension routes each push to an account and keeps the Mattermost ids in `userInfo`;
 // MattermostSync maps them to the chat, sends replies through the write path and marks channels read.
+/// Phase 4G: re-registers the notification categories when a passcode is turned on or off.
+private let mattermostNotificationAuthenticationDisposable = MetaDisposable()
+private var mattermostNotificationHasPasscode: Bool?
+
 extension AppDelegate {
+    /// While Relay has a passcode, Reply and Mark as Read on a notification need the device unlocked (the
+    /// notification itself hides the text while the app is locked, MattermostPushService).
+    func observeMattermostNotificationAuthentication(context: AccountContextImpl) {
+        guard MattermostBackend.isEnabled else {
+            return
+        }
+        mattermostNotificationAuthenticationDisposable.set((context.sharedContext.accountManager.accessChallengeData()
+        |> map { view -> Bool in
+            if case .none = view.data {
+                return false
+            }
+            return true
+        }
+        |> distinctUntilChanged
+        |> deliverOnMainQueue).start(next: { [weak self, weak context] hasPasscode in
+            // The first value is the state the categories were just registered with.
+            let previous = mattermostNotificationHasPasscode
+            mattermostNotificationHasPasscode = hasPasscode
+            guard let self, let context, let previous, previous != hasPasscode else {
+                return
+            }
+            self.registerForNotifications(context: context, authorize: false)
+        }))
+    }
+
     func installMattermostNotificationHooks() {
         #if DEBUG
         // The debug remote (tools/relay-remote.py notification-open|reply|read) runs the same handler as a tap.

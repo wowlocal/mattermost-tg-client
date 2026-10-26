@@ -79,6 +79,13 @@ public enum MattermostSync {
     private static let pathMonitor = MMLocked<NWPathMonitor?>(nil)
     /// Phase 4B: when the app last entered the background (nil while it is active).
     private static let enteredBackgroundAt = MMLocked<Double?>(nil)
+    /// Phase 4G: accounts being logged out because managed configuration doesn't allow their server.
+    static let restrictedLogouts = MMLocked<Set<AccountRecordId>>([])
+
+    /// The account manager of the lifecycle (main app), for logouts started outside it.
+    static var lifecycleAccountManager: AccountManager<TelegramAccountManagerTypes>? {
+        return self.lifecycle.with { $0?.accountManager }
+    }
 
     static let userAgent = "Relay/0.1 (iOS; MattermostSync)"
     /// Sync-store cursors kept by the account lifecycle.
@@ -109,6 +116,12 @@ public enum MattermostSync {
             return
         }
         self.registry.with { $0[account.id] = Registered(account: account, server: server) }
+        // Phase 4G: an account on a server that managed configuration doesn't allow never connects.
+        let managed = MattermostManagedSettings.current
+        if let allowed = managed.restrictedServerURL, let url = URL(string: server.url), !managed.allowsServer(url) {
+            self.logOutRestricted(accountId: account.id, serverURL: server.url, allowed: allowed)
+            return
+        }
         guard let token = MattermostKeychain.token(accountId: account.id.int64) else {
             MMLog.log("account \(account.id.int64): no session token in the Keychain")
             self.markExpired(accountId: account.id, store: store, server: server)
@@ -182,7 +195,7 @@ public enum MattermostSync {
         }
     }
 
-    private static func stopAccount(_ accountId: AccountRecordId) {
+    static func stopAccount(_ accountId: AccountRecordId) {
         let sync = self.accounts.with { $0.removeValue(forKey: accountId) }
         sync?.stop()
     }
@@ -380,7 +393,7 @@ public enum MattermostSync {
         }
         self.updateExpired { $0.removeValue(forKey: accountId) }
         registered.account.mattermostSessionExpired.set(false)
-        MMLog.log("account \(accountId.int64): session renewed for \(login.user.username); restarting sync")
+        MMLog.log("account \(accountId.int64): session renewed; restarting sync")
         self.run(account: registered.account, store: store, server: registered.server, token: login.token)
     }
 
@@ -391,7 +404,7 @@ public enum MattermostSync {
             throw MattermostRenewSessionError.unknownAccount
         }
         try await MattermostAccountSetup.createAccount(server: server, serverURL: serverURL, login: login, loginId: loginId, target: .newAccount(rootPath: lifecycle.rootPath, encryptionParameters: lifecycle.encryptionParameters), accountManager: lifecycle.accountManager)
-        MMLog.log("account \(accountId.int64): replaced by a login as \(login.user.username); logging the old account out")
+        MMLog.log("account \(accountId.int64): replaced by a login as another user; logging the old account out")
         let _ = await logoutFromAccount(id: accountId, accountManager: lifecycle.accountManager, alreadyLoggedOutRemotely: false).awaitValue()
     }
 
@@ -406,6 +419,8 @@ public enum MattermostSync {
     public static func startLifecycle(accountManager: AccountManager<TelegramAccountManagerTypes>, rootPath: String, encryptionParameters: ValueBoxEncryptionParameters) {
         let lifecycle = Lifecycle(accountManager: accountManager, rootPath: rootPath, encryptionParameters: encryptionParameters)
         self.lifecycle.with { $0 = lifecycle }
+        // Accounts loaded before the lifecycle existed (Phase 4G).
+        self.enforceServerRestriction()
         // `UIApplication.didBecomeActiveNotification` (MattermostSync doesn't import UIKit).
         let observer = NotificationCenter.default.addObserver(forName: Notification.Name("UIApplicationDidBecomeActiveNotification"), object: nil, queue: nil, using: { _ in
             MattermostSync.verifySessionsOnActivation()

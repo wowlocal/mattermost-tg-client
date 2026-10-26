@@ -595,7 +595,7 @@ extension MattermostAccountSync {
         guard let peerId = self.channelState(channel.id)?.peerId else {
             throw MattermostDirectoryError.server("The channel was created but could not be loaded.")
         }
-        MMLog.log("directory: created \(channel.type.rawValue) channel \(channel.id) (\(channel.name)) in \(draft.teamId)")
+        MMLog.log("directory: created \(channel.type.rawValue) channel \(channel.id) in \(draft.teamId)")
         return peerId
     }
 

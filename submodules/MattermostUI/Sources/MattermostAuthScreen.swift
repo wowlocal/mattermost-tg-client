@@ -20,6 +20,8 @@ struct MattermostAuthField {
     let kind: Kind
     let placeholder: String
     var text: String
+    /// Set by managed configuration (Phase 4G): shown, not editable.
+    var isLocked: Bool = false
 }
 
 /// What an auth screen shows, top to bottom.
@@ -199,7 +201,8 @@ final class MattermostAuthScreen: ViewController {
     }
 
     func debugFill(field: String, text: String) -> Bool {
-        guard let fieldDescription = self.content.fields.first(where: { $0.id == field }) else {
+        // A locked field can't be typed into (Phase 4G).
+        guard let fieldDescription = self.content.fields.first(where: { $0.id == field }), !fieldDescription.isLocked else {
             return false
         }
         if case .password = fieldDescription.kind {
@@ -328,8 +331,8 @@ final class MattermostAuthScreenNode: ASDisplayNode, UITextFieldDelegate {
             guard self.inProgress != oldValue else {
                 return
             }
-            for fieldNode in self.fieldNodes {
-                fieldNode.textField.isEnabled = !self.inProgress
+            for (index, fieldNode) in self.fieldNodes.enumerated() {
+                fieldNode.textField.isEnabled = !self.inProgress && !self.content.fields[index].isLocked
                 fieldNode.alpha = self.inProgress ? 0.6 : 1.0
             }
             for button in self.alternativeButtons {
@@ -493,6 +496,13 @@ final class MattermostAuthScreenNode: ASDisplayNode, UITextFieldDelegate {
             textField.clearButtonMode = .whileEditing
             textField.disableAutomaticKeyboardHandling = [.forward, .backward]
             textField.text = field.text
+            if field.isLocked {
+                // Managed configuration set it (Phase 4G): VoiceOver reads the field as dimmed, with the reason.
+                textField.isEnabled = false
+                textField.textColor = theme.list.itemSecondaryTextColor
+                textField.clearButtonMode = .never
+                textField.accessibilityHint = self.presentationData.strings.Relay_Login_ManagedField
+            }
             switch field.kind {
             case .serverAddress:
                 textField.keyboardType = .URL
@@ -533,7 +543,8 @@ final class MattermostAuthScreenNode: ASDisplayNode, UITextFieldDelegate {
     }
 
     func activateInput() {
-        if let index = self.content.fields.firstIndex(where: { $0.text.isEmpty }) ?? (self.fieldNodes.isEmpty ? nil : 0) {
+        let editable = self.content.fields.indices.filter { !self.content.fields[$0].isLocked }
+        if let index = editable.first(where: { self.content.fields[$0].text.isEmpty }) ?? editable.first {
             self.fieldNodes[index].textField.becomeFirstResponder()
         }
     }

@@ -34,6 +34,10 @@ swift_library(
         "//submodules/AppBundle:AppBundle",
         # Phase 3F: Do Not Disturb and custom status end dates.
         "//submodules/TelegramUI/Components/ItemListDatePickerItem:ItemListDatePickerItem",
+        # Phase 4G: the passcode a managed configuration requires (setup, settings, debug).
+        "//submodules/PasscodeUI:PasscodeUI",
+        "//submodules/PasscodeCore:PasscodeCore",
+        "//submodules/TelegramUIPreferences:TelegramUIPreferences",
         "//submodules/MattermostSyncCore:MattermostSyncCore",
         "//submodules/MattermostKit:MattermostKit",
         "//submodules/MattermostSync:MattermostSync",

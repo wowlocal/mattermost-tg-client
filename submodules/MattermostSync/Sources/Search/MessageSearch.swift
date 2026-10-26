@@ -118,7 +118,7 @@ extension MattermostAccountSync {
         }
         let started = CFAbsoluteTimeGetCurrent()
         let result = await self.runSearch(request, page: page)
-        MMLog.log("search: \"\(request.terms)\"\(request.isOrSearch ? " (or)" : "")\(request.endpoint == .files ? " (files)" : "") page \(page) → \(result.messageIds.count) message(s)\(result.nextPage != nil ? ", more" : "") in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
+        MMLog.log("search: \(request.terms.count) characters\(request.isOrSearch ? " (or)" : "")\(request.endpoint == .files ? " (files)" : "") page \(page) → \(result.messageIds.count) message(s)\(result.nextPage != nil ? ", more" : "") in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
         return result
     }
 

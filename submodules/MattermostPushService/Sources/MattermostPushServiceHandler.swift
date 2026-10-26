@@ -116,6 +116,16 @@ public final class MattermostPushServiceHandler: @unchecked Sendable {
         // Telegram's data root (`rootPathForBasePath`, TelegramCore).
         let rootPath = groupURL.path + "/telegram-data"
         let pushDirectory = rootPath + "/mattermost-push"
+        // Phase 4G: the certificate pins of the app's managed configuration (its copy in the app group) apply to
+        // the acknowledgement, the sender and the avatar requests. The app applies its own.
+        if Bundle.main.bundlePath.hasSuffix(".appex") {
+            let managed = MattermostManagedConfiguration.readShared(directory: URL(fileURLWithPath: rootPath)) ?? .none
+            if MattermostServerTrust.shared.pins != managed.certificatePins {
+                // The extension's process outlives a push: new pins get a new session (no connection reused).
+                MattermostServerTrust.shared.setPins(managed.certificatePins)
+                MattermostURLSession.renew()
+            }
+        }
 
         let accounts = self.loadAccounts(rootPath: rootPath)
         defer {

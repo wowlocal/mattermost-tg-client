@@ -5472,6 +5472,12 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     }
 
     public func chatInputTextNodeShouldPaste() -> Bool {
+        // MATTERMOST: managed configuration's copy and paste protection: nothing copied in another app is pasted
+        // into a message (Phase 4G).
+        if let allowsPasting = MattermostManagedApp.allowsPastingCurrentPasteboard, !allowsPasting() {
+            MattermostManagedApp.pasteRefused?()
+            return false
+        }
         let pasteboard = UIPasteboard.general
 
         // A rich structural fragment (e.g. a copied table/list) from the WYSIWYG editor carries the private

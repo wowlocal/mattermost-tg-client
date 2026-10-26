@@ -289,6 +289,13 @@ final class MattermostDebugRemote {
             }
         default:
             self.lastExtra = [:]
+            // Phase 4G: managed configuration, passcode, pasteboard, diagnostics (`RelaySecurityDebug`).
+            if RelaySecurityDebug.handle(sharedContext: self.sharedContext, action: action, command: command, completion: { [weak self] ok, error, extra in
+                self?.lastExtra = extra
+                self?.writeResult(id: id, ok: ok, error: error)
+            }) {
+                return
+            }
             // Phase 3D-2: directory and membership screens (`MattermostDirectoryDebug`); output in `extra`.
             if MattermostDirectoryDebug.handle(sharedContext: self.sharedContext, action: action, command: command, completion: { [weak self] ok, error, extra in
                 self?.lastExtra = extra

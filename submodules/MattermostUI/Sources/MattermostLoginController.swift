@@ -153,14 +153,21 @@ public final class MattermostLoginController: NavigationController {
 
     private func makeServerScreen() -> MattermostAuthScreen {
         let minimum = ServerCompatibility.minimumVersion
+        // Phase 4G: managed configuration prefills the server, and locks it when other servers aren't allowed.
+        let managed = MattermostManagedSettings.current
+        let isLocked = managed.restrictedServerURL != nil
+        var footer = self.strings.Relay_Login_MinimumVersion("\(minimum.major).\(minimum.minor)").string
+        if isLocked {
+            footer = self.strings.Relay_Login_ManagedServer(managed.serverName ?? MattermostAccountSetup.hostDisplay(managed.restrictedServerURL!)).string + "\n\n" + footer
+        }
         let content = MattermostAuthScreenContent(
             showsLogo: true,
             title: self.hasOtherAccounts ? self.strings.Relay_Login_AddAccountTitle : RelayBranding.appName,
             text: self.hasOtherAccounts ? self.strings.Relay_Login_AddAccountText : self.strings.Relay_Login_WelcomeText,
-            fields: [MattermostAuthField(id: "url", kind: .serverAddress, placeholder: self.strings.Relay_Login_ServerPlaceholder, text: "")],
+            fields: [MattermostAuthField(id: "url", kind: .serverAddress, placeholder: self.strings.Relay_Login_ServerPlaceholder, text: managed.serverURL ?? "", isLocked: isLocked)],
             primaryTitle: self.strings.Relay_Login_Connect,
             alternatives: [],
-            footer: self.strings.Relay_Login_MinimumVersion("\(minimum.major).\(minimum.minor)").string
+            footer: footer
         )
         let screen = MattermostAuthScreen(debugScreenName: "server", sharedContext: self.sharedContext, presentationData: self.presentationData, content: content)
         screen.primaryAction = { [weak self, weak screen] in
@@ -219,13 +226,20 @@ public final class MattermostLoginController: NavigationController {
         var prefilledLoginId = ""
         let title: String
         var text: String
+        // Phase 4G: managed configuration names the managed server and prefills its login id.
+        let managed = MattermostManagedSettings.current
+        let isManagedServer = managed.isManagedServer(server.url)
+        let serverName = isManagedServer ? (managed.serverName ?? server.displayName) : server.displayName
         if case let .relogin(session) = self.mode {
             prefilledLoginId = session.loginId ?? ""
             title = self.strings.Relay_Login_ReloginTitle
-            text = self.strings.Relay_Login_ReloginText(server.displayName).string
+            text = self.strings.Relay_Login_ReloginText(serverName).string
         } else {
-            title = server.displayName
+            title = serverName
             text = self.strings.Relay_Login_CredentialsText(host).string
+            if isManagedServer, let username = managed.username {
+                prefilledLoginId = username
+            }
         }
         if server.allowsPasswordLogin {
             fields.append(MattermostAuthField(id: "login", kind: .loginId, placeholder: self.strings.relayLoginIdPlaceholder(server), text: prefilledLoginId))

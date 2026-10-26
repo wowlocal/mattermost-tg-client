@@ -275,9 +275,18 @@ private func passcodeOptionsControllerEntries(context: AccountContext, presentat
             entries.append(.togglePasscode(presentationData.theme, presentationData.strings.PasscodeSettings_TurnPasscodeOn, false))
             entries.append(.settingInfo(presentationData.theme, presentationData.strings.PasscodeSettings_Help))
         case .numericalPassword, .plaintextPassword, .secured:
-            entries.append(.togglePasscode(presentationData.theme, presentationData.strings.PasscodeSettings_TurnPasscodeOff, true))
+            // MATTERMOST: a passcode required by managed configuration can't be turned off (Phase 4G).
+            let managedPolicy = MattermostManagedApp.policy
+            if !managedPolicy.requiresPasscode {
+                entries.append(.togglePasscode(presentationData.theme, presentationData.strings.PasscodeSettings_TurnPasscodeOff, true))
+            }
             entries.append(.changePasscode(presentationData.theme, presentationData.strings.PasscodeSettings_ChangePasscode))
-            entries.append(.settingInfo(presentationData.theme, presentationData.strings.PasscodeSettings_Help))
+            if managedPolicy.requiresPasscode {
+                let organization = managedPolicy.organizationName ?? presentationData.strings.Relay_Managed_Organization
+                entries.append(.settingInfo(presentationData.theme, presentationData.strings.Relay_Managed_PasscodeFooter(organization).string))
+            } else {
+                entries.append(.settingInfo(presentationData.theme, presentationData.strings.PasscodeSettings_Help))
+            }
             entries.append(.telegramHeader(presentationData.theme, presentationData.strings.PasscodeSettings_LockTelegram.uppercased()))
             entries.append(.autoLock(presentationData.theme, presentationData.strings.PasscodeSettings_AutoLock, autolockStringForTimeout(strings: presentationData.strings, timeout: passcodeOptionsData.presentationSettings.autolockTimeout)))
             if let biometricAuthentication = LocalAuth.biometricAuthentication {
@@ -640,6 +649,10 @@ public func passcodeOptionsController(context: AccountContext, focusOnItemTag: P
             values.append(10)
             values.sort()
         #endif
+        // MATTERMOST: managed configuration's required passcode locks after at most five minutes away (Phase 4G).
+        if MattermostManagedApp.policy.requiresPasscode {
+            values = values.filter { $0 != 0 && $0 <= MattermostManagedAppPolicy.maximumAutolockTimeout }
+        }
         
         var items: [ContextMenuItem] = []
         for value in values {

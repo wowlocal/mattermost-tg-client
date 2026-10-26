@@ -21,10 +21,12 @@ public let relaySourceCodeURL = "https://github.com/wowlocal/mattermost-tg-clien
 private final class RelayAboutArguments {
     let openSourceCode: () -> Void
     let openLicenses: () -> Void
+    let openDiagnostics: () -> Void
 
-    init(openSourceCode: @escaping () -> Void, openLicenses: @escaping () -> Void) {
+    init(openSourceCode: @escaping () -> Void, openLicenses: @escaping () -> Void, openDiagnostics: @escaping () -> Void) {
         self.openSourceCode = openSourceCode
         self.openLicenses = openLicenses
+        self.openDiagnostics = openDiagnostics
     }
 }
 
@@ -39,6 +41,7 @@ private enum RelayAboutEntry: ItemListNodeEntry {
     case sourceCode(title: String, value: String)
     case sourceCodeInfo(String)
     case licenses(title: String)
+    case diagnostics(title: String)
 
     var section: ItemListSectionId {
         switch self {
@@ -46,7 +49,7 @@ private enum RelayAboutEntry: ItemListNodeEntry {
             return RelayAboutSection.version.rawValue
         case .sourceCode, .sourceCodeInfo:
             return RelayAboutSection.source.rawValue
-        case .licenses:
+        case .licenses, .diagnostics:
             return RelayAboutSection.licenses.rawValue
         }
     }
@@ -61,6 +64,8 @@ private enum RelayAboutEntry: ItemListNodeEntry {
             return 2
         case .licenses:
             return 3
+        case .diagnostics:
+            return 4
         }
     }
 
@@ -90,6 +95,11 @@ private enum RelayAboutEntry: ItemListNodeEntry {
                 return true
             }
             return false
+        case let .diagnostics(title):
+            if case .diagnostics(title) = rhs {
+                return true
+            }
+            return false
         }
     }
 
@@ -107,6 +117,10 @@ private enum RelayAboutEntry: ItemListNodeEntry {
         case let .licenses(title):
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.openLicenses()
+            })
+        case let .diagnostics(title):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: "", sectionId: self.section, style: .blocks, action: {
+                arguments.openDiagnostics()
             })
         }
     }
@@ -126,18 +140,26 @@ public func relayAboutController(context: AccountContext) -> ViewController {
         context.sharedContext.applicationBindings.openUrl(relaySourceCodeURL)
     }, openLicenses: {
         pushControllerImpl?(relayLicensesController(context: context))
+    }, openDiagnostics: {
+        // Phase 4G: MattermostUI's screen (diagnostic logs, iOS reports, export).
+        if let controller = MattermostUIHooks.makeDiagnosticsController?(context) {
+            pushControllerImpl?(controller)
+        }
     })
 
     let signal = context.sharedContext.presentationData
     |> map { presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let strings = presentationData.strings
         let sourceHost = URL(string: relaySourceCodeURL)?.host ?? relaySourceCodeURL
-        let entries: [RelayAboutEntry] = [
+        var entries: [RelayAboutEntry] = [
             .version(title: strings.Relay_About_Version, value: relayAppVersionString()),
             .sourceCode(title: strings.Relay_About_SourceCode, value: sourceHost),
             .sourceCodeInfo(strings.Relay_About_SourceCodeInfo + "\n" + relaySourceCodeURL + "\n\n" + strings.Relay_About_Disclaimer),
             .licenses(title: strings.Relay_About_Licenses)
         ]
+        if MattermostUIHooks.makeDiagnosticsController != nil {
+            entries.append(.diagnostics(title: strings.Relay_Diagnostics_Title))
+        }
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(strings.Relay_About_Title), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks)
         return (controllerState, (listState, arguments))

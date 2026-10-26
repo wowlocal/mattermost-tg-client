@@ -60,7 +60,7 @@ extension TelegramRootController {
             }
         case "compose":
             self.openRootCompose()
-        case "privacy", "data", "notifications", "appearance", "about", "devices", "openlinks", "reaction-notifications":
+        case "privacy", "data", "notifications", "appearance", "about", "devices", "openlinks", "reaction-notifications", "passcode", "diagnostics":
             guard let context = self.chatListController?.context else {
                 return
             }
@@ -83,6 +83,15 @@ extension TelegramRootController {
                 controller = webBrowserSettingsController(context: context)
             case "reaction-notifications":
                 controller = reactionNotificationSettingsController(context: context)
+            case "passcode":
+                // Phase 4G: Privacy and Security → Passcode (without asking for the passcode first).
+                controller = passcodeOptionsController(context: context)
+            case "diagnostics":
+                // Phase 4G: About Relay → Diagnostics.
+                guard let diagnostics = MattermostUIHooks.makeDiagnosticsController?(context) else {
+                    return
+                }
+                controller = diagnostics
             default:
                 controller = themeSettingsController(context: context)
             }

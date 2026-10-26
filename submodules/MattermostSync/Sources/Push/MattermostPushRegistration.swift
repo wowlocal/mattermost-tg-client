@@ -34,7 +34,12 @@ extension MattermostSync {
             return
         }
         let environment = MattermostPushDevice.currentEnvironment()
+        // The device token stays out of release logs (4G: logs may be exported); debug checks read it whole.
+        #if DEBUG
         MMLog.log("push: APNs \(environment.rawValue) token \(MattermostPushDevice.hexToken(token))")
+        #else
+        MMLog.log("push: APNs \(environment.rawValue) token \(MattermostPushDevice.hexToken(token).prefix(8))…")
+        #endif
         let syncs = self.runningSyncs()
         for sync in syncs {
             self.registerPushDevice(sync: sync)

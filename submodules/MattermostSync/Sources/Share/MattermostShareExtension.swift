@@ -37,9 +37,29 @@ public enum MattermostShareExtension {
         NSLog("[Relay] %@: %@", role, text)
     }
 
+    /// Phase 4G: the extension takes the certificate pins and the server restriction from the app's copy of its
+    /// managed configuration (only the app can read the configuration itself), once per process.
+    private static let managedConfigurationLoaded = MMLocked<Bool>(false)
+
+    static func loadManagedConfiguration(rootPath: String) {
+        guard Bundle.main.bundlePath.hasSuffix(".appex"), self.managedConfigurationLoaded.with({ loaded -> Bool in
+            let first = !loaded
+            loaded = true
+            return first
+        }) else {
+            return
+        }
+        MattermostManagedSettings.loadInExtension(sharedDirectory: URL(fileURLWithPath: rootPath))
+    }
+
     /// The client of an account on this device: server from its store, token from the shared Keychain group.
     static func client(rootPath: String, accountId: AccountRecordId) -> (MattermostClient, MattermostShareAccount)? {
+        self.loadManagedConfiguration(rootPath: rootPath)
         guard let account = MattermostShareAccounts.account(rootPath: rootPath, accountId: accountId.int64), let url = URL(string: account.serverURL) else {
+            return nil
+        }
+        guard MattermostManagedSettings.current.allowsServer(url) else {
+            self.log("account \(accountId.int64): its server is not allowed by managed configuration")
             return nil
         }
         guard let token = MattermostSessionKeychain.token(accountId: accountId.int64, log: { self.log($0) }) else {

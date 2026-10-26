@@ -158,7 +158,7 @@ extension MattermostAccountSync {
             }
             return (reference.postId, messageId)
         }
-        MMLog.log("mentions: \"\(terms)\" page \(page) → \(entries.count)")
+        MMLog.log("mentions: page \(page) → \(entries.count)")
         return (entries, result.nextPage != nil)
     }
 }

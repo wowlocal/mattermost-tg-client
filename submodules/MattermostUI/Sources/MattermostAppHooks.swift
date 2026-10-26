@@ -24,6 +24,13 @@ public enum MattermostAppHooks {
             let strings = sharedContext?.currentPresentationData.with({ $0 }).strings ?? defaultPresentationStrings
             return strings.relayNotice(notice)
         }
+        // Phase 4G: managed configuration in the UI (passcode requirement, app switcher, pasteboard, device
+        // check, restricted logouts) and local diagnostics (MetricKit, Settings → About Relay → Diagnostics).
+        RelayManagedConfigurationPresenter.shared.start(sharedContext: sharedContext)
+        RelayDiagnostics.shared.start()
+        MattermostUIHooks.makeDiagnosticsController = { context in
+            return relayDiagnosticsController(context: context)
+        }
         #if DEBUG
         MattermostDebugRemote.shared.start(sharedContext: sharedContext)
         #endif

@@ -26,6 +26,10 @@ extension PresentationStrings {
             return self.Relay_Login_Error_TooOld("\(version)", "\(minimum.major).\(minimum.minor)").string
         case .unknownVersion:
             return self.Relay_Login_Error_UnknownVersion
+        case let .notAllowed(allowed):
+            return self.Relay_Login_Error_NotAllowed(allowed).string
+        case let .certificateRejected(host):
+            return self.Relay_Login_Error_CertificateRejected(host).string
         }
     }
 
@@ -36,6 +40,8 @@ extension PresentationStrings {
                 return self.Relay_Login_Error_AlreadyLoggedIn(username).string
             case let .storage(reason):
                 return self.Relay_Login_Error_Storage(reason).string
+            case let .serverNotAllowed(allowed):
+                return self.Relay_Login_Error_NotAllowed(allowed).string
             }
         }
         if let error = error as? MattermostRenewSessionError {
@@ -59,6 +65,9 @@ extension PresentationStrings {
             }
             return self.Relay_Login_Error_Credentials
         case let .transport(urlError):
+            if let host = urlError.mattermostPinMismatchHost {
+                return self.Relay_Login_Error_CertificateRejected(host).string
+            }
             return self.Relay_Login_Error_Offline(urlError.localizedDescription).string
         case .rateLimited:
             return self.Relay_Login_Error_RateLimited

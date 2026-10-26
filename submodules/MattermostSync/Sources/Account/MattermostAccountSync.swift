@@ -390,6 +390,18 @@ public final class MattermostAccountSync: @unchecked Sendable {
         })
     }
 
+    /// Phase 4G: reconnect now, whatever the socket's state (the certificate pins changed: the open connection was
+    /// accepted under the old ones).
+    func reconnectNow(reason: String) {
+        guard let socket = self.socket, !self.isStopped else {
+            return
+        }
+        MMLog.log("websocket: reconnecting now (\(reason))")
+        Task {
+            await socket.reconnectNow()
+        }
+    }
+
     /// Phase 4B: the server answered a REST request, or the network path came back, while the WebSocket waits out
     /// its backoff (up to a minute after a long outage): reconnect now, at most every 5 s.
     func reconnectSoon(reason: String) {

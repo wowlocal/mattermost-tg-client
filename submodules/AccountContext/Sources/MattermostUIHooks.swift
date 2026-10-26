@@ -6,4 +6,6 @@ import Display
 public enum MattermostUIHooks {
     /// Settings → Notifications → Push and Mentions (the user's Mattermost notify props).
     public static var makeNotificationPreferencesController: ((AccountContext) -> ViewController)?
+    /// Settings → About Relay → Diagnostics (Phase 4G: diagnostic logs, MetricKit reports, the export).
+    public static var makeDiagnosticsController: ((AccountContext) -> ViewController)?
 }

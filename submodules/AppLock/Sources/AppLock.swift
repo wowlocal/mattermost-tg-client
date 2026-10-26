@@ -160,9 +160,10 @@ public final class AppLockContextImpl: AppLockContext {
             presentationDataSignal,
             applicationBindings.applicationIsActive,
             applicationBindings.applicationInForeground,
-            self.currentState.get()
+            self.currentState.get(),
+            MattermostManagedApp.policyUpdates // MATTERMOST: managed configuration (Phase 4G)
         )
-        |> deliverOnMainQueue).startStrict(next: { [weak self] accessChallengeData, sharedData, presentationData, isApplicationActive, isApplicationInForeground, state in
+        |> deliverOnMainQueue).startStrict(next: { [weak self] accessChallengeData, sharedData, presentationData, isApplicationActive, isApplicationInForeground, state, managedPolicy in
             guard let strongSelf = self else {
                 return
             }
@@ -275,6 +276,12 @@ public final class AppLockContextImpl: AppLockContext {
                 }
             }
             
+            // MATTERMOST: managed configuration may ask to hide the app's content whenever it isn't active, passcode
+            // or not (Mattermost's `blurApplicationScreen`, Phase 4G): the app switcher shows the blurred cover.
+            if managedPolicy.hidesContentWhenInactive, !isApplicationActive, !strongSelf.biometricAuthenticationState.suppressCoveringView {
+                shouldDisplayCoveringView = true
+            }
+
             strongSelf.updateTimestampRenewTimer(shouldRun: isApplicationActive && !isCurrentlyLocked)
             strongSelf.lockStatus.update(isPasscodeLocked: isCurrentlyLocked, isApplicationActive: isApplicationActive, isApplicationInForeground: isApplicationInForeground)
             

@@ -479,3 +479,26 @@
 "Relay.Devices.Client.OAuth" = "OAuth app";
 "Relay.Devices.Client.Mobile" = "Mobile app";
 "Relay.Devices.Client.Unknown" = "Unknown client";
+
+/* Security and diagnostics (Phase 4G): managed app configuration (MDM/EMM), certificate pins, diagnostics. */
+"Relay.Login.ManagedField" = "Set by your organization.";
+"Relay.Login.ManagedServer" = "Your organization set up Relay for %@.";
+"Relay.Login.Error.NotAllowed" = "Your organization allows Relay to connect only to %@.";
+"Relay.Login.Error.CertificateRejected" = "The certificate of %@ isn't the one your organization requires, so Relay didn't connect.";
+"Relay.Managed.Organization" = "Your organization";
+"Relay.Managed.PasscodeRequiredTitle" = "Passcode Required";
+"Relay.Managed.PasscodeRequiredText" = "%@ requires a passcode for Relay. Set one to continue.";
+"Relay.Managed.SetPasscode" = "Set Passcode";
+"Relay.Managed.PasscodeFooter" = "Required by %@: the passcode can't be turned off, and Relay locks after at most 5 minutes away.";
+"Relay.Managed.SignedOutTitle" = "Signed Out";
+"Relay.Managed.SignedOutText" = "Your organization allows Relay to connect only to %1$@, so Relay signed you out of %2$@.";
+"Relay.Managed.DeviceNotAllowedTitle" = "Device Not Allowed";
+"Relay.Managed.DeviceNotAllowedText" = "%@ doesn't allow Relay on a device that has been jailbroken.";
+"Relay.Managed.PasteBlocked" = "%@ doesn't allow pasting content from other apps into Relay.";
+"Relay.Diagnostics.Title" = "Diagnostics";
+"Relay.Diagnostics.SaveLogs" = "Save Diagnostic Logs";
+"Relay.Diagnostics.LogsFooter" = "Relay keeps a log of what it does (connections, syncing, errors) on this device to help with problems. The log never contains your messages, passwords or session tokens. Turn it off when you don't need it.";
+"Relay.Diagnostics.Reports" = "Reports from iOS";
+"Relay.Diagnostics.Export" = "Export Diagnostics";
+"Relay.Diagnostics.ExportFooter" = "Creates a file with Relay's version, your servers' addresses and versions, performance and crash reports from iOS, and the diagnostic log, without messages, passwords, tokens or user ids. Nothing is sent unless you choose where to share it.";
+"Relay.Diagnostics.Failed" = "Relay couldn't prepare the diagnostics.";

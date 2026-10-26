@@ -227,6 +227,11 @@ extension MattermostAccountSync {
             if let value = config.int64("TimeBetweenUserTypingUpdatesMilliseconds"), value > 0 {
                 self.typingInterval.with { $0 = Double(value) / 1000.0 }
             }
+            // Phase 4G: the server version the diagnostics report (the login stored the one it saw).
+            if let version = config.version, !version.isEmpty, var info = self.store.serverInfo(), info.version != version {
+                info.version = version
+                self.store.setServerInfo(info)
+            }
         }
         var customNames: [String] = []
         var page = 0

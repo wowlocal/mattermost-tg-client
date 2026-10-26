@@ -99,9 +99,12 @@ extension MattermostSync {
     }
 
     /// The notification category of Mattermost message notifications: Reply and Mark as Read.
-    public static func notificationCategories(replyTitle: String, replyPlaceholder: String, markReadTitle: String, hiddenPreviewsBodyPlaceholder: String, options: UNNotificationCategoryOptions) -> [UNNotificationCategory] {
-        let reply = UNTextInputNotificationAction(identifier: MattermostPushUserInfo.replyActionIdentifier, title: replyTitle, options: [], textInputButtonTitle: replyTitle, textInputPlaceholder: replyPlaceholder)
-        let markRead = UNNotificationAction(identifier: MattermostPushUserInfo.markReadActionIdentifier, title: markReadTitle, options: [])
+    /// - Parameter actionsRequireAuthentication: Phase 4G: while the app has a passcode, Reply and Mark as Read ask
+    ///   for the device to be unlocked first (Face ID / the device passcode).
+    public static func notificationCategories(replyTitle: String, replyPlaceholder: String, markReadTitle: String, hiddenPreviewsBodyPlaceholder: String, options: UNNotificationCategoryOptions, actionsRequireAuthentication: Bool = false) -> [UNNotificationCategory] {
+        let actionOptions: UNNotificationActionOptions = actionsRequireAuthentication ? [.authenticationRequired] : []
+        let reply = UNTextInputNotificationAction(identifier: MattermostPushUserInfo.replyActionIdentifier, title: replyTitle, options: actionOptions, textInputButtonTitle: replyTitle, textInputPlaceholder: replyPlaceholder)
+        let markRead = UNNotificationAction(identifier: MattermostPushUserInfo.markReadActionIdentifier, title: markReadTitle, options: actionOptions)
         return [
             UNNotificationCategory(identifier: MattermostPushUserInfo.messageCategory, actions: [reply, markRead], intentIdentifiers: [], hiddenPreviewsBodyPlaceholder: hiddenPreviewsBodyPlaceholder, options: options)
         ]

@@ -74,6 +74,10 @@ public enum MattermostServerProbeError: Error, Equatable {
     case notMattermost(host: String)
     case tooOld(version: ServerVersion, minimum: ServerVersion)
     case unknownVersion
+    /// Managed configuration allows only another server (Phase 4G); `allowed` is its host (and port, path).
+    case notAllowed(allowed: String)
+    /// The server's certificate doesn't match the pins managed configuration set for it (Phase 4G).
+    case certificateRejected(host: String)
 
     public var message: String {
         switch self {
@@ -91,6 +95,10 @@ public enum MattermostServerProbeError: Error, Equatable {
             return "This server runs Mattermost \(version). Relay needs Mattermost \(minimum.major).\(minimum.minor) or newer. Ask your administrator to upgrade the server."
         case .unknownVersion:
             return "Relay can't tell which Mattermost version this server runs, so it can't connect to it."
+        case let .notAllowed(allowed):
+            return "Your organization allows Relay to connect only to \(allowed)."
+        case let .certificateRejected(host):
+            return "The certificate of \(host) isn't the one your organization requires, so Relay didn't connect."
         }
     }
 }
@@ -99,6 +107,8 @@ public enum MattermostAccountSetupError: Error, Equatable {
     /// This user on this server already has an account in the app.
     case alreadyLoggedIn(username: String)
     case storage(String)
+    /// Managed configuration allows only another server (Phase 4G).
+    case serverNotAllowed(allowed: String)
 
     public var message: String {
         switch self {
@@ -106,6 +116,8 @@ public enum MattermostAccountSetupError: Error, Equatable {
             return "You're already logged in to this server as \(username)."
         case let .storage(reason):
             return "Relay couldn't save the account on this device (\(reason))."
+        case let .serverNotAllowed(allowed):
+            return "Your organization allows Relay to connect only to \(allowed)."
         }
     }
 }
@@ -138,6 +150,12 @@ public enum MattermostAccountSetup {
             url = try ServerAddress.normalize(address, allowInsecureLocal: allowInsecureLocal)
         } catch let error as ServerAddress.NormalizationError {
             throw MattermostServerProbeError.invalidAddress(error)
+        }
+        // Phase 4G: managed configuration may allow only its own server.
+        let managed = MattermostManagedSettings.current
+        if let allowed = managed.restrictedServerURL, !managed.allowsServer(url) {
+            MMLog.log("probe \(url): not allowed by managed configuration")
+            throw MattermostServerProbeError.notAllowed(allowed: self.hostDisplay(allowed))
         }
         let hasScheme = address.contains("://")
         do {
@@ -190,8 +208,22 @@ public enum MattermostAccountSetup {
         return MattermostServerDescription(url: url, siteName: config.siteName ?? "", version: version, config: config, license: license)
     }
 
+    /// `host[:port][/path]`, as the login shows a server.
+    public static func hostDisplay(_ url: URL) -> String {
+        var text = url.host ?? url.absoluteString
+        if let port = url.port {
+            text += ":\(port)"
+        }
+        if !url.path.isEmpty && url.path != "/" {
+            text += url.path
+        }
+        return text
+    }
+
     private static func probeError(_ error: MattermostError, host: String) -> MattermostServerProbeError {
         switch error {
+        case let .transport(urlError) where urlError.mattermostPinMismatchHost != nil:
+            return .certificateRejected(host: host)
         case let .transport(urlError):
             return .unreachable(host: host, reason: urlError.localizedDescription)
         case .rateLimited:
@@ -246,8 +278,14 @@ public enum MattermostAccountSetup {
     @discardableResult
     public static func createAccount(server: MattermostServerDescription?, serverURL: URL, login: LoginResult, loginId: String?, target: Target, accountManager: AccountManager<TelegramAccountManagerTypes>) async throws -> AccountRecordId {
         let serverURLString = serverURL.absoluteString
+        let managed = MattermostManagedSettings.current
+        if let allowed = managed.restrictedServerURL, !managed.allowsServer(serverURL) {
+            let client = MattermostClient(serverURL: serverURL, token: login.token, userAgent: self.userAgent)
+            try? await client.logout()
+            throw MattermostAccountSetupError.serverNotAllowed(allowed: self.hostDisplay(allowed))
+        }
         if let existing = MattermostSync.registeredAccount(userId: login.user.id, serverURL: serverURLString) {
-            MMLog.log("login: \(login.user.username) on \(serverURLString) already has account \(existing.int64)")
+            MMLog.log("login: this user on \(serverURLString) already has account \(existing.int64)")
             // The login made a session the app won't use: end it (best effort).
             let client = MattermostClient(serverURL: serverURL, token: login.token, userAgent: self.userAgent)
             try? await client.logout()
@@ -295,7 +333,7 @@ public enum MattermostAccountSetup {
         }
         let ownPeerId = MattermostPeerIds.userPeerId(ownIdValue)
         let ownUser = PeerConverter.user(login.user, peerId: ownPeerId)
-        MMLog.log("login: \(login.user.username) on \(serverURLString) → account \(id.int64), own peer \(ownPeerId)")
+        MMLog.log("login: \(serverURLString) → account \(id.int64), own peer \(ownPeerId)")
 
         let writeState: (Transaction) -> Void = { transaction in
             transaction.setState(AuthorizedAccountState(isTestingEnvironment: false, masterDatacenterId: 2, peerId: ownPeerId, state: nil, invalidatedChannels: []))

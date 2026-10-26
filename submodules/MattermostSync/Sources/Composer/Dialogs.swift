@@ -117,7 +117,7 @@ extension MattermostAccountSync {
         if teamId.isEmpty {
             teamId = self.state.with { $0.teams.first?.id ?? "" }
         }
-        MMLog.log("live: open_dialog \"\(request.dialog.title)\" (\(request.dialog.elements.count) elements, callback \(request.dialog.callbackId)) for \(channelId.isEmpty ? "no chat" : channelId)")
+        MMLog.log("live: open_dialog (\(request.dialog.elements.count) elements, callback \(request.dialog.callbackId)) for \(channelId.isEmpty ? "no chat" : channelId)")
         MattermostSync.dialogPipe(accountId: self.account.id).putNext(MattermostDialogRequest(accountId: self.account.id, id: MattermostSync.makeDialogId(), request: request, channelId: channelId, teamId: teamId))
     }
 

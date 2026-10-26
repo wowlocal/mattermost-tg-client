@@ -481,7 +481,7 @@ extension MattermostAccountSync {
         let trimmed = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(CustomStatusRules.textMaxLength))
         let status = UserCustomStatus(emoji: emojiName.isEmpty ? CustomStatusRules.defaultEmoji : emojiName, text: trimmed, duration: duration.apiValue, expiresAt: duration.expiresAtString(now: Date()))
         try await self.client.updateCustomStatus(status)
-        MMLog.log("profile: custom status \(status.emoji) \"\(status.text)\" \(status.duration) \(status.expiresAt)")
+        MMLog.log("profile: custom status set (\(status.duration), expires \(status.expiresAt.isEmpty ? "never" : status.expiresAt))")
         // The `user_updated` echo reloads the user too; this makes the change visible at once.
         await self.applyOwnUserUpdated()
     }
@@ -513,7 +513,7 @@ extension MattermostAccountSync {
             return
         }
         let user = try await self.client.patchUser(patch)
-        MMLog.log("profile: patched \(user.username) (\(user.firstName) \(user.lastName), nickname \(user.nickname), position \(user.position))")
+        MMLog.log("profile: patched")
         self.state.with { state in
             // The answer is the full own user (with notify props).
             state.me = user
@@ -686,7 +686,7 @@ extension MattermostAccountSync {
             return users.filter { $0.customStatus?.isExpired(at: now) == true }
         }
         if !expired.isEmpty {
-            MMLog.log("profile: custom status expired for \(expired.map { $0.username }.sorted())")
+            MMLog.log("profile: custom status expired for \(expired.count) user(s)")
             await self.postbox.mmTransaction { transaction in
                 self.writeUsers(expired, transaction: transaction)
             }

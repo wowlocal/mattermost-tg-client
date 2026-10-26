@@ -353,7 +353,8 @@ private func fetchURLImage(postbox: Postbox, url resourceURL: String, resourceId
                     if let url = sameOrigin {
                         var request = URLRequest(url: url)
                         request.setValue(MattermostSync.userAgent, forHTTPHeaderField: "User-Agent")
-                        let (body, response) = try await URLSession.shared.data(for: request)
+                        // The client's session: the server's certificate pins apply (Phase 4G).
+                        let (body, response) = try await client.session.data(for: request)
                         guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode), !body.isEmpty else {
                             throw URLError(.badServerResponse)
                         }

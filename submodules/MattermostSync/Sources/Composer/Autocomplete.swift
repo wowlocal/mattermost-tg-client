@@ -155,7 +155,7 @@ extension MattermostAccountSync {
         do {
             found = try await self.client.autocompleteUsers(name: name, teamId: self.teamId(for: channelState), channelId: channelId, limit: 25)
         } catch {
-            MMLog.log("autocomplete: users \"\(name)\" failed: \(error)")
+            MMLog.log("autocomplete: users (\(name.count) characters) failed: \(error)")
             return []
         }
         let all = (found.users + found.outOfChannel).filter { $0.deleteAt == 0 }
@@ -204,7 +204,7 @@ extension MattermostAccountSync {
         do {
             channels = try await self.client.autocompleteChannels(teamId: teamId, name: name)
         } catch {
-            MMLog.log("autocomplete: channels \"\(name)\" failed: \(error)")
+            MMLog.log("autocomplete: channels (\(name.count) characters) failed: \(error)")
             return []
         }
         func matches(_ channel: Channel) -> Bool {
@@ -236,7 +236,7 @@ extension MattermostAccountSync {
             let emoji = try await self.client.autocompleteCustomEmoji(name: query.lowercased())
             return emoji.filter { $0.deleteAt == 0 }.map(\.name)
         } catch {
-            MMLog.log("autocomplete: emoji \"\(query)\" failed: \(error)")
+            MMLog.log("autocomplete: emoji (\(query.count) characters) failed: \(error)")
             return []
         }
     }
