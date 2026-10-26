@@ -269,6 +269,21 @@ public enum MattermostDirectory {
         }
     }
 
+    /// One channel for its preview (by id; search opens channels the user hasn't joined with it).
+    public static func channelPreview(accountId: AccountRecordId, channelId: String) -> Signal<MattermostBrowsedChannel, MattermostDirectoryError> {
+        return self.run(accountId: accountId) { sync in
+            return try await sync.channelPreview(channelId: channelId)
+        }
+    }
+
+    /// The Mattermost channel of a peer search shows for a public channel the user isn't in (3C), if it is one.
+    public static func previewChannelId(accountId: AccountRecordId, peerId: PeerId) -> String? {
+        guard let sync = MattermostSync.sync(accountId: accountId) else {
+            return nil
+        }
+        return sync.state.with { $0.previewChannels[peerId]?.id }
+    }
+
     /// Joins a public channel; returns its chat once written.
     public static func joinChannel(accountId: AccountRecordId, channelId: String) -> Signal<PeerId, MattermostDirectoryError> {
         return self.run(accountId: accountId) { sync in
@@ -504,24 +519,35 @@ extension MattermostAccountSync {
             counts = (try? await self.client.channelMemberCounts(channelIds: channels.map(\.id))) ?? [:]
         }
         let result = channels.enumerated().map { index, channel -> MattermostBrowsedChannel in
-            let title = channel.displayName.isEmpty ? channel.name : channel.displayName
-            let memberPeerId = self.channelState(channel.id)?.peerId
-            let previewPeerId = memberPeerId ?? MattermostPeerIds.channelPeerId(MattermostPeerIds.suggestionPeerIdValue(Int64(page * perPage + index)))
-            return MattermostBrowsedChannel(
-                id: channel.id,
-                teamId: channel.teamId,
-                name: channel.name,
-                displayName: title,
-                purpose: channel.purpose,
-                header: MattermostMarkdown.parse(channel.header).text,
-                memberCount: counts[channel.id],
-                isArchived: channel.isArchived,
-                isPrivate: channel.type == .privateChannel,
-                memberPeerId: memberPeerId,
-                previewPeer: EnginePeer(PeerConverter.channel(channel, title: title, peerId: previewPeerId))
-            )
+            return self.browsedChannel(channel, memberCount: counts[channel.id], index: page * perPage + index)
         }
         return MattermostChannelPage(channels: result, hasMore: hasMore)
+    }
+
+    /// A channel as Browse Channels and its preview show it; `index` picks an in-memory peer id for the avatar.
+    private func browsedChannel(_ channel: Channel, memberCount: Int64?, index: Int) -> MattermostBrowsedChannel {
+        let title = channel.displayName.isEmpty ? channel.name : channel.displayName
+        let memberPeerId = self.channelState(channel.id)?.peerId
+        let previewPeerId = memberPeerId ?? MattermostPeerIds.channelPeerId(MattermostPeerIds.suggestionPeerIdValue(Int64(index)))
+        return MattermostBrowsedChannel(
+            id: channel.id,
+            teamId: channel.teamId,
+            name: channel.name,
+            displayName: title,
+            purpose: channel.purpose,
+            header: MattermostMarkdown.parse(channel.header).text,
+            memberCount: memberCount,
+            isArchived: channel.isArchived,
+            isPrivate: channel.type == .privateChannel,
+            memberPeerId: memberPeerId,
+            previewPeer: EnginePeer(PeerConverter.channel(channel, title: title, peerId: previewPeerId))
+        )
+    }
+
+    func channelPreview(channelId: String) async throws -> MattermostBrowsedChannel {
+        let channel = try await self.client.channel(id: channelId)
+        let counts = (try? await self.client.channelMemberCounts(channelIds: [channelId])) ?? [:]
+        return self.browsedChannel(channel, memberCount: counts[channelId], index: 0)
     }
 
     func previewPosts(channelId: String, limit: Int) async throws -> [MattermostPreviewPost] {

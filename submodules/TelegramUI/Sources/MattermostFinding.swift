@@ -34,7 +34,13 @@ func mattermostNavigateToChat(_ params: NavigateToChatControllerParams) -> Bool 
         return true
     }
     if case .channel = peer, MattermostSync.isPreviewChannel(accountId: context.account.id, peerId: peer.id) {
-        mattermostAskToJoin(params: params, peer: peer)
+        // 3D-2: the channel's preview (purpose, header, recent messages) with Join; the join prompt without one.
+        if let channelId = MattermostDirectory.previewChannelId(accountId: context.account.id, peerId: peer.id) {
+            params.purposefulAction?()
+            params.navigationController.pushViewController(mattermostChannelPreviewController(context: context, channelId: channelId))
+        } else {
+            mattermostAskToJoin(params: params, peer: peer)
+        }
         return true
     }
     return false

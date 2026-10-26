@@ -942,6 +942,15 @@ private enum PreviewEntry: ItemListNodeEntry {
 
 /// A channel the user isn't in: its name, members, purpose and header, and Join.
 func mattermostChannelPreviewController(context: AccountContext, channel: MattermostBrowsedChannel) -> ViewController {
+    return mattermostChannelPreviewController(context: context, channelId: channel.id, loaded: .single(channel))
+}
+
+/// The preview of a public channel by its id (also opened by search for a channel the user hasn't joined, 3C).
+public func mattermostChannelPreviewController(context: AccountContext, channelId: String) -> ViewController {
+    return mattermostChannelPreviewController(context: context, channelId: channelId, loaded: MattermostDirectory.channelPreview(accountId: context.account.id, channelId: channelId))
+}
+
+private func mattermostChannelPreviewController(context: AccountContext, channelId: String, loaded: Signal<MattermostBrowsedChannel, MattermostDirectoryError>) -> ViewController {
     let accountId = context.account.id
     let joining = ValuePromise<Bool>(false, ignoreRepeated: true)
     let joiningValue = Atomic<Bool>(value: false)
@@ -949,16 +958,34 @@ func mattermostChannelPreviewController(context: AccountContext, channel: Matter
     var navigationControllerImpl: (() -> NavigationController?)?
     var presentImpl: ((ViewController) -> Void)?
 
+    let channelPromise = Promise<(MattermostBrowsedChannel?, String?)>((nil, nil))
+    let channelValue = Atomic<MattermostBrowsedChannel?>(value: nil)
+    channelPromise.set(loaded
+    |> map { channel -> (MattermostBrowsedChannel?, String?) in
+        let _ = channelValue.swap(channel)
+        return (channel, nil)
+    }
+    |> `catch` { error -> Signal<(MattermostBrowsedChannel?, String?), NoError> in
+        return .single((nil, mattermostDirectoryErrorText(error, strings: context.sharedContext.currentPresentationData.with { $0 }.strings)))
+    })
+
     // A read-only look at the channel: its newest messages.
     let recentPromise = Promise<[MattermostPreviewPost]?>(nil)
-    recentPromise.set(.single(nil) |> then(MattermostDirectory.previewPosts(accountId: accountId, channelId: channel.id)
+    recentPromise.set(.single(nil) |> then(MattermostDirectory.previewPosts(accountId: accountId, channelId: channelId)
     |> map(Optional.init)
     |> `catch` { _ -> Signal<[MattermostPreviewPost]?, NoError> in
         return .single([])
     }))
 
     let join: () -> Void = {
-        if channel.isArchived || joiningValue.swap(true) {
+        guard let channel = channelValue.with({ $0 }), !channel.isArchived else {
+            return
+        }
+        if let peerId = channel.memberPeerId {
+            mattermostOpenChat(context: context, navigationController: navigationControllerImpl?(), peerId: peerId)
+            return
+        }
+        if joiningValue.swap(true) {
             return
         }
         joining.set(true)
@@ -975,45 +1002,50 @@ func mattermostChannelPreviewController(context: AccountContext, channel: Matter
     }
     let arguments = PreviewArguments(context: context, join: join)
 
-    let signal = combineLatest(context.sharedContext.presentationData, joining.get(), recentPromise.get())
+    let signal = combineLatest(context.sharedContext.presentationData, joining.get(), recentPromise.get(), channelPromise.get())
     |> deliverOnMainQueue
-    |> map { presentationData, joining, recent -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, joining, recent, channelAndError -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let strings = presentationData.strings
         var entries: [PreviewEntry] = []
-        var subtitle = "~" + channel.name
-        if let count = channel.memberCount {
-            subtitle += " · " + strings.Relay_Browse_Members(Int32(clamping: count))
-        }
-        entries.append(.channel(channel, text: subtitle))
-        if !channel.purpose.isEmpty {
-            entries.append(.header(id: 0, text: strings.Relay_Channel_Purpose))
-            entries.append(.text(id: 0, text: channel.purpose))
-        }
-        if !channel.header.isEmpty {
-            entries.append(.header(id: 1, text: strings.Relay_Channel_Header))
-            entries.append(.text(id: 1, text: channel.header))
-        }
-        if channel.isArchived {
-            entries.append(.info(strings.Relay_ChannelPreview_Archived))
-        } else {
-            entries.append(.join(title: strings.Relay_ChannelPreview_Join, enabled: !joining))
-        }
-        entries.append(.recentHeader(strings.Relay_ChannelPreview_Recent))
-        if let recent {
-            if recent.isEmpty {
-                entries.append(.recentInfo(strings.Relay_ChannelPreview_NoMessages))
+        let (channel, loadError) = channelAndError
+        if let channel {
+            var subtitle = "~" + channel.name
+            if let count = channel.memberCount {
+                subtitle += " · " + strings.Relay_Browse_Members(Int32(clamping: count))
             }
-            let formatter = DateFormatter()
-            formatter.dateStyle = .short
-            formatter.timeStyle = .short
-            for (index, post) in recent.enumerated() {
-                entries.append(.recent(index: index, text: "\(post.author) · \(formatter.string(from: post.date))\n\(post.text)"))
+            entries.append(.channel(channel, text: subtitle))
+            if !channel.purpose.isEmpty {
+                entries.append(.header(id: 0, text: strings.Relay_Channel_Purpose))
+                entries.append(.text(id: 0, text: channel.purpose))
+            }
+            if !channel.header.isEmpty {
+                entries.append(.header(id: 1, text: strings.Relay_Channel_Header))
+                entries.append(.text(id: 1, text: channel.header))
+            }
+            if channel.isArchived {
+                entries.append(.info(strings.Relay_ChannelPreview_Archived))
+            } else {
+                entries.append(.join(title: channel.memberPeerId != nil ? strings.Relay_ChannelPreview_Open : strings.Relay_ChannelPreview_Join, enabled: !joining))
+            }
+            entries.append(.recentHeader(strings.Relay_ChannelPreview_Recent))
+            if let recent {
+                if recent.isEmpty {
+                    entries.append(.recentInfo(strings.Relay_ChannelPreview_NoMessages))
+                }
+                let formatter = DateFormatter()
+                formatter.dateStyle = .short
+                formatter.timeStyle = .short
+                for (index, post) in recent.enumerated() {
+                    entries.append(.recent(index: index, text: "\(post.author) · \(formatter.string(from: post.date))\n\(post.text)"))
+                }
+            } else {
+                entries.append(.recentInfo(strings.Relay_Compose_Loading))
             }
         } else {
-            entries.append(.recentInfo(strings.Relay_Compose_Loading))
+            entries.append(.info(loadError ?? strings.Relay_Compose_Loading))
         }
         let rightButton: ItemListNavigationButton? = joining ? ItemListNavigationButton(content: .none, style: .activity, enabled: true, action: {}) : nil
-        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(channel.displayName), leftNavigationButton: nil, rightNavigationButton: rightButton, backNavigationButton: ItemListBackButton(title: strings.Common_Back))
+        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(channel?.displayName ?? ""), leftNavigationButton: nil, rightNavigationButton: rightButton, backNavigationButton: ItemListBackButton(title: strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
         return (controllerState, (listState, arguments))
     }
@@ -1030,7 +1062,8 @@ func mattermostChannelPreviewController(context: AccountContext, channel: Matter
         controller?.present(c, in: .window(.root))
     }
     controller.debugState = {
-        return ["screen": "channel-preview", "channelId": channel.id, "name": channel.name, "archived": channel.isArchived, "joining": joiningValue.with { $0 }]
+        let channel = channelValue.with { $0 }
+        return ["screen": "channel-preview", "channelId": channelId, "name": channel?.name ?? "", "archived": channel?.isArchived ?? false, "joined": channel?.memberPeerId != nil, "joining": joiningValue.with { $0 }]
     }
     controller.debugActions = [
         "join": { _ in

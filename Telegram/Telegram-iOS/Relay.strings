@@ -227,6 +227,7 @@
 "Relay.Browse.Empty" = "No channels found.";
 "Relay.Browse.EmptyArchived" = "No archived channels found.";
 "Relay.ChannelPreview.Join" = "Join Channel";
+"Relay.ChannelPreview.Open" = "Open Channel";
 "Relay.ChannelPreview.Archived" = "This channel is archived: nobody can join it or post in it.";
 "Relay.Channel.Name" = "NAME";
 "Relay.Channel.NamePlaceholder" = "Channel name";
@@ -309,3 +310,6 @@
 "Relay.Search.JoinText" = "You aren't a member of this channel. Join it to read and post.";
 "Relay.Search.Join" = "Join";
 "Relay.Search.JoinFailed" = "You couldn't join this channel.";
+
+/* An archived channel's composer (3D-2: archived channels are read-only; nothing else restricts writing in Relay). */
+"Conversation.DefaultRestrictedText" = "This channel is archived. Its messages can be read but not changed.";

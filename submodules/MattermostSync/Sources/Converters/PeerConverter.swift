@@ -69,7 +69,9 @@ enum PeerConverter {
             restrictionInfo: nil,
             adminRights: nil,
             bannedRights: nil,
-            defaultBannedRights: nil,
+            // An archived channel is read-only (3D-2): Telegram's composer shows its "writing isn't allowed" panel
+            // (`Conversation.DefaultRestrictedText`, worded for archived channels in Relay.strings).
+            defaultBannedRights: channel.isArchived && participationStatus == .member ? PeerConverter.archivedChannelRights : nil,
             usernames: [],
             storiesHidden: nil,
             nameColor: nil,
@@ -84,6 +86,8 @@ enum PeerConverter {
             linkedMonoforumId: nil
         )
     }
+
+    static let archivedChannelRights = TelegramChatBannedRights(flags: [.banSendText, .banSendMedia, .banSendStickers, .banSendGifs, .banSendInline, .banSendPolls, .banSendPhotos, .banSendVideos, .banSendInstantVideos, .banSendMusic, .banSendVoice, .banSendFiles, .banSendReactions, .banPinMessages, .banChangeInfo, .banAddMembers], untilDate: Int32.max)
 
     static func presence(status: UserStatus.Status, lastActivityAt: Int64, dndEndTime: Int64?, now: Date) -> TelegramUserPresence {
         let mapped = PresenceMapper.presence(
