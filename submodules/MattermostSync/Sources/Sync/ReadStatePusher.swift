@@ -67,7 +67,8 @@ extension MattermostAccountSync {
             guard let states = transaction.getPeerReadStates(peerId), let cloud = states.first(where: { $0.0 == Namespaces.Message.Cloud })?.1, case let .idBased(maxIncomingReadId, _, _, count, _) = cloud else {
                 return nil
             }
-            let next = self.store.entries(channelId: channelId, fromLocalId: maxIncomingReadId + 1, ascending: true, limit: 16).first(where: { !$0.isDeleted })
+            // The next post (a read multi-file post's other parts don't count).
+            let next = self.store.entries(channelId: channelId, fromLocalId: maxIncomingReadId + 1, ascending: true, limit: 128).first(where: { !$0.isDeleted && $0.partIndex == 0 })
             return (maxIncomingReadId, count, next?.postId)
         }
         guard let target = target else {

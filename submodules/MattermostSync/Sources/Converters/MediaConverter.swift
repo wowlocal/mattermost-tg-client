@@ -14,9 +14,13 @@ enum MediaConverter {
     private static let thumbnailBox = (width: 120, height: 100)
     private static let previewBox = (width: 1920, height: 1080)
 
+    /// Images Telegram shows as photos (and groups into albums); other files show as documents.
+    static func isAlbumImage(_ file: FileInfo) -> Bool {
+        return file.isImage && file.width > 0 && file.height > 0 && file.mimeType != "image/svg+xml"
+    }
+
     static func media(for file: FileInfo, mediaId: Int64) -> Converted {
-        let isDecodableImage = file.isImage && file.width > 0 && file.height > 0 && file.mimeType != "image/svg+xml"
-        if isDecodableImage {
+        if isAlbumImage(file) {
             var representations: [TelegramMediaImageRepresentation] = []
             if file.hasPreviewImage {
                 representations.append(TelegramMediaImageRepresentation(
@@ -71,7 +75,24 @@ enum MediaConverter {
         return Converted(media: telegramFile, tags: [.file])
     }
 
-    private static func fit(width: Int, height: Int, in box: (width: Int, height: Int)) -> PixelDimensions {
+    /// An image from a URL on the Mattermost server (message attachment images, `image_url` / `thumb_url`).
+    static func urlImage(url: String, width: Int, height: Int, mediaId: Int64) -> TelegramMediaImage {
+        return TelegramMediaImage(
+            imageId: MediaId(namespace: Namespaces.Media.CloudImage, id: mediaId),
+            representations: [TelegramMediaImageRepresentation(
+                dimensions: PixelDimensions(width: Int32(clamping: width), height: Int32(clamping: height)),
+                resource: MattermostURLImageResource(url: url),
+                progressiveSizes: [],
+                immediateThumbnailData: nil
+            )],
+            immediateThumbnailData: nil,
+            reference: nil,
+            partialReference: nil,
+            flags: []
+        )
+    }
+
+    static func fit(width: Int, height: Int, in box: (width: Int, height: Int)) -> PixelDimensions {
         if width <= box.width && height <= box.height {
             return PixelDimensions(width: Int32(clamping: width), height: Int32(clamping: height))
         }

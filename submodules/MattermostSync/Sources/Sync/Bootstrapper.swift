@@ -130,6 +130,10 @@ extension MattermostAccountSync {
             transaction.setPinnedItemIds(groupId: .root, itemIds: pinned)
         }
         await self.writeTeamFolders(teams: teams)
+        let chatIds = included.map { $0.channel.id }
+        self.addTask(Task { [weak self] in
+            await self?.refreshMemberCounts(chatIds)
+        })
         self.state.with { $0.isBootstrapped = true }
         self.bootstrapped.set(true)
         MMLog.log("bootstrap: structure written in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms: \(teams.count) teams, \(included.count) chats, \(users.count) users, \(favoriteChannelIds.count) favorites")

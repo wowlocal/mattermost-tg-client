@@ -179,7 +179,7 @@ extension MattermostAccountSync {
                         let nearby = self.store.entries(channelId: channelId, fromLocalId: edge, ascending: !olderFirst, limit: self.perPage)
                         return nearby.first(where: { entry in
                             return !entry.isDeleted && requested.contains(entry.localId) && !transaction.messageExists(id: MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: entry.localId))
-                        })?.postId
+                        })?.serverPostId
                     }
                     if let unwritten = unwritten {
                         MMLog.log("holes: \(unwritten) is mapped but not stored; reloading around it")
@@ -317,7 +317,7 @@ extension MattermostAccountSync {
             guard let localId = Int32(exactly: threadId), let entry = self.store.entries(channelId: channelId, fromLocalId: localId, ascending: true, limit: 1).first, entry.localId == localId else {
                 return nil
             }
-            return entry.postId
+            return entry.serverPostId
         }
         var posts: [Post] = []
         if let rootPostId = rootPostId {
@@ -369,6 +369,14 @@ func referencedUserIds(_ posts: [Post]) -> Set<String> {
     var result = Set<String>()
     for post in posts {
         result.insert(post.userId)
+        if post.type.hasPrefix("system_") {
+            // Users named by system messages (added, removed, the actor), shown as mentions.
+            for key in ["userId", "addedUserId", "removedUserId"] {
+                if let id = post.props[key]?.scalarString, !id.isEmpty {
+                    result.insert(id)
+                }
+            }
+        }
         for reaction in post.metadata?.reactions ?? [] {
             result.insert(reaction.userId)
         }

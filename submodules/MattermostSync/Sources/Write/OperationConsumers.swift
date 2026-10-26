@@ -142,13 +142,14 @@ extension MattermostAccountSync {
     /// leaves that reaction as the server has it (the optimistic state rolls back).
     func pushReactions(messageId: MessageId) async -> Bool {
         let ownPeerId = self.ownPeerId
+        let reactionsSourceId = self.primaryMessageId(for: messageId) ?? messageId
         let snapshot: (wanted: [MessageReaction.Reaction], mine: [MessageReaction.Reaction])? = await self.postbox.mmTransaction { transaction in
             guard let message = transaction.getMessage(messageId), let pending = message.attributes.first(where: { $0 is PendingReactionsMessageAttribute }) as? PendingReactionsMessageAttribute else {
                 transaction.setPendingMessageAction(type: .updateReaction, id: messageId, action: nil)
                 return nil
             }
             var mine: [MessageReaction.Reaction] = []
-            if let reactions = message.attributes.first(where: { $0 is ReactionsMessageAttribute }) as? ReactionsMessageAttribute {
+            if let reactions = (transaction.getMessage(reactionsSourceId) ?? message).attributes.first(where: { $0 is ReactionsMessageAttribute }) as? ReactionsMessageAttribute {
                 for peer in reactions.recentPeers where (peer.isMy || peer.peerId == ownPeerId) && !mine.contains(peer.value) {
                     mine.append(peer.value)
                 }
@@ -207,10 +208,11 @@ extension MattermostAccountSync {
         let now = Int32(Date().timeIntervalSince1970)
         let addedValues = added
         let removedValues = removed
+        // A multi-file post keeps its reactions on its primary message (the one Telegram shows them from).
+        let primaryId = self.primaryMessageId(for: messageId) ?? messageId
         await self.postbox.mmTransaction { transaction in
-            var finished = false
-            transaction.updateMessage(messageId, update: { current in
-                var attributes = current.attributes
+            func applied(_ attributes: [MessageAttribute]) -> [MessageAttribute] {
+                var attributes = attributes
                 var recentPeers: [ReactionsMessageAttribute.RecentPeer] = []
                 if let index = attributes.firstIndex(where: { $0 is ReactionsMessageAttribute }) {
                     recentPeers = (attributes[index] as! ReactionsMessageAttribute).recentPeers
@@ -223,6 +225,16 @@ extension MattermostAccountSync {
                 if let attribute = PostConverter.reactionsAttribute(recentPeers: recentPeers) {
                     attributes.append(attribute)
                 }
+                return attributes
+            }
+            var finished = false
+            if primaryId != messageId {
+                transaction.updateMessage(primaryId, update: { current in
+                    return .update(StoreMessage.mmCopy(of: current, id: current.id, threadId: current.threadId, attributes: applied(current.attributes)))
+                })
+            }
+            transaction.updateMessage(messageId, update: { current in
+                var attributes = primaryId == messageId ? applied(current.attributes) : current.attributes.filter { !($0 is ReactionsMessageAttribute) }
                 // Done unless the user changed the reactions again meanwhile (then this runs once more).
                 if let index = attributes.firstIndex(where: { $0 is PendingReactionsMessageAttribute }), (attributes[index] as! PendingReactionsMessageAttribute).reactions.map({ $0.value }) == snapshot.wanted {
                     attributes.remove(at: index)

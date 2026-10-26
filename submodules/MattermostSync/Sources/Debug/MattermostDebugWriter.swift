@@ -21,6 +21,8 @@ import MattermostSyncCore
 /// | `senduser\|<username>\|<text>` (to the user's peer; creates the DM channel if needed) | `enqueueMessages` |
 /// | `image\|<chat>\|<caption>` (a generated 1200×800 JPEG) | `enqueueMessages` with a local `TelegramMediaImage` |
 /// | `file\|<chat>\|<file name>\|<content>` | `enqueueMessages` with a local `TelegramMediaFile` |
+/// | `album\|<chat>\|<count>\|<caption>` (generated JPEGs, one grouping key) | `enqueueMessages` as the media picker's album |
+/// | `files\|<chat>\|<count>\|<caption>` (text files, one grouping key, caption on the last) | `enqueueMessages` as grouped files |
 /// | `react\|<chat>\|<msg>\|<emoji>` / `unreact\|…` | `updateMessageReactionsInteractively` (as a reaction tap) |
 /// | `edit\|<chat>\|<msg>\|<text>` | `account.pendingUpdateMessageManager.add` (as the edit panel) |
 /// | `delete\|<chat>\|<msg>` | `engine.messages.deleteMessagesInteractively(.forEveryone)` |
@@ -109,6 +111,33 @@ enum MattermostDebugWriter {
             account.postbox.mediaBox.storeResourceData(resource.id, data: data, synchronous: true)
             let image = TelegramMediaImage(imageId: MediaId(namespace: Namespaces.Media.LocalImage, id: id), representations: [TelegramMediaImageRepresentation(dimensions: PixelDimensions(width: 1200, height: 800), resource: resource, progressiveSizes: [], immediateThumbnailData: nil)], immediateThumbnailData: nil, reference: nil, partialReference: nil, flags: [])
             return await enqueue(account: account, peerId: peerId, message: .message(text: field(2), attributes: [], inlineStickers: [:], mediaReference: .standalone(media: image), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: []))
+        case "album", "files":
+            // As the media picker sends an album (or files with "group items" on): one message per item, all
+            // with the same local grouping key; the caption on the first photo or the last file.
+            let count = max(2, min(10, Int(field(2)) ?? 3))
+            let groupingKey = Int64.random(in: 1 ... Int64.max)
+            var messages: [EnqueueMessage] = []
+            for index in 0 ..< count {
+                let id = Int64.random(in: 1 ... Int64.max)
+                let media: Media
+                if action == "album" {
+                    guard let data = generatedJpeg(label: "\(index + 1)/\(count)", hue: CGFloat(index) / CGFloat(count)) else {
+                        return "could not render an image"
+                    }
+                    let resource = LocalFileMediaResource(fileId: id)
+                    account.postbox.mediaBox.storeResourceData(resource.id, data: data, synchronous: true)
+                    media = TelegramMediaImage(imageId: MediaId(namespace: Namespaces.Media.LocalImage, id: id), representations: [TelegramMediaImageRepresentation(dimensions: PixelDimensions(width: 1200, height: 800), resource: resource, progressiveSizes: [], immediateThumbnailData: nil)], immediateThumbnailData: nil, reference: nil, partialReference: nil, flags: [])
+                } else {
+                    let data = Data("Relay grouped file \(index + 1) of \(count)\n".utf8)
+                    let resource = LocalFileMediaResource(fileId: id, size: Int64(data.count))
+                    account.postbox.mediaBox.storeResourceData(resource.id, data: data, synchronous: true)
+                    media = TelegramMediaFile(fileId: MediaId(namespace: Namespaces.Media.LocalFile, id: id), partialReference: nil, resource: resource, previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil, mimeType: "text/plain", size: Int64(data.count), attributes: [.FileName(fileName: "part-\(index + 1).txt")], alternativeRepresentations: [])
+                }
+                let captionIndex = action == "album" ? 0 : count - 1
+                messages.append(.message(text: index == captionIndex ? field(3) : "", attributes: [], inlineStickers: [:], mediaReference: .standalone(media: media), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: groupingKey, correlationId: nil, bubbleUpEmojiOrStickersets: []))
+            }
+            let ids = await signalValue(enqueueMessages(account: account, peerId: peerId, messages: messages))
+            return "enqueued \(ids?.compactMap { $0 }.map { "\($0)" } ?? [])"
         case "file":
             let name = field(2).isEmpty ? "notes.txt" : field(2)
             let data = Data((field(3).isEmpty ? "Relay debug file \(Date())\n" : field(3) + "\n").utf8)
@@ -267,16 +296,19 @@ enum MattermostDebugWriter {
         return (text, entities)
     }
 
-    private static func generatedJpeg() -> Data? {
+    private static func generatedJpeg(label: String = "Relay 2A", hue: CGFloat? = nil) -> Data? {
         let size = CGSize(width: 1200, height: 800)
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1.0
         let image = UIGraphicsImageRenderer(size: size, format: format).image { context in
-            let colors = [UIColor(red: 0.12, green: 0.45, blue: 0.86, alpha: 1.0).cgColor, UIColor(red: 0.55, green: 0.2, blue: 0.75, alpha: 1.0).cgColor]
+            var colors = [UIColor(red: 0.12, green: 0.45, blue: 0.86, alpha: 1.0).cgColor, UIColor(red: 0.55, green: 0.2, blue: 0.75, alpha: 1.0).cgColor]
+            if let hue = hue {
+                colors = [UIColor(hue: hue, saturation: 0.7, brightness: 0.85, alpha: 1.0).cgColor, UIColor(hue: fmod(hue + 0.2, 1.0), saturation: 0.7, brightness: 0.6, alpha: 1.0).cgColor]
+            }
             if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors as CFArray, locations: [0.0, 1.0]) {
                 context.cgContext.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: size.width, y: size.height), options: [])
             }
-            let text = NSAttributedString(string: "Relay 2A\n\(DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .medium))", attributes: [.font: UIFont.boldSystemFont(ofSize: 96), .foregroundColor: UIColor.white])
+            let text = NSAttributedString(string: "\(label)\n\(DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .medium))", attributes: [.font: UIFont.boldSystemFont(ofSize: 96), .foregroundColor: UIColor.white])
             text.draw(at: CGPoint(x: 80, y: 260))
         }
         return image.jpegData(compressionQuality: 0.85)

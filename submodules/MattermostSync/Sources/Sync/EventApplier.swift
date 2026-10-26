@@ -24,6 +24,10 @@ extension MattermostAccountSync {
             if let post = event.deletedPost {
                 await self.applyDeleted(post)
             }
+        case .ephemeralMessage:
+            if let post = event.decodeEmbedded(Post.self, key: "post") {
+                self.applyEphemeral(post)
+            }
         case .reactionAdded, .reactionRemoved:
             if let reaction = event.reaction {
                 await self.applyReaction(reaction, added: event.type == .reactionAdded)
@@ -58,6 +62,13 @@ extension MattermostAccountSync {
         case .userAdded:
             if event.data["user_id"]?.stringValue == self.ownUserId, !event.broadcast.channelId.isEmpty {
                 await self.refreshChannel(event.broadcast.channelId)
+            } else if !event.broadcast.channelId.isEmpty {
+                await self.refreshMemberCounts([event.broadcast.channelId])
+            }
+        case .userRemoved:
+            let channelId = event.data["channel_id"]?.stringValue ?? event.broadcast.channelId
+            if !channelId.isEmpty, event.data["user_id"]?.stringValue != self.ownUserId {
+                await self.refreshMemberCounts([channelId])
             }
         case .sidebarCategoryCreated, .sidebarCategoryUpdated, .sidebarCategoryDeleted, .sidebarCategoryOrderUpdated:
             await self.refreshFavorites()
@@ -98,7 +109,7 @@ extension MattermostAccountSync {
                 MMLog.log("live: echo of own post \(post.id) (pending \(post.pendingPostId)) left to its request")
                 return
             }
-            await self.applyOwnPost(post, pendingPostId: post.pendingPostId, uploadedFiles: [], onRewritten: nil)
+            await self.applyOwnPost(post, pendingPostId: post.pendingPostId, uploadedFiles: [:], onRewritten: nil)
             MMLog.log("live: own post \(post.id) (pending \(post.pendingPostId)) applied from its echo")
             return
         }
@@ -302,6 +313,7 @@ extension MattermostAccountSync {
                 let teamId = channel.teamId
                 self.writeChannel(channel, member: member, teamId: teamId, transaction: transaction)
             }
+            await self.refreshMemberCounts([channelId])
             if isNew && channel.type != .directMessage {
                 await self.writeTeamFolders(teams: self.state.with { $0.teams })
             }

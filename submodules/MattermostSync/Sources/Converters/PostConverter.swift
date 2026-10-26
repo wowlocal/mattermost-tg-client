@@ -30,18 +30,27 @@ struct PostConversionContext {
     /// Post id → current local id in this channel.
     var localId: (String) -> Int32?
     var mediaId: (String) -> Int64
+    /// The author shown instead of the poster (webhook and bot `override_username`), see `OverridePeers`.
+    var authorOverride: (Post) -> PeerId? = { _ in nil }
+}
+
+/// The messages of one post (one per mapped part, in part order) and the custom emoji files their text
+/// references (stored in Postbox's media table, so `Message.associatedMedia` resolves them offline).
+struct ConvertedPost {
+    var messages: [StoreMessage] = []
+    var customEmojiFiles: [TelegramMediaFile] = []
 }
 
 /// Mattermost posts → Postbox `StoreMessage`s (design: "Writing a page of posts", step 3).
 enum PostConverter {
-    static func storeMessage(post: Post, localId: Int32, context: PostConversionContext) -> StoreMessage {
-        let messageId = MessageId(peerId: context.chatPeerId, namespace: Namespaces.Message.Cloud, id: localId)
+    /// A post as its messages (`PostLayout`). `localIds` maps part index → local id; parts without an id
+    /// (tombstoned) are skipped.
+    static func storeMessages(post: Post, localIds: [Int: Int32], context: PostConversionContext) -> ConvertedPost {
+        var result = ConvertedPost()
+        let layout = PostLayout(post: post)
         let isIncoming = post.userId != context.ownUserId
         let flags: StoreMessageFlags = isIncoming ? [.Incoming] : []
-        var tags: MessageTags = []
-        var attributes: [MessageAttribute] = []
-        var media: [Media] = []
-        var text = ""
+        let authorId = context.authorOverride(post) ?? context.userPeerId(post.userId)
 
         // Threads: channel messages use thread 1 like Telegram's supergroups, replies the local id of their
         // root; Saved Messages use the own peer id as thread; DMs have no threads.
@@ -54,85 +63,163 @@ enum PostConverter {
         case .direct:
             threadId = nil
         }
+        var commonAttributes: [MessageAttribute] = []
         if !post.rootId.isEmpty, let rootLocalId = context.localId(post.rootId) {
             let rootMessageId = MessageId(peerId: context.chatPeerId, namespace: Namespaces.Message.Cloud, id: rootLocalId)
             if context.kind == .channel {
                 threadId = Int64(rootLocalId)
             }
-            attributes.append(ReplyMessageAttribute(messageId: rootMessageId, threadMessageId: context.kind == .channel ? rootMessageId : nil, quote: nil, isQuote: false, innerSubject: nil))
+            commonAttributes.append(ReplyMessageAttribute(messageId: rootMessageId, threadMessageId: context.kind == .channel ? rootMessageId : nil, quote: nil, isQuote: false, innerSubject: nil))
+        }
+        if post.editAt > 0 {
+            commonAttributes.append(EditedMessageAttribute(date: mmSeconds(post.editAt), isHidden: false))
         }
 
+        // The primary message's extras: reply count, reactions, pinned flag.
+        var primaryAttributes: [MessageAttribute] = []
+        var primaryTags: MessageTags = []
+        if post.rootId.isEmpty && post.replyCount > 0 {
+            let latestUsers = (post.participants ?? []).prefix(3).compactMap { context.userPeerId($0.id) }
+            primaryAttributes.append(ReplyThreadMessageAttribute(count: Int32(clamping: post.replyCount), latestUsers: Array(latestUsers), commentsPeerId: nil, maxMessageId: nil, maxReadMessageId: nil))
+        }
+        if let reactions = reactionsAttribute(post.metadata?.reactions ?? [], context: context) {
+            primaryAttributes.append(reactions)
+        }
+        if post.isPinned {
+            primaryTags.insert(.pinned)
+        }
+
+        // Text and the media of each part.
+        var text = ""
+        var textAttributes: [MessageAttribute] = []
+        var textTags: MessageTags = []
+        var media: [[Media]] = Array(repeating: [], count: layout.count)
+        var partTags: [MessageTags] = Array(repeating: [], count: layout.count)
         if post.type.hasPrefix("system_") {
-            let action = ServiceAction.from(type: post.type, userId: post.userId, message: post.message, props: stringProps(post.props))
-            let actionText = action?.fallbackText(name: { reference in
-                if let userId = reference.userId, let name = context.userDisplayName(userId) {
-                    return name
-                }
-                if let username = reference.username {
-                    return "@\(username)"
-                }
-                return "Someone"
-            }) ?? post.message
-            media.append(TelegramMediaAction(action: .customText(text: actionText, entities: [], additionalAttributes: nil)))
+            media[0].append(self.serviceAction(post: post, context: context))
         } else {
-            var markdown = post.message
-            let attachmentText = attachmentsText(post.props)
-            if !attachmentText.isEmpty {
-                markdown = markdown.isEmpty ? attachmentText : markdown + "\n\n" + attachmentText
+            var builder = FormattedTextBuilder()
+            builder.appendMarkdown(post.message)
+            let attachments = AttachmentConverter.convert(props: post.props, images: post.metadata?.images ?? [:], serverURL: context.serverURL, builder: &builder)
+            if let markup = attachments.replyMarkup {
+                primaryAttributes.append(markup)
             }
-            let formatted = MattermostMarkdown.parse(markdown)
+            let formatted = builder.formatted
             text = formatted.text
-            var entities = formatted.entities.compactMap { entity in
-                return textEntity(entity, context: context)
+            let customEmojiNames = Set((post.metadata?.emojis ?? []).map { $0.name.lowercased() })
+            var entities: [MessageTextEntity] = []
+            for entity in formatted.entities {
+                if case let .customEmoji(name) = entity.type {
+                    // Only the server's custom emoji become images; other `:name:` stays text, as on Mattermost.
+                    guard customEmojiNames.contains(name) else {
+                        continue
+                    }
+                    let file = MattermostReactionImages.file(for: ":\(name):")
+                    result.customEmojiFiles.append(file)
+                    entities.append(MessageTextEntity(range: entity.range, type: .CustomEmoji(stickerPack: nil, fileId: file.fileId.id)))
+                    continue
+                }
+                if let converted = textEntity(entity, context: context) {
+                    entities.append(converted)
+                }
             }
             if post.type == "me", !text.isEmpty {
                 entities.insert(MessageTextEntity(range: 0 ..< (text as NSString).length, type: .Italic), at: 0)
             }
             if !entities.isEmpty {
-                attributes.append(TextEntitiesMessageAttribute(entities: entities))
+                textAttributes.append(TextEntitiesMessageAttribute(entities: entities))
             }
             if isIncoming && post.createAt > context.lastViewedAt && mentionsMe(formatted, kind: context.kind, ownUsername: context.ownUsername) {
-                tags.insert(.unseenPersonalMessage)
+                textTags.insert(.unseenPersonalMessage)
             }
 
-            for file in post.metadata?.files ?? [] where file.deleteAt == 0 {
+            for (index, part) in layout.parts.enumerated() {
+                guard let file = part.file else {
+                    continue
+                }
                 let converted = MediaConverter.media(for: file, mediaId: context.mediaId(file.id))
-                media.append(converted.media)
-                tags.formUnion(converted.tags)
+                media[index].append(converted.media)
+                partTags[index].formUnion(converted.tags)
+            }
+            if layout.parts[0].file == nil, let image = attachments.image {
+                // An attachment image (no files): the photo under the attachment text, as Mattermost shows it.
+                media[0].append(MediaConverter.urlImage(url: image.url, width: image.width, height: image.height, mediaId: context.mediaId("url:" + image.url)))
+                partTags[0].formUnion([.photoOrVideo, .photo])
+                if !text.isEmpty {
+                    textAttributes.append(InvertMediaMessageAttribute())
+                }
             }
         }
 
-        if post.rootId.isEmpty && post.replyCount > 0 {
-            let latestUsers = (post.participants ?? []).prefix(3).compactMap { context.userPeerId($0.id) }
-            attributes.append(ReplyThreadMessageAttribute(count: Int32(clamping: post.replyCount), latestUsers: Array(latestUsers), commentsPeerId: nil, maxMessageId: nil, maxReadMessageId: nil))
+        for (index, part) in layout.parts.enumerated() {
+            guard let localId = localIds[index] else {
+                continue
+            }
+            var attributes = commonAttributes
+            var tags = partTags[index]
+            var partText = ""
+            if index == layout.textPartIndex {
+                partText = text
+                attributes.append(contentsOf: textAttributes)
+                tags.formUnion(textTags)
+            }
+            if index == 0 {
+                attributes.append(contentsOf: primaryAttributes)
+                tags.formUnion(primaryTags)
+            }
+            result.messages.append(StoreMessage(
+                id: MessageId(peerId: context.chatPeerId, namespace: Namespaces.Message.Cloud, id: localId),
+                customStableId: nil,
+                globallyUniqueId: nil,
+                groupingKey: part.groupingKey,
+                threadId: threadId,
+                timestamp: mmSeconds(post.createAt),
+                flags: flags,
+                tags: tags,
+                globalTags: [],
+                localTags: [],
+                forwardInfo: nil,
+                authorId: authorId,
+                text: partText,
+                attributes: attributes,
+                media: media[index]
+            ))
         }
-        if post.editAt > 0 {
-            attributes.append(EditedMessageAttribute(date: mmSeconds(post.editAt), isHidden: false))
-        }
-        if let reactions = reactionsAttribute(post.metadata?.reactions ?? [], context: context) {
-            attributes.append(reactions)
-        }
-        if post.isPinned {
-            tags.insert(.pinned)
-        }
+        return result
+    }
 
-        return StoreMessage(
-            id: messageId,
-            customStableId: nil,
-            globallyUniqueId: nil,
-            groupingKey: nil,
-            threadId: threadId,
-            timestamp: mmSeconds(post.createAt),
-            flags: flags,
-            tags: tags,
-            globalTags: [],
-            localTags: [],
-            forwardInfo: nil,
-            authorId: context.userPeerId(post.userId),
-            text: text,
-            attributes: attributes,
-            media: media
-        )
+    /// A system post as a service message (centered bubble): Telegram's custom-text action, with the users
+    /// as mention entities (tapping one opens the profile) and quoted values (a new header) in bold.
+    static func serviceAction(post: Post, context: PostConversionContext) -> TelegramMediaAction {
+        guard let action = ServiceAction.from(type: post.type, userId: post.userId, message: post.message, props: stringProps(post.props)) else {
+            return TelegramMediaAction(action: .customText(text: post.message, entities: [], additionalAttributes: nil))
+        }
+        let formatted = action.formattedText(name: { reference in
+            if let userId = reference.userId, let name = context.userDisplayName(userId) {
+                return name
+            }
+            if let username = reference.username {
+                return "@\(username)"
+            }
+            return "Someone"
+        })
+        var entities: [MessageTextEntity] = []
+        for mention in formatted.mentions {
+            var peerId: PeerId?
+            if let userId = mention.user.userId {
+                peerId = context.userPeerId(userId)
+            }
+            if peerId == nil, let username = mention.user.username {
+                peerId = context.usernamePeerId(username)
+            }
+            if let peerId = peerId {
+                entities.append(MessageTextEntity(range: mention.range, type: .TextMention(peerId: peerId)))
+            }
+        }
+        for range in formatted.emphasized {
+            entities.append(MessageTextEntity(range: range, type: .Bold))
+        }
+        return TelegramMediaAction(action: .customText(text: formatted.text, entities: entities, additionalAttributes: nil))
     }
 
     /// Reactions grouped by emoji, in order of their first use. Every reacting user is listed in
@@ -257,56 +344,6 @@ enum PostConverter {
             }
         }
         return result
-    }
-
-    /// Slack-style attachments (bots, webhooks) as markdown text until they get their own rendering.
-    private static func attachmentsText(_ props: [String: JSONValue]) -> String {
-        guard let attachments = props["attachments"]?.arrayValue else {
-            return ""
-        }
-        var blocks: [String] = []
-        for attachment in attachments {
-            guard let object = attachment.objectValue else {
-                continue
-            }
-            var lines: [String] = []
-            for key in ["pretext", "author_name"] {
-                if let value = object[key]?.stringValue, !value.isEmpty {
-                    lines.append(value)
-                }
-            }
-            if let title = object["title"]?.stringValue, !title.isEmpty {
-                if let link = object["title_link"]?.stringValue, !link.isEmpty {
-                    lines.append("**[\(title)](\(link))**")
-                } else {
-                    lines.append("**\(title)**")
-                }
-            }
-            if let value = object["text"]?.stringValue, !value.isEmpty {
-                lines.append(value)
-            }
-            for field in object["fields"]?.arrayValue ?? [] {
-                guard let field = field.objectValue else {
-                    continue
-                }
-                let title = field["title"]?.stringValue ?? ""
-                let value = field["value"]?.scalarString ?? ""
-                if !title.isEmpty || !value.isEmpty {
-                    lines.append(title.isEmpty ? value : "**\(title):** \(value)")
-                }
-            }
-            let actions = (object["actions"]?.arrayValue ?? []).compactMap { $0.objectValue?["name"]?.stringValue }
-            if !actions.isEmpty {
-                lines.append(actions.map { "[\($0)]" }.joined(separator: " "))
-            }
-            if let footer = object["footer"]?.stringValue, !footer.isEmpty {
-                lines.append("_\(footer)_")
-            }
-            if !lines.isEmpty {
-                blocks.append(lines.map { "> " + $0 }.joined(separator: "\n"))
-            }
-        }
-        return blocks.joined(separator: "\n\n")
     }
 }
 

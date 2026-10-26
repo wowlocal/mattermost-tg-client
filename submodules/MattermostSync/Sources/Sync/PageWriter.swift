@@ -61,8 +61,8 @@ extension MattermostAccountSync {
             touched.append(requestedRange)
         }
 
-        // 1. ID map, as one SQLite transaction.
-        let runKeys = page.run.filter { $0.deleteAt == 0 }.map { PostOrderKey(createAt: $0.createAt, postId: $0.id) }
+        // 1. ID map, as one SQLite transaction. Every post brings its parts (one message per file).
+        let runKeys = postKeys(page.run)
         var ingests: [IngestResult] = []
         var mainIngest: IngestResult?
         if case let .around(target, _, _) = page.kind, !page.run.contains(where: { $0.id == target }) {
@@ -85,15 +85,15 @@ extension MattermostAccountSync {
                 let newer = runKeys.filter { targetKey < $0 }
                 mainIngest = try self.allocator.ingestAround(target: targetKey, older: older, newer: newer, olderReachedStart: olderReachedStart, newerReachedLatest: newerReachedLatest, channelId: channelId, store: &store)
             case .singles:
-                for key in runKeys.sorted() {
-                    ingests.append(try self.allocator.insertPost(key, channelId: channelId, store: &store))
+                for post in page.run.filter({ $0.deleteAt == 0 }).sorted(by: { PostOrderKey(createAt: $0.createAt, postId: $0.id) < PostOrderKey(createAt: $1.createAt, postId: $1.id) }) {
+                    ingests.append(try self.allocator.insertPost(PostOrderKey(createAt: post.createAt, postId: post.id), partCount: PostLayout.partCount(post), channelId: channelId, store: &store))
                 }
             }
             if let mainIngest = mainIngest {
                 ingests.insert(mainIngest, at: 0)
             }
             for post in page.extra where post.deleteAt == 0 {
-                ingests.append(try self.allocator.insertPost(PostOrderKey(createAt: post.createAt, postId: post.id), channelId: channelId, store: &store))
+                ingests.append(try self.allocator.insertPost(PostOrderKey(createAt: post.createAt, postId: post.id), partCount: PostLayout.partCount(post), channelId: channelId, store: &store))
             }
         }
         if let error = error {
@@ -158,7 +158,8 @@ extension MattermostAccountSync {
         return result
     }
 
-    /// Converts and stores every live, mapped post (insert or update in place). Returns the message count.
+    /// Converts and stores every live, mapped post (insert or update in place), one message per part
+    /// (`PostLayout`). Returns the message count.
     @discardableResult
     func writeMessages(channelId: String, posts: [Post], transaction: Transaction) -> Int {
         if posts.isEmpty {
@@ -166,25 +167,120 @@ extension MattermostAccountSync {
         }
         var seen = Set<String>()
         let unique = posts.filter { seen.insert($0.id).inserted }
-        let rootIds = unique.compactMap { $0.rootId.isEmpty ? nil : $0.rootId }
-        let entries = self.store.entries(channelId: channelId, postIds: unique.map { $0.id } + rootIds)
-        guard let context = self.conversionContext(channelId: channelId, entries: entries) else {
+        self.reconcileParts(channelId: channelId, posts: unique, transaction: transaction)
+
+        let layouts = unique.map { PostLayout(post: $0) }
+        var lookupIds: [String] = []
+        for (post, layout) in zip(unique, layouts) {
+            lookupIds.append(contentsOf: PostOrderKey(createAt: post.createAt, postId: post.id).parts(count: layout.count).map { $0.postId })
+            if !post.rootId.isEmpty {
+                lookupIds.append(post.rootId)
+            }
+        }
+        let entries = self.store.entries(channelId: channelId, postIds: lookupIds)
+        guard var context = self.conversionContext(channelId: channelId, entries: entries) else {
             return 0
         }
+        let overrides = self.writeOverridePeers(unique, transaction: transaction)
+        context.authorOverride = { post in
+            return overrides[post.id]
+        }
         var messages: [StoreMessage] = []
+        var customEmojiFiles: [Int64: TelegramMediaFile] = [:]
         var threadRoots: [String: String] = [:]
-        for post in unique {
+        for (post, layout) in zip(unique, layouts) {
             guard post.deleteAt == 0, let entry = entries[post.id], !entry.isDeleted else {
                 continue
             }
-            messages.append(PostConverter.storeMessage(post: post, localId: entry.localId, context: context))
-            if !post.rootId.isEmpty {
-                threadRoots[post.id] = post.rootId
+            var localIds: [Int: Int32] = [:]
+            for (index, key) in PostOrderKey(createAt: post.createAt, postId: post.id).parts(count: layout.count).enumerated() {
+                if let part = entries[key.postId], !part.isDeleted {
+                    localIds[index] = part.localId
+                    if !post.rootId.isEmpty {
+                        threadRoots[key.postId] = post.rootId
+                    }
+                }
+            }
+            let converted = PostConverter.storeMessages(post: post, localIds: localIds, context: context)
+            messages.append(contentsOf: converted.messages)
+            for file in converted.customEmojiFiles {
+                customEmojiFiles[file.fileId.id] = file
             }
         }
         self.store.setThreadRootIds(threadRoots, channelId: channelId)
+        for file in customEmojiFiles.values {
+            transaction.storeMediaIfNotPresent(media: file)
+        }
         let _ = transaction.addMessages(messages, location: .Random)
         return messages.count
+    }
+
+    /// Makes the id map hold exactly each post's current parts: posts mapped with fewer parts (an edit added
+    /// files, or the post was mapped before it had parts) get the missing ones; parts beyond the current
+    /// count (an edit removed files) are tombstoned and their messages deleted.
+    private func reconcileParts(channelId: String, posts: [Post], transaction: Transaction) {
+        var expectedIds: [String] = []
+        var counts: [String: Int] = [:]
+        for post in posts where post.deleteAt == 0 {
+            let count = PostLayout.partCount(post)
+            counts[post.id] = count
+            // The parts it should have, and the one after them (present when it had more).
+            expectedIds.append(contentsOf: PostOrderKey(createAt: post.createAt, postId: post.id).parts(count: count + 1).map { $0.postId })
+        }
+        if expectedIds.isEmpty {
+            return
+        }
+        let entries = self.store.entries(channelId: channelId, postIds: expectedIds)
+        var grow: [Post] = []
+        var shrink: [(postId: String, keeping: Int)] = []
+        for post in posts {
+            guard let count = counts[post.id], let entry = entries[post.id], !entry.isDeleted else {
+                continue
+            }
+            let key = PostOrderKey(createAt: post.createAt, postId: post.id)
+            if (1 ..< max(1, count)).contains(where: { entries[key.part($0).postId] == nil }) {
+                grow.append(post)
+            }
+            if count < PostParts.maximumCount, let extra = entries[key.part(count).postId], !extra.isDeleted {
+                shrink.append((post.id, count))
+            }
+        }
+        if grow.isEmpty && shrink.isEmpty {
+            return
+        }
+        guard let channelState = self.channelState(channelId) else {
+            return
+        }
+        var store = self.storeRef()
+        var ingests: [IngestResult] = []
+        var removed: [MessageIdEntry] = []
+        let error = self.store.idMapTransaction {
+            for post in grow {
+                ingests.append(try self.allocator.insertPost(PostOrderKey(createAt: post.createAt, postId: post.id), partCount: counts[post.id] ?? 1, channelId: channelId, store: &store))
+            }
+            for item in shrink {
+                removed.append(contentsOf: self.allocator.removeParts(postId: item.postId, keeping: item.keeping, channelId: channelId, store: &store))
+            }
+        }
+        if let error = error {
+            MMLog.log("write: parts of \(grow.count + shrink.count) post(s) in \(channelId) failed: \(error)")
+            return
+        }
+        var touched: [ClosedRange<Int32>] = []
+        for ingest in ingests {
+            if let plan = ingest.renumberPlan, !plan.moves.isEmpty {
+                self.applyRenumber(plan, channelId: channelId, channelState: channelState, transaction: transaction)
+                touched.append(plan.affectedRange)
+            }
+            if let islandRange = ingest.islandRange {
+                touched.append(islandRange)
+            }
+        }
+        if !removed.isEmpty {
+            transaction.deleteMessages(removed.map { MessageId(peerId: channelState.peerId, namespace: Namespaces.Message.Cloud, id: $0.localId) }, forEachMedia: nil)
+        }
+        self.syncHoles(channelId: channelId, channelState: channelState, ranges: touched, transaction: transaction)
+        MMLog.log("write: parts of \(channelId): \(grow.count) post(s) grew, \(shrink.count) shrank (\(removed.count) removed)")
     }
 
     /// Makes Postbox's holes inside `ranges` equal to the ID map's holes (the fill contract: a request

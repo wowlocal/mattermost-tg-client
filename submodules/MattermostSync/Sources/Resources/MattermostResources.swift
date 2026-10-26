@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import SwiftSignalKit
 import Postbox
 import TelegramCore
@@ -104,9 +105,70 @@ public final class MattermostAvatarResource: TelegramMediaResource {
     }
 }
 
+/// An image at a URL on the Mattermost server: message attachment images (`image_url`, `thumb_url`) and
+/// webhook icons (`override_icon_url`). Only URLs on the account's server are fetched (relative URLs
+/// resolve against it); images elsewhere would need the server's image proxy and are not loaded.
+public final class MattermostURLImageResource: TelegramMediaResource {
+    public let url: String
+
+    public init(url: String) {
+        self.url = url
+    }
+
+    public required init(decoder: PostboxDecoder) {
+        self.url = decoder.decodeStringForKey("u", orElse: "")
+    }
+
+    public func encode(_ encoder: PostboxEncoder) {
+        encoder.encodeString(self.url, forKey: "u")
+    }
+
+    public var size: Int64? {
+        return nil
+    }
+
+    public var id: MediaResourceId {
+        return MediaResourceId("mm-url-\(self.url.persistentHashString)")
+    }
+
+    public func isEqual(to: MediaResource) -> Bool {
+        guard let to = to as? MattermostURLImageResource else {
+            return false
+        }
+        return self.url == to.url
+    }
+
+    /// The URL to fetch, or nil when it is not on `serverURL`.
+    static func sameOriginURL(_ string: String, serverURL: URL) -> URL? {
+        guard let url = URL(string: string, relativeTo: serverURL)?.absoluteURL, let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            return nil
+        }
+        func port(_ url: URL) -> Int? {
+            return url.port ?? (url.scheme?.lowercased() == "https" ? 443 : 80)
+        }
+        guard scheme == serverURL.scheme?.lowercased(), url.host?.lowercased() == serverURL.host?.lowercased(), port(url) == port(serverURL) else {
+            return nil
+        }
+        return url
+    }
+}
+
+extension String {
+    /// FNV-1a of the UTF-8 bytes as hex: stable across launches (unlike `hashValue`).
+    var persistentHashString: String {
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in self.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x100000001b3
+        }
+        return String(hash, radix: 16)
+    }
+}
+
 private var mattermostDeclaredEncodables: Void = {
     declareEncodable(MattermostFileResource.self, f: { MattermostFileResource(decoder: $0) })
     declareEncodable(MattermostAvatarResource.self, f: { MattermostAvatarResource(decoder: $0) })
+    declareEncodable(MattermostURLImageResource.self, f: { MattermostURLImageResource(decoder: $0) })
     return
 }()
 
@@ -165,6 +227,9 @@ public func mattermostFetchResource(postbox: Postbox, resource: MediaResource) -
     if let signal = MattermostReactionImages.fetch(postbox: postbox, resource: resource) {
         return signal
     }
+    if let resource = resource as? MattermostURLImageResource {
+        return fetchURLImage(postbox: postbox, resource: resource)
+    }
     let request: MattermostResource
     if let resource = resource as? MattermostFileResource {
         request = resource.request
@@ -181,8 +246,9 @@ public func mattermostFetchResource(postbox: Postbox, resource: MediaResource) -
             let task = Task {
                 do {
                     let data = try await client.data(for: request)
+                    let image = flattenedImageData(data)
                     subscriber.putNext(.reset)
-                    subscriber.putNext(.dataPart(resourceOffset: 0, data: data, range: 0 ..< Int64(data.count), complete: true))
+                    subscriber.putNext(.dataPart(resourceOffset: 0, data: image, range: 0 ..< Int64(image.count), complete: true))
                     subscriber.putCompletion()
                 } catch {
                     if !Task.isCancelled {
@@ -196,4 +262,89 @@ public func mattermostFetchResource(postbox: Postbox, resource: MediaResource) -
             }
         }
     }
+}
+
+/// Telegram draws photos opaque, so the (arbitrary) colour of transparent pixels would show: images with
+/// an alpha channel (logos, icons) are flattened onto white.
+private func flattenedImageData(_ data: Data) -> Data {
+    guard let image = UIImage(data: data), let cgImage = image.cgImage else {
+        return data
+    }
+    switch cgImage.alphaInfo {
+    case .none, .noneSkipFirst, .noneSkipLast:
+        return data
+    default:
+        break
+    }
+    let size = CGSize(width: cgImage.width, height: cgImage.height)
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = 1.0
+    format.opaque = true
+    let rendered = UIGraphicsImageRenderer(size: size, format: format).image { context in
+        UIColor.white.setFill()
+        context.fill(CGRect(origin: .zero, size: size))
+        image.draw(in: CGRect(origin: .zero, size: size))
+    }
+    return rendered.pngData() ?? data
+}
+
+/// A `MattermostURLImageResource`: a plain GET on the server's origin (static images need no session).
+private func fetchURLImage(postbox: Postbox, resource: MattermostURLImageResource) -> Signal<MediaResourceDataFetchResult, MediaResourceDataFetchError> {
+    let resourceId = resource.id.stringRepresentation
+    return MattermostResourceClients.shared.client(postbox: postbox)
+    |> castError(MediaResourceDataFetchError.self)
+    |> mapToSignal { client -> Signal<MediaResourceDataFetchResult, MediaResourceDataFetchError> in
+        guard let url = MattermostURLImageResource.sameOriginURL(resource.url, serverURL: client.serverURL) else {
+            MMLog.log("fetch \(resourceId): \(resource.url) is not on the server; not loaded")
+            return .fail(.generic)
+        }
+        return Signal { subscriber in
+            let task = Task {
+                do {
+                    var request = URLRequest(url: url)
+                    request.setValue(MattermostSync.userAgent, forHTTPHeaderField: "User-Agent")
+                    let (data, response) = try await URLSession.shared.data(for: request)
+                    guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode), !data.isEmpty else {
+                        throw URLError(.badServerResponse)
+                    }
+                    let image = flattenedImageData(data)
+                    subscriber.putNext(.reset)
+                    subscriber.putNext(.dataPart(resourceOffset: 0, data: image, range: 0 ..< Int64(image.count), complete: true))
+                    subscriber.putCompletion()
+                } catch {
+                    if !Task.isCancelled {
+                        MMLog.log("fetch \(resourceId) failed: \(error)")
+                    }
+                    subscriber.putError(.generic)
+                }
+            }
+            return ActionDisposable {
+                task.cancel()
+            }
+        }
+    }
+}
+
+/// Telegram draws photos opaque, so the (arbitrary) colour of transparent pixels would show: images with
+/// an alpha channel (logos, icons) are flattened onto white.
+private func flattenedImageData(_ data: Data) -> Data {
+    guard let image = UIImage(data: data), let cgImage = image.cgImage else {
+        return data
+    }
+    switch cgImage.alphaInfo {
+    case .none, .noneSkipFirst, .noneSkipLast:
+        return data
+    default:
+        break
+    }
+    let size = CGSize(width: cgImage.width, height: cgImage.height)
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = 1.0
+    format.opaque = true
+    let rendered = UIGraphicsImageRenderer(size: size, format: format).image { context in
+        UIColor.white.setFill()
+        context.fill(CGRect(origin: .zero, size: size))
+        image.draw(in: CGRect(origin: .zero, size: size))
+    }
+    return rendered.pngData() ?? data
 }

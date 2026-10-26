@@ -26,7 +26,8 @@ extension MattermostAccountSync {
         }
     }
 
-    /// The post of a Cloud message, from the ID map.
+    /// The post of a Cloud message, from the ID map. Every message of a multi-file post (`PostParts`) gives
+    /// the post.
     func postReference(for messageId: MessageId) -> (channelId: String, postId: String)? {
         guard messageId.namespace == Namespaces.Message.Cloud, let channelId = self.channelId(forPeerId: messageId.peerId) else {
             return nil
@@ -34,7 +35,16 @@ extension MattermostAccountSync {
         guard let entry = self.store.entries(channelId: channelId, fromLocalId: messageId.id, ascending: true, limit: 1).first, entry.localId == messageId.id, !entry.isDeleted else {
             return nil
         }
-        return (channelId, entry.postId)
+        return (channelId, entry.serverPostId)
+    }
+
+    /// The primary message of the post a Cloud message belongs to (the message itself for most posts): it
+    /// carries the post's reactions and reply count.
+    func primaryMessageId(for messageId: MessageId) -> MessageId? {
+        guard let reference = self.postReference(for: messageId), let entry = self.store.entries(channelId: reference.channelId, postIds: [reference.postId])[reference.postId], !entry.isDeleted else {
+            return nil
+        }
+        return MessageId(peerId: messageId.peerId, namespace: Namespaces.Message.Cloud, id: entry.localId)
     }
 
     /// The thread root post of a reply target: our replies always point at their root, so a target that is
@@ -136,17 +146,23 @@ extension MattermostAccountSync {
 
     // MARK: Building the post
 
-    /// The `POST /posts` body of an outgoing message, and its `pending` row (registered here, before the
-    /// request, so the WebSocket echo is always recognized). Nil when the message is gone.
-    func outgoingDraft(messageId: MessageId, fileIds: [String]) async -> OutgoingDraft? {
+    /// The `POST /posts` body of an outgoing message (or of a group of messages sent as one post: an album),
+    /// and its `pending` row (registered here, before the request, so the WebSocket echo is always
+    /// recognized). The first message of a group stands for it. Nil when the messages are gone.
+    func outgoingDraft(messageId: MessageId, fileIds: [String], groupMessageIds: [MessageId] = []) async -> OutgoingDraft? {
         return await self.postbox.mmTransaction { transaction -> OutgoingDraft? in
             guard let message = transaction.getMessage(messageId), let channelId = self.channelId(forPeerId: messageId.peerId), let channelState = self.channelState(channelId) else {
                 return nil
             }
-            let entities = (message.attributes.first(where: { $0 is TextEntitiesMessageAttribute }) as? TextEntitiesMessageAttribute)?.entities ?? []
-            let markdown = OutgoingText.markdown(text: message.text, entities: entities, username: { peerId in
-                return (transaction.getPeer(peerId) as? TelegramUser)?.username
-            })
+            // A group's captions (usually one) become the post's text.
+            let texts = ([message] + groupMessageIds.filter { $0 != messageId }.compactMap { transaction.getMessage($0) }).compactMap { item -> String? in
+                let entities = (item.attributes.first(where: { $0 is TextEntitiesMessageAttribute }) as? TextEntitiesMessageAttribute)?.entities ?? []
+                let markdown = OutgoingText.markdown(text: item.text, entities: entities, username: { peerId in
+                    return (transaction.getPeer(peerId) as? TelegramUser)?.username
+                })
+                return markdown.isEmpty ? nil : markdown
+            }
+            let markdown = texts.joined(separator: "\n\n")
             var rootId = ""
             if let reply = message.attributes.first(where: { $0 is ReplyMessageAttribute }) as? ReplyMessageAttribute, reply.messageId.peerId == messageId.peerId {
                 rootId = self.threadRootPostId(replyTarget: reply.messageId, transaction: transaction) ?? ""
@@ -163,11 +179,13 @@ extension MattermostAccountSync {
     // MARK: The sent post
 
     /// Writes our own created post (from the `POST /posts` response, or its WebSocket echo after a restart):
-    /// allocates its local id, rewrites the Local message into the Cloud one in place (same stable id, server
-    /// text and timestamp, Mattermost media with the uploaded data moved over), and drops the `pending` row.
-    /// `onRewritten` is called inside the transaction with the Cloud id. When the Local message is gone, the
-    /// post is written like any live post.
-    func applyOwnPost(_ post: Post, pendingPostId: String, uploadedFiles: [PostSender.UploadedFile], onRewritten: ((MessageId) -> Void)?) async {
+    /// allocates its local ids, rewrites the Local messages into the Cloud ones in place (same stable ids,
+    /// server text and timestamp, Mattermost media with the uploaded data moved over), and drops the
+    /// `pending` row. A post sent from a group of messages (an album) rewrites the whole group: each Local
+    /// message becomes the Cloud message (part) with its file. `onRewritten` is called inside the
+    /// transaction with the Cloud ids, in the order of the Local messages. When the Local messages are gone,
+    /// the post is written like any live post.
+    func applyOwnPost(_ post: Post, pendingPostId: String, uploadedFiles: [MessageId: [PostSender.UploadedFile]], onRewritten: (([MessageId]) -> Void)?) async {
         var extra: [Post] = []
         if !post.rootId.isEmpty, self.store.entries(channelId: post.channelId, postIds: [post.rootId])[post.rootId] == nil, let root = try? await self.client.post(id: post.rootId) {
             extra.append(root)
@@ -189,18 +207,28 @@ extension MattermostAccountSync {
                 }
                 return
             }
+            // The Local messages of the post: the message, or its whole group (an album sent as one post).
+            var localMessages = [localMessage]
+            if localMessage.groupingKey != nil, let group = transaction.getMessageGroup(localMessageId) {
+                let locals = group.filter { $0.id.namespace == Namespaces.Message.Local }.sorted(by: { $0.id < $1.id })
+                if locals.contains(where: { $0.id == localMessageId }) {
+                    localMessages = locals
+                }
+            }
 
-            // 1. ID map (as `write` does for singles), then renumbering.
+            // 1. ID map (as `write` does for singles, with the post's parts), then renumbering.
+            let layout = PostLayout(post: post)
+            let postKey = PostOrderKey(createAt: post.createAt, postId: post.id)
             var store = self.storeRef()
             var ingests: [IngestResult] = []
             let error = self.store.idMapTransaction {
                 for root in extra where root.deleteAt == 0 {
-                    ingests.append(try self.allocator.insertPost(PostOrderKey(createAt: root.createAt, postId: root.id), channelId: post.channelId, store: &store))
+                    ingests.append(try self.allocator.insertPost(PostOrderKey(createAt: root.createAt, postId: root.id), partCount: PostLayout.partCount(root), channelId: post.channelId, store: &store))
                 }
-                ingests.append(try self.allocator.insertPost(PostOrderKey(createAt: post.createAt, postId: post.id), channelId: post.channelId, store: &store))
+                ingests.append(try self.allocator.insertPost(postKey, partCount: layout.count, channelId: post.channelId, store: &store))
             }
-            guard error == nil, let ingest = ingests.last, let localId = ingest.localId(for: post.id) ?? self.store.entries(channelId: post.channelId, postIds: [post.id])[post.id]?.localId else {
-                MMLog.log("send: could not allocate an id for own post \(post.id)")
+            guard error == nil else {
+                MMLog.log("send: could not allocate ids for own post \(post.id)")
                 return
             }
             var touched: [ClosedRange<Int32>] = []
@@ -217,46 +245,110 @@ extension MattermostAccountSync {
                 self.writeMessages(channelId: post.channelId, posts: extra, transaction: transaction)
             }
 
-            // 2. The rewrite.
-            let entries = self.store.entries(channelId: post.channelId, postIds: [post.id, post.rootId].filter { !$0.isEmpty })
-            guard let context = self.conversionContext(channelId: post.channelId, entries: entries) else {
+            // 2. The Cloud messages.
+            let partKeys = postKey.parts(count: layout.count)
+            let entries = self.store.entries(channelId: post.channelId, postIds: partKeys.map { $0.postId } + [post.rootId].filter { !$0.isEmpty })
+            guard var context = self.conversionContext(channelId: post.channelId, entries: entries), let primary = entries[post.id], !primary.isDeleted else {
+                MMLog.log("send: own post \(post.id) is not mapped")
                 return
             }
-            let converted = PostConverter.storeMessage(post: post, localId: localId, context: context)
-            let cloudId = MessageId(peerId: channelState.peerId, namespace: Namespaces.Message.Cloud, id: localId)
-            if !post.rootId.isEmpty {
-                self.store.setThreadRootIds([post.id: post.rootId], channelId: post.channelId)
+            let overrides = self.writeOverridePeers([post], transaction: transaction)
+            context.authorOverride = { item in
+                return overrides[item.id]
             }
-            if transaction.messageExists(id: cloudId) {
-                // Written already (e.g. by a catch-up): keep that one.
-                transaction.deleteMessages([localMessageId], forEachMedia: nil)
-                self.writeMessages(channelId: post.channelId, posts: [post], transaction: transaction)
-            } else {
-                moveUploadedMedia(from: localMessage, to: converted.media, uploadedFiles: uploadedFiles, mediaBox: mediaBox)
-                transaction.updateMessage(localMessageId, update: { current in
-                    return .update(StoreMessage(
-                        id: cloudId,
-                        customStableId: nil,
-                        globallyUniqueId: current.globallyUniqueId,
-                        groupingKey: nil,
-                        threadId: converted.threadId,
-                        timestamp: converted.timestamp,
-                        flags: [],
-                        tags: converted.tags,
-                        globalTags: [],
-                        localTags: current.localTags,
-                        forwardInfo: nil,
-                        authorId: converted.authorId,
-                        text: converted.text,
-                        attributes: converted.attributes,
-                        media: converted.media
-                    ))
-                })
-                self.bumpThreadRoot(of: post, transaction: transaction)
+            var localIds: [Int: Int32] = [:]
+            var threadRoots: [String: String] = [:]
+            for (index, key) in partKeys.enumerated() {
+                if let entry = entries[key.postId], !entry.isDeleted {
+                    localIds[index] = entry.localId
+                    if !post.rootId.isEmpty {
+                        threadRoots[key.postId] = post.rootId
+                    }
+                }
             }
+            self.store.setThreadRootIds(threadRoots, channelId: post.channelId)
+            let converted = PostConverter.storeMessages(post: post, localIds: localIds, context: context)
+            for file in converted.customEmojiFiles {
+                transaction.storeMediaIfNotPresent(media: file)
+            }
+
+            // 3. Pair each Local message with its Cloud message: by uploaded file, else in order.
+            func cloudId(_ message: StoreMessage) -> MessageId? {
+                if case let .Id(id) = message.id {
+                    return id
+                }
+                return nil
+            }
+            func fileIds(_ message: StoreMessage) -> [String] {
+                return message.media.flatMap { media -> [String] in
+                    if let image = media as? TelegramMediaImage {
+                        return image.representations.compactMap { ($0.resource as? MattermostFileResource)?.fileId }
+                    } else if let file = media as? TelegramMediaFile, let resource = file.resource as? MattermostFileResource {
+                        return [resource.fileId]
+                    }
+                    return []
+                }
+            }
+            var remaining = converted.messages
+            var pairs: [(local: Message, cloud: StoreMessage)] = []
+            var unpaired: [Message] = []
+            for local in localMessages {
+                if let fileId = uploadedFiles[local.id]?.first?.fileId, let index = remaining.firstIndex(where: { fileIds($0).contains(fileId) }) {
+                    pairs.append((local, remaining.remove(at: index)))
+                } else {
+                    unpaired.append(local)
+                }
+            }
+            for local in unpaired {
+                if remaining.isEmpty {
+                    transaction.deleteMessages([local.id], forEachMedia: nil)
+                } else {
+                    pairs.append((local, remaining.removeFirst()))
+                }
+            }
+            pairs.sort(by: { $0.local.id < $1.local.id })
+
+            var rewritten: [MessageId] = []
+            for (local, cloud) in pairs {
+                guard let id = cloudId(cloud) else {
+                    continue
+                }
+                if transaction.messageExists(id: id) {
+                    // Written already (e.g. by a catch-up): keep that one, updated.
+                    transaction.deleteMessages([local.id], forEachMedia: nil)
+                    let _ = transaction.addMessages([cloud], location: .Random)
+                } else {
+                    moveUploadedMedia(from: local, to: cloud.media, uploadedFiles: uploadedFiles[local.id] ?? [], mediaBox: mediaBox)
+                    transaction.updateMessage(local.id, update: { current in
+                        return .update(StoreMessage(
+                            id: id,
+                            customStableId: nil,
+                            globallyUniqueId: current.globallyUniqueId,
+                            groupingKey: cloud.groupingKey,
+                            threadId: cloud.threadId,
+                            timestamp: cloud.timestamp,
+                            flags: [],
+                            tags: cloud.tags,
+                            globalTags: [],
+                            localTags: current.localTags,
+                            forwardInfo: nil,
+                            authorId: cloud.authorId,
+                            text: cloud.text,
+                            attributes: cloud.attributes,
+                            media: cloud.media
+                        ))
+                    })
+                }
+                rewritten.append(id)
+            }
+            if !remaining.isEmpty {
+                // More parts than Local messages (should not happen): store them as received.
+                let _ = transaction.addMessages(remaining, location: .Random)
+            }
+            self.bumpThreadRoot(of: post, transaction: transaction)
             self.syncHoles(channelId: post.channelId, channelState: channelState, ranges: touched, transaction: transaction)
-            MMLog.log("send: \(localMessageId) rewritten to \(cloudId) (post \(post.id))")
-            onRewritten?(cloudId)
+            MMLog.log("send: \(localMessages.map { $0.id }) rewritten to \(rewritten) (post \(post.id), \(layout.count) part(s))")
+            onRewritten?(rewritten)
         }
     }
 

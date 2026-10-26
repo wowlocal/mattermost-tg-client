@@ -13,6 +13,8 @@ import MattermostSyncCore
 ///   Cloud rewrite (`applyOwnPost`). Posts are created one at a time per channel, in the order they were
 ///   handed over, so messages queued while offline go out in order. Transient errors (offline, server down,
 ///   5xx, 429) are retried until the server is back; other errors fail the message.
+/// - `sendMessageGroup`: a group of messages (an album, or files sent grouped) as one post with all their
+///   files and captions; the post's messages (`PostLayout`) replace the group.
 ///
 /// Deduplication against the WebSocket `posted` echo: the `pending` table maps `pending_post_id` to the local
 /// message; while our request is in flight, its echo is ignored and the response does the rewrite. An echo
@@ -71,22 +73,32 @@ final class PostSender: MattermostMessageSender {
     }
 
     func sendMessage(messageId: MessageId) -> Signal<MessageId, MattermostSendError> {
+        return self.sendMessageGroup(messageIds: [messageId])
+        |> mapToSignal { ids -> Signal<MessageId, MattermostSendError> in
+            if let id = ids.first {
+                return .single(id)
+            }
+            return .complete()
+        }
+    }
+
+    func sendMessageGroup(messageIds: [MessageId]) -> Signal<[MessageId], MattermostSendError> {
         return Signal { subscriber in
             let task = Task {
-                guard let sync = self.sync else {
+                guard let sync = self.sync, !messageIds.isEmpty else {
                     subscriber.putError(.generic)
                     return
                 }
                 do {
-                    try await self.send(messageId: messageId, sync: sync, onRewritten: { cloudId in
+                    try await self.send(messageIds: messageIds, sync: sync, onRewritten: { cloudIds in
                         // Called inside the rewriting transaction, like Telegram's `pendingMessageEvent`: the
                         // delivered event reaches PendingMessageManager before the unsent-ids update does.
-                        subscriber.putNext(cloudId)
+                        subscriber.putNext(cloudIds)
                         subscriber.putCompletion()
                     })
                     subscriber.putCompletion()
                 } catch {
-                    MMLog.log("send: \(messageId) failed: \(error)")
+                    MMLog.log("send: \(messageIds) failed: \(error)")
                     subscriber.putError(.generic)
                 }
             }
@@ -163,19 +175,30 @@ final class PostSender: MattermostMessageSender {
 
     // MARK: Post
 
-    private func send(messageId: MessageId, sync: MattermostAccountSync, onRewritten: @escaping (MessageId) -> Void) async throws {
+    /// Creates the post of one message, or of a group of messages (one post with all their files), and
+    /// rewrites the messages. The first message stands for the group (its `globallyUniqueId` is the
+    /// `pending_post_id`).
+    private func send(messageIds unsortedIds: [MessageId], sync: MattermostAccountSync, onRewritten: @escaping ([MessageId]) -> Void) async throws {
         await sync.waitUntilBootstrapped()
-        var files = self.uploadedFiles(messageId: messageId)
-        if files.isEmpty, await sync.messageHasMedia(messageId) {
-            // Uploaded by an earlier run of the app: upload again (file ids are kept only in memory).
-            try await self.upload(messageId: messageId, sync: sync, progress: { _ in })
-            files = self.uploadedFiles(messageId: messageId)
+        let messageIds = unsortedIds.sorted()
+        let messageId = messageIds[0]
+        var files: [MessageId: [UploadedFile]] = [:]
+        for id in messageIds {
+            var uploaded = self.uploadedFiles(messageId: id)
+            if uploaded.isEmpty, await sync.messageHasMedia(id) {
+                // Uploaded by an earlier run of the app: upload again (file ids are kept only in memory).
+                try await self.upload(messageId: id, sync: sync, progress: { _ in })
+                uploaded = self.uploadedFiles(messageId: id)
+            }
+            files[id] = uploaded
         }
         guard await sync.messageExists(messageId) else {
             MMLog.log("send: \(messageId) is gone; nothing to send")
             return
         }
-        guard await sync.ensureChannel(forPeerId: messageId.peerId) != nil, let draft = await sync.outgoingDraft(messageId: messageId, fileIds: files.map { $0.fileId }) else {
+        // Files in message order, each message's files in media order (Mattermost keeps `file_ids` order).
+        let fileIds = messageIds.flatMap { id in (files[id] ?? []).sorted(by: { $0.mediaIndex < $1.mediaIndex }).map { $0.fileId } }
+        guard await sync.ensureChannel(forPeerId: messageId.peerId) != nil, let draft = await sync.outgoingDraft(messageId: messageId, fileIds: fileIds, groupMessageIds: messageIds) else {
             sync.notice("Couldn't send the message: this chat is not on the server.")
             throw SendFailure.unknownChat
         }
@@ -195,10 +218,14 @@ final class PostSender: MattermostMessageSender {
         }
         switch outcome.current {
         case let .success(post):
-            MMLog.log("send: \(messageId) → post \(post.id) (pending \(pendingPostId)) in \(Int((CFAbsoluteTimeGetCurrent() - queuedAt) * 1000)) ms")
+            MMLog.log("send: \(messageIds) → post \(post.id) with \(fileIds.count) file(s) (pending \(pendingPostId)) in \(Int((CFAbsoluteTimeGetCurrent() - queuedAt) * 1000)) ms")
             await sync.applyOwnPost(post, pendingPostId: pendingPostId, uploadedFiles: files, onRewritten: onRewritten)
             self.inFlight.with { _ = $0.remove(pendingPostId) }
-            self.uploads.with { _ = $0.removeValue(forKey: messageId) }
+            self.uploads.with { uploads in
+                for id in messageIds {
+                    uploads.removeValue(forKey: id)
+                }
+            }
         case let .failure(error):
             self.inFlight.with { _ = $0.remove(pendingPostId) }
             await sync.postbox.mmTransaction { _ in

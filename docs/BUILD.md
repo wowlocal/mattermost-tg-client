@@ -70,6 +70,7 @@ The credentials are only used when no account exists yet; later launches reuse t
 | `pin\|<chat>`, `unpin\|<chat>` | `engine.peers.toggleItemPinned(.group(.root))` (all chats) |
 | `folderpin\|<chat>\|<team>`, `folderunpin\|…` | `engine.peers.toggleItemPinned(.filter(…))` (a team folder tab) |
 | `wait\|<s>`, `waitfor\|offline`, `waitfor\|online` | pauses (e.g. stop the server while `waitfor\|offline` waits) |
+| `album\|<chat>\|<count>\|<caption>` (generated JPEGs) / `files\|<chat>\|<count>\|<caption>` (text files) | `enqueueMessages` with one local grouping key, as the media picker's album or grouped files (sent as one post) |
 
 ```sh
 SIMCTL_CHILD_RELAY_DEBUG_OPEN_CHAT=sandbox \
@@ -78,6 +79,10 @@ SIMCTL_CHILD_RELAY_DEBUG_WRITE='send|sandbox|Hello **world**;reply|sandbox|last|
 ```
 
 Failed writes the UI can't show (a refused delete, an unsendable message) appear as toasts (`MattermostSync.notices`).
+
+#### Interactive message hooks (Phase 2C, debug builds only)
+
+`RELAY_DEBUG_OPEN_SCREEN=button:<title>` taps the inline button with that title on the newest message of the chat that `RELAY_DEBUG_OPEN_CHAT` opened, through the chat's `requestMessageActionCallback` exactly as a tap does. For a menu button (title ends in ` ▾`) the option sheet opens; `RELAY_DEBUG_SELECT_OPTION=<option text or value>` picks that option four seconds later (time for a screenshot). Ephemeral answers show as a toast, refused actions as an alert.
 
 If `simctl install` doesn't pick up a rebuilt binary (same build number), replace the installed bundle in place as described in the root `CLAUDE.md` ("Updating the running simulator after a rebuild").
 
