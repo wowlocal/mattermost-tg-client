@@ -348,6 +348,28 @@ tools/mm-large-server.py purge       # delete the team and the load users perman
   `xcrun simctl launch "$UDID" org.relaychat.Relay -AppleLanguages "(en-XA)"`. Plain English on screen is
   hard-coded or server text.
 
+#### Phase 4F: known-gaps burn-down (debug builds only)
+
+```sh
+tools/relay-remote.py "$UDID" dump-chatlist          # chatlist.json now has each row's `top` (sortTimestamp, id, text, isRoot)
+tools/relay-remote.py "$UDID" actions post=<post id> # what the message menu offers for a post in the visible chat (deleteGlobally, …)
+tools/relay-remote.py "$UDID" chat-search "query=…"  # in-chat search (CRT: replies too); chat-search-step dir=earlier opens a reply's thread
+SIMCTL_CHILD_RELAY_DEBUG_SEND_DELAY=25 SIMCTL_CHILD_RELAY_DEBUG_WRITE='image|sandbox|caption' \
+  xcrun simctl launch "$UDID" org.relaychat.Relay    # waits 25 s between the upload and POST /posts: end the app meanwhile
+```
+
+- **Upload ids across a restart**: with `RELAY_DEBUG_SEND_DELAY`, terminate the app after `send: uploaded …` and the
+  `debug delay` line, relaunch without it: the log says `reuses N file(s) uploaded before a restart` and the post's
+  `file_ids` are the first upload's.
+- **Thread unread separator**: mark a followed thread read at a reply as the user
+  (`PUT /users/{me}/teams/{team}/threads/{root}/read/{create_at}`), post more replies as someone else, open the thread
+  (`replies post=<root>`): the log says `threads: <root> opens at its first unread reply …`.
+- **Notification sender names**: the app logs `push: sender names as <format>` (the `push_name_format` cursor in
+  `sync.sqlite`); `simulate-push` (Phase 3A) then titles the notification with that name (`notifications` lists it
+  when the app is in the background and notifications are allowed: `tools/sim-allow-notifications.py`).
+- **delete_others_posts**: `channel_admin` has none on an unlicensed server; add it for a check as sysadmin
+  (`PUT /roles/{id}/patch`, keep the old list to restore it); the app follows `role_updated` live (`actions`).
+
 If `simctl install` doesn't pick up a rebuilt binary (same build number), replace the installed bundle in place as described in the root `CLAUDE.md` ("Updating the running simulator after a rebuild"). This happened in 2D after a 30-second incremental build: compare the md5 of `Frameworks/TelegramUIFramework.framework/TelegramUIFramework` in the `.ipa` and in the installed app when a change seems missing.
 
 ### Push notifications on the simulator (Phase 3A)
