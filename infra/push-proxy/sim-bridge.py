@@ -11,11 +11,12 @@ model.PushNotification as JSON). This bridge stands in for that URL:
    to the simulator (real ack ids, post ids, server id):
    - `--deliver simctl` (default): `xcrun simctl push <udid> org.relaychat.Relay`. iOS shows the server's
      text as is: simulated pushes never start the notification service extension (only APNs delivery
-     does). Background pushes (`clear`) wake the app as on a device.
+     does), and a background push (`clear`) only triggers a background fetch, without its payload.
    - `--deliver app`: hands the payload to a running debug build (debug remote `simulate-push`), which runs
      the notification service extension's code (MattermostPushService) and schedules the result as a local
      notification `--app-delay` seconds later, so it is delivered while the app is in the background, locked
-     or killed. The app must be in the foreground when the push arrives.
+     or killed. `clear` and `update_badge` go to the app's handler for background pushes. The app must be
+     in the foreground when the push arrives.
 3. it answers {"status": "OK"} when the simulator took the push (the proxy's own answer is only logged:
    without a real APNs key it is a failure, and a "remove" answer would make the server drop the device).
 
@@ -33,6 +34,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -113,6 +115,7 @@ class Bridge:
     def __init__(self, args):
         self.args = args
         self.lock = threading.Lock()
+        self.app_lock = threading.Lock()
         self.count = 0
 
     def forward(self, path, body):
@@ -134,20 +137,17 @@ class Bridge:
             log("  device %s… is not --device-token; not delivered" % msg.get("device_id", "")[:8])
             return False
         payload, _ = apns_payload(msg)
-        if self.args.deliver == "app" and payload["type"] not in ("clear", "update_badge"):
-            return self.deliver_to_app(payload)
         payload["Simulator Target Bundle"] = BUNDLE_ID
-        with self.lock:
-            self.count += 1
-            number = self.count
         if self.args.save_dir:
             os.makedirs(self.args.save_dir, exist_ok=True)
             saved = dict(payload)
             saved["signature"] = "NO_SIGNATURE"
-            name = "%03d-%s.apns" % (number, msg.get("type", "push"))
+            name = "%s-%s-%s.apns" % (datetime.datetime.now().strftime("%H%M%S"), msg.get("type", "push"), msg.get("ack_id", "")[:6])
             with open(os.path.join(self.args.save_dir, name), "w") as f:
                 json.dump(saved, f, indent=2, sort_keys=True)
                 f.write("\n")
+        if self.args.deliver == "app":
+            return self.deliver_to_app(payload)
         with tempfile.NamedTemporaryFile("w", suffix=".apns", delete=False) as f:
             json.dump(payload, f)
             path = f.name
@@ -171,11 +171,24 @@ class Bridge:
         directory = os.path.join(container, "Documents", "relay-debug")
         os.makedirs(directory, exist_ok=True)
         command = {"action": "simulate-push", "id": uuid.uuid4().hex, "payload": json.dumps(payload), "delay": str(self.args.app_delay)}
-        with open(os.path.join(directory, "command.json"), "w") as f:
-            json.dump(command, f)
-        subprocess.check_call(["xcrun", "simctl", "spawn", self.args.udid, "notifyutil", "-p", "org.relaychat.Relay.debug"])
-        log("  handed to the app (simulate-push, shown in %s s)" % self.args.app_delay)
-        return True
+        # One command file: hand pushes over one at a time, each after the app answered the previous one.
+        with self.app_lock:
+            with open(os.path.join(directory, "command.json"), "w") as f:
+                json.dump(command, f)
+            subprocess.check_call(["xcrun", "simctl", "spawn", self.args.udid, "notifyutil", "-p", "org.relaychat.Relay.debug"])
+            deadline = time.time() + 15
+            while time.time() < deadline:
+                try:
+                    with open(os.path.join(directory, "result.json")) as f:
+                        result = json.load(f)
+                    if result.get("id") == command["id"]:
+                        log("  handed to the app (simulate-push, shown in %s s): %s" % (self.args.app_delay, "ok" if result.get("ok") else result.get("error")))
+                        return bool(result.get("ok"))
+                except (OSError, ValueError):
+                    pass
+                time.sleep(0.1)
+        log("  the app did not answer (is a debug build in the foreground?)")
+        return False
 
 
 def make_handler(bridge):

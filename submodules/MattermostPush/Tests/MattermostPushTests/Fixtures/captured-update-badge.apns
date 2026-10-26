@@ -1,0 +1,12 @@
+{
+  "Simulator Target Bundle": "org.relaychat.Relay",
+  "ack_id": "qrgd386pd3g47xh5yhewffykrh",
+  "aps": {
+    "badge": 17
+  },
+  "is_crt_enabled": false,
+  "server_id": "cbmk94w77in6bnhiy5q5oh114o",
+  "signature": "NO_SIGNATURE",
+  "sub_type": "",
+  "type": "update_badge"
+}

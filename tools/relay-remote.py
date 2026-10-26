@@ -9,6 +9,11 @@ docs/BUILD.md "Debug remote") and prints the result.
   tools/relay-remote.py <udid> switch username=bob
   tools/relay-remote.py <udid> logout username=alice
   tools/relay-remote.py <udid> relogin
+  tools/relay-remote.py <udid> notifications                       # delivered notifications, newest first
+  tools/relay-remote.py <udid> notification-open which=latest      # as a tap (which: latest, index, request id)
+  tools/relay-remote.py <udid> notification-reply which=0 "text=On my way"
+  tools/relay-remote.py <udid> notification-read which=0
+  tools/relay-remote.py <udid> simulate-push file=<payload.apns> delay=3   # the extension's code, in the app
 
 The command goes to <app data container>/Documents/relay-debug/command.json; the Darwin notification
 org.relaychat.Relay.debug tells the app to run it; the app answers in relay-debug/result.json.

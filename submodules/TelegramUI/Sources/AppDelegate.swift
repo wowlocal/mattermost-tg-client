@@ -3560,6 +3560,22 @@ extension AppDelegate {
         MattermostSync.debugNotificationResponder = { [weak self] userInfo, actionIdentifier, text in
             self?.handleMattermostNotificationResponse(userInfo: userInfo, actionIdentifier: actionIdentifier, text: text, completion: {})
         }
+        // `RELAY_DEBUG_OPEN_NOTIFICATION=latest|<request id>`: a tap on a delivered notification at launch, the
+        // moment iOS reports a tap that launched the app (cold start).
+        if let which = ProcessInfo.processInfo.environment["RELAY_DEBUG_OPEN_NOTIFICATION"], !which.isEmpty {
+            UNUserNotificationCenter.current().getDeliveredNotifications(completionHandler: { notifications in
+                let candidates = notifications.filter { MattermostSync.isMattermostNotification(userInfo: $0.request.content.userInfo) }.sorted(by: { $0.date > $1.date })
+                let notification = which == "latest" ? candidates.first : candidates.first(where: { $0.request.identifier == which })
+                guard let notification else {
+                    NSLog("[Relay] debug: no delivered notification %@", which)
+                    return
+                }
+                DispatchQueue.main.async {
+                    NSLog("[Relay] debug: opening notification %@ at launch", notification.request.identifier)
+                    self.handleMattermostNotificationResponse(userInfo: notification.request.content.userInfo, actionIdentifier: UNNotificationDefaultActionIdentifier, text: nil, completion: {})
+                }
+            })
+        }
         #endif
     }
 

@@ -88,6 +88,57 @@ final class MattermostPushPayloadTests: XCTestCase {
     }
 }
 
+/// Payloads the dev server (Mattermost 11.7.14, full contents, collapsed threads on) produced for alice, as
+/// mattermost-push-proxy 6.6.0 turns them into APNs payloads (infra/push-proxy/sim-bridge.py --save-dir).
+final class MattermostPushCapturedPayloadTests: XCTestCase {
+    func testDirectMessage() throws {
+        let payload = try XCTUnwrap(MattermostPushPayload(userInfo: try fixture("captured-dm")))
+        XCTAssertEqual(payload.type, .message)
+        XCTAssertEqual(payload.senderName, "@bob")
+        XCTAssertEqual(payload.channelName, "@bob")
+        let text = MattermostPushTextBuilder.text(for: payload, kind: .unknown, siteName: nil)
+        XCTAssertEqual(text.title, "@bob")
+        XCTAssertEqual(text.body, "Fixture: a direct message")
+        XCTAssertNil(text.groupName)
+    }
+
+    func testChannelMention() throws {
+        let payload = try XCTUnwrap(MattermostPushPayload(userInfo: try fixture("captured-channel-mention")))
+        let text = MattermostPushTextBuilder.text(for: payload, kind: .channel, siteName: nil)
+        XCTAssertEqual(text.title, "Code Review")
+        XCTAssertEqual(text.groupName, "Code Review")
+        XCTAssertEqual(text.senderName, "@bob")
+        // The server's "@bob: " prefix goes; the group notification shows the sender.
+        XCTAssertEqual(text.body, "@alice fixture: a channel mention")
+        XCTAssertTrue(MattermostPushRouter.mentions(payload.message ?? "", username: "alice"))
+    }
+
+    func testThreadReply() throws {
+        let payload = try XCTUnwrap(MattermostPushPayload(userInfo: try fixture("captured-thread-reply")))
+        XCTAssertTrue(payload.isThreadReply)
+        XCTAssertTrue(payload.isCRTEnabled)
+        let text = MattermostPushTextBuilder.text(for: payload, kind: .channel, siteName: nil)
+        XCTAssertEqual(text.title, "Reply in Sandbox")
+        XCTAssertEqual(text.body, "Fixture: a reply in alice's thread")
+        XCTAssertEqual(text.threadIdentifier, payload.channelId)
+        let target = try XCTUnwrap(MattermostNotificationTarget(userInfo: try fixture("captured-thread-reply")))
+        XCTAssertEqual(target.replyRootId, payload.rootId)
+        XCTAssertEqual(target.teamId, payload.teamId)
+    }
+
+    func testClearAndBadge() throws {
+        let clear = try XCTUnwrap(MattermostPushPayload(userInfo: try fixture("captured-clear")))
+        XCTAssertEqual(clear.type, .clear)
+        XCTAssertNotNil(clear.channelId)
+        XCTAssertNil(clear.rootId)
+        // A channel read with collapsed threads clears the channel's posts but not its thread replies.
+        XCTAssertTrue(MattermostPushClear.matches(userInfo: try fixture("captured-channel-mention"), channelId: clear.channelId!, rootId: clear.rootId, isCRTEnabled: clear.isCRTEnabled, serverId: clear.serverId, accountId: nil))
+        let badge = try XCTUnwrap(MattermostPushPayload(userInfo: try fixture("captured-update-badge")))
+        XCTAssertEqual(badge.type, .updateBadge)
+        XCTAssertEqual(badge.badge, 17)
+    }
+}
+
 final class MattermostPushTextTests: XCTestCase {
     func testDirectMessageIsTitledBySender() throws {
         let payload = try XCTUnwrap(MattermostPushPayload(userInfo: try fixture("dm")))

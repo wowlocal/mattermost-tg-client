@@ -140,8 +140,25 @@ public final class MattermostPushServiceHandler: @unchecked Sendable {
             let isChannel = ((try? device.store.peer(mattermostId: channelId)) ?? nil) != nil
             return isDirect || isChannel ? true : nil
         }, alreadyDelivered: payload.postId.map { deliveryLog.accounts(postId: $0) } ?? [])
-        guard let routed = route.account, let device = accounts.first(where: { $0.account.accountId == routed.accountId }) else {
+        guard var routed = route.account else {
             mmLog("no account for this push (\(route.reason)); dropped")
+            return UNMutableNotificationContent()
+        }
+        if payload.type == .session && route.isAmbiguous {
+            // A session push names no channel or sender: ask the server which candidate's session ended.
+            for candidateId in route.candidateIds {
+                guard let candidate = accounts.first(where: { $0.account.accountId == candidateId }), let client = self.client(for: candidate.account) else {
+                    continue
+                }
+                let accepted = await client.isTokenAccepted()
+                if !accepted {
+                    routed = candidate.account
+                    mmLog("session push: account \(candidateId)'s token is rejected")
+                    break
+                }
+            }
+        }
+        guard let device = accounts.first(where: { $0.account.accountId == routed.accountId }) else {
             return UNMutableNotificationContent()
         }
         mmLog("routed to account \(routed.accountId) (\(route.reason)\(route.isAmbiguous ? ", ambiguous among \(route.candidateIds)" : ""))")
@@ -157,15 +174,7 @@ public final class MattermostPushServiceHandler: @unchecked Sendable {
         // A first version without network work, in case time runs out.
         self.setFallback(self.content(payload: payload, kind: kind, device: device, recipientAccountName: names, lockedMessage: lockedMessage, avatar: nil))
 
-        let token = MattermostSessionKeychain.token(accountId: routed.accountId)
-        let client = token.flatMap { token -> MattermostClient? in
-            guard let url = URL(string: routed.serverURL) else {
-                return nil
-            }
-            var configuration = MattermostClient.Configuration(serverURL: url, userAgent: "Relay/0.1 (iOS; NotificationService)")
-            configuration.timeoutInterval = 8
-            return MattermostClient(configuration: configuration, token: token)
-        }
+        let client = self.client(for: routed)
         if client == nil {
             mmLog("account \(routed.accountId): no session token readable here; not acknowledging")
         }
@@ -183,6 +192,16 @@ public final class MattermostPushServiceHandler: @unchecked Sendable {
     }
 
     // MARK: Accounts
+
+    /// A client with the account's session token from the shared Keychain group, if this process can read it.
+    private func client(for account: MattermostPushAccount) -> MattermostClient? {
+        guard let token = MattermostSessionKeychain.token(accountId: account.accountId), let url = URL(string: account.serverURL) else {
+            return nil
+        }
+        var configuration = MattermostClient.Configuration(serverURL: url, userAgent: "Relay/0.1 (iOS; NotificationService)")
+        configuration.timeoutInterval = 8
+        return MattermostClient(configuration: configuration, token: token)
+    }
 
     private func loadAccounts(rootPath: String) -> [MattermostDeviceAccount] {
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: rootPath) else {

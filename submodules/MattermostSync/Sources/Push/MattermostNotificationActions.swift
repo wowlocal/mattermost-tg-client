@@ -187,6 +187,22 @@ extension MattermostSync {
         return candidates.first(where: { self.sync(accountId: $0)?.channelState(target.channelId) != nil }) ?? candidates.first
     }
 
+    /// `accountId(for:)` once the app has loaded its accounts (a tap or an action may have launched it), waiting
+    /// up to 20 s.
+    static func waitForAccountId(for target: MattermostNotificationTarget) async -> AccountRecordId? {
+        let deadline = CFAbsoluteTimeGetCurrent() + 20.0
+        while CFAbsoluteTimeGetCurrent() < deadline && !Task.isCancelled {
+            if let id = self.accountId(for: target) {
+                // The extension's account, or one on the push's server once every account is loaded.
+                if target.accountId == nil || target.accountId == id.int64 || CFAbsoluteTimeGetCurrent() > deadline - 15.0 {
+                    return id
+                }
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return self.accountId(for: target)
+    }
+
     /// The account's sync once it runs and has bootstrapped, waiting up to `timeout` seconds.
     static func waitForBootstrappedSync(accountId: AccountRecordId, timeout: Double) async -> MattermostAccountSync? {
         let deadline = CFAbsoluteTimeGetCurrent() + timeout
@@ -228,7 +244,7 @@ extension MattermostSync {
     // MARK: Tap
 
     static func destination(for target: MattermostNotificationTarget) async -> MattermostNotificationDestination? {
-        guard let accountId = self.accountId(for: target) else {
+        guard let accountId = await self.waitForAccountId(for: target) else {
             MMLog.log("push: no account for the notification of channel \(target.channelId)")
             return nil
         }
@@ -257,7 +273,7 @@ extension MattermostSync {
 
     static func reply(target: MattermostNotificationTarget, text: String) async -> Bool {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, let accountId = self.accountId(for: target) else {
+        guard !text.isEmpty, let accountId = await self.waitForAccountId(for: target) else {
             return false
         }
         if let sync = await self.waitForBootstrappedSync(accountId: accountId, timeout: 20.0), let channelState = sync.channelState(target.channelId) {
@@ -297,7 +313,7 @@ extension MattermostSync {
     // MARK: Mark as read
 
     static func markRead(target: MattermostNotificationTarget) async -> Bool {
-        guard let accountId = self.accountId(for: target), let (client, server) = self.notificationClient(accountId: accountId) else {
+        guard let accountId = await self.waitForAccountId(for: target), let (client, server) = self.notificationClient(accountId: accountId) else {
             return false
         }
         do {
