@@ -15,6 +15,45 @@ public enum EmojiTable {
         return Array(table.keys)
     }
 
+    /// The short name Mattermost clients send for an emoji: the first alias of its row (`+1` for 👍).
+    /// Also matches the emoji without its variation selector (U+FE0F).
+    public static func name(forUnicode emoji: String) -> String? {
+        if let name = names[emoji] {
+            return name
+        }
+        let stripped = String(String.UnicodeScalarView(emoji.unicodeScalars.filter { $0 != "\u{FE0F}" }))
+        return names[stripped]
+    }
+
+    /// Every distinct emoji with its primary short name, in table order.
+    public static var allEmoji: [(name: String, emoji: String)] {
+        var seen = Set<String>()
+        var result: [(name: String, emoji: String)] = []
+        for (aliases, emoji) in rows where seen.insert(emoji).inserted {
+            if let name = aliases.split(separator: " ").first {
+                result.append((String(name), emoji))
+            }
+        }
+        return result
+    }
+
+    private static let names: [String: String] = {
+        var result: [String: String] = [:]
+        for (aliases, emoji) in rows {
+            guard let name = aliases.split(separator: " ").first else {
+                continue
+            }
+            if result[emoji] == nil {
+                result[emoji] = String(name)
+            }
+            let stripped = String(String.UnicodeScalarView(emoji.unicodeScalars.filter { $0 != "\u{FE0F}" }))
+            if result[stripped] == nil {
+                result[stripped] = String(name)
+            }
+        }
+        return result
+    }()
+
     private static let table: [String: String] = {
         var result: [String: String] = [:]
         result.reserveCapacity(rows.count * 2)
