@@ -32,6 +32,8 @@ swift_library(
         "//submodules/ItemListPeerItem:ItemListPeerItem",
         "//submodules/ItemListPeerActionItem:ItemListPeerActionItem",
         "//submodules/AppBundle:AppBundle",
+        # Phase 3F: Do Not Disturb and custom status end dates.
+        "//submodules/TelegramUI/Components/ItemListDatePickerItem:ItemListDatePickerItem",
         "//submodules/MattermostSyncCore:MattermostSyncCore",
         "//submodules/MattermostKit:MattermostKit",
         "//submodules/MattermostSync:MattermostSync",

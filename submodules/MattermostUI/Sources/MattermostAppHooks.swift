@@ -15,6 +15,10 @@ public enum MattermostAppHooks {
         MattermostSessionExpiryPresenter.shared.start(sharedContext: sharedContext)
         // Phase 3D: interactive dialogs and live member list changes.
         MattermostChatHooks.shared.start(sharedContext: sharedContext)
+        // Phase 3F: Settings → Notifications → Push and Mentions (SettingsUI can't depend on MattermostUI).
+        MattermostUIHooks.makeNotificationPreferencesController = { context in
+            return mattermostNotificationPreferencesController(context: context)
+        }
         #if DEBUG
         MattermostDebugRemote.shared.start(sharedContext: sharedContext)
         #endif
