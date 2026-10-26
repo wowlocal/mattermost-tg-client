@@ -154,6 +154,8 @@ extension MattermostAccountSync {
         }
         if self.channelState(post.channelId) == nil {
             await self.refreshChannel(post.channelId)
+            // A new or closed DM/GM (3D-2): shown again, also on the user's other clients.
+            await self.showDirectChat(channelId: post.channelId)
         }
         guard self.channelState(post.channelId) != nil else {
             MMLog.log("live: post \(post.id) in unknown channel \(post.channelId)")

@@ -521,10 +521,12 @@ public func mattermostChannelSettingsController(context: AccountContext, peerId:
 
     let confirm: (String, String, String, Bool, @escaping () -> Void) -> Void = { title, text, action, destructive, f in
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        presentImpl?(textAlertController(context: context, title: title, text: text, actions: [
+        let alert = textAlertController(context: context, title: title, text: text, actions: [
             TextAlertAction(type: .genericAction, title: presentationData.strings.Common_Cancel, action: {}),
             TextAlertAction(type: destructive ? .destructiveAction : .defaultAction, title: action, action: f)
-        ], parseMarkdown: true))
+        ], parseMarkdown: true)
+        MattermostDirectoryDebug.alertPresented(alert, confirm: f)
+        presentImpl?(alert)
     }
 
     let arguments = ChannelEditArguments(updateDisplayName: { text in
@@ -738,6 +740,12 @@ public func mattermostChannelSettingsController(context: AccountContext, peerId:
         },
         "confirm-archive": { _ in
             arguments.archive()
+        },
+        "confirm-convert": { _ in
+            arguments.convertToPrivate()
+        },
+        "confirm-unarchive": { _ in
+            arguments.unarchive()
         }
     ]
     reload()

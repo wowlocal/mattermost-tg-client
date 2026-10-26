@@ -286,3 +286,5 @@
 "Group.LeaveGroup" = "Leave Channel";
 "PeerInfo.LeaveGroupTitle" = "Leave Channel";
 "PeerInfo.LeaveGroupText" = "Are you sure you want to leave **%@**?";
+"Relay.ChannelPreview.Recent" = "RECENT MESSAGES";
+"Relay.ChannelPreview.NoMessages" = "No messages yet.";

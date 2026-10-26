@@ -48,10 +48,12 @@ public enum MattermostMemberActions {
         }
         let name = member.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder)
         let channelName = channel.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder)
-        present(textAlertController(context: context, title: nil, text: presentationData.strings.Relay_Members_RemoveConfirm(name, channelName).string, actions: [
+        let alert = textAlertController(context: context, title: nil, text: presentationData.strings.Relay_Members_RemoveConfirm(name, channelName).string, actions: [
             TextAlertAction(type: .genericAction, title: presentationData.strings.Common_Cancel, action: {}),
             TextAlertAction(type: .destructiveAction, title: presentationData.strings.Relay_Members_RemoveAction, action: run)
-        ], parseMarkdown: true))
+        ], parseMarkdown: true)
+        MattermostDirectoryDebug.alertPresented(alert, confirm: run)
+        present(alert)
     }
 
     /// "Make Channel Admin" / "Remove Channel Admin" (`PUT …/members/{user}/schemeRoles`).

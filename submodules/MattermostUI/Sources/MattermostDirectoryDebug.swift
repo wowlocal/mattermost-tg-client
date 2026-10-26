@@ -16,6 +16,7 @@ import MattermostSync
 ///   channel `name`), `submit` (Create / Add / Save), `more` (next page), `new-group`, `new-channel`, `browse`,
 ///   `archived` (`value`), `team` (`team`), `join`, `set` (`field`: name/url/purpose/header/private, `value`),
 ///   `convert`, `archive`, `unarchive`, `confirm-archive`;
+/// - `alert` (`do`: `confirm` or `cancel`): a button of the confirmation alert these screens showed;
 /// - `info-*` (`peerinfo`, `info-edit`, `info-add-member`, `info-member` (`username`, `do`: menu/promote/remove/remove-confirmed),
 ///   `info-leave`, `info-state`): the profile of the visible chat, registered by PeerInfoScreen
 ///   (`MattermostDirectoryDebug.peerInfo`).
@@ -24,6 +25,18 @@ public enum MattermostDirectoryDebug {
 
     /// Installed by the visible channel profile (PeerInfoScreen, debug builds): runs `info-*` commands.
     public static var peerInfo: ((_ action: String, _ command: [String: Any], _ completion: @escaping (Bool, String?, [String: Any]) -> Void) -> Bool)?
+
+    private static weak var alert: ViewController?
+    private static var alertConfirm: (() -> Void)?
+
+    /// A confirmation alert of these screens (archive, convert, remove a member): the remote's `alert` command
+    /// presses its buttons (`do=confirm` runs the button's own action).
+    static func alertPresented(_ alert: ViewController, confirm: @escaping () -> Void) {
+        #if DEBUG
+        self.alert = alert
+        self.alertConfirm = confirm
+        #endif
+    }
 
     static func screenAppeared(_ controller: MattermostDirectoryListController) {
         #if DEBUG
@@ -58,6 +71,20 @@ public enum MattermostDirectoryDebug {
             }
             run(command)
             after((command["wait"] as? Double) ?? 1.5) {
+                completion(true, nil, self.describe())
+            }
+            return true
+        case "alert":
+            guard let alert = self.alert else {
+                completion(false, "no alert", [:])
+                return true
+            }
+            let confirm = (command["do"] as? String) == "confirm" ? self.alertConfirm : nil
+            self.alert = nil
+            self.alertConfirm = nil
+            alert.dismiss()
+            confirm?()
+            after(2.0) {
                 completion(true, nil, self.describe())
             }
             return true

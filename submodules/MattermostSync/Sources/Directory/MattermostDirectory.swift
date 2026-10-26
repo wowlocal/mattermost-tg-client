@@ -50,6 +50,7 @@ public struct MattermostBrowsedChannel: Equatable {
     public let name: String
     public let displayName: String
     public let purpose: String
+    /// The header as plain text (markdown removed).
     public let header: String
     public let memberCount: Int64?
     public let isArchived: Bool
@@ -58,6 +59,14 @@ public struct MattermostBrowsedChannel: Equatable {
     public let memberPeerId: PeerId?
     /// An in-memory peer for the row's avatar (never stored).
     public let previewPeer: EnginePeer
+}
+
+/// A recent message of a channel the user isn't in (Browse Channels' preview).
+public struct MattermostPreviewPost: Equatable {
+    public let id: String
+    public let author: String
+    public let text: String
+    public let date: Date
 }
 
 public struct MattermostChannelPage: Equatable {
@@ -252,6 +261,14 @@ public enum MattermostDirectory {
         }
     }
 
+    /// The newest messages of a public channel the user isn't in (a read-only preview; public channels are
+    /// readable by the team's members): root posts other than system messages, oldest first.
+    public static func previewPosts(accountId: AccountRecordId, channelId: String, limit: Int = 10) -> Signal<[MattermostPreviewPost], MattermostDirectoryError> {
+        return self.run(accountId: accountId) { sync in
+            return try await sync.previewPosts(channelId: channelId, limit: limit)
+        }
+    }
+
     /// Joins a public channel; returns its chat once written.
     public static func joinChannel(accountId: AccountRecordId, channelId: String) -> Signal<PeerId, MattermostDirectoryError> {
         return self.run(accountId: accountId) { sync in
@@ -443,6 +460,7 @@ extension MattermostAccountSync {
         let channel = try await self.client.createDirectChannel(userId: self.ownUserId, otherUserId: userId)
         if self.channelState(channel.id) == nil {
             await self.refreshChannel(channel.id)
+            await self.showDirectChat(channelId: channel.id)
         }
         MMLog.log("directory: DM \(channel.id) with \(userId) opened")
         return userPeerId
@@ -456,6 +474,7 @@ extension MattermostAccountSync {
         let channel = try await self.client.createGroupChannel(userIds: [self.ownUserId] + userIds)
         await self.ensureUsers(Set(userIds))
         await self.refreshChannel(channel.id)
+        await self.showDirectChat(channelId: channel.id)
         guard let peerId = self.channelState(channel.id)?.peerId else {
             throw MattermostDirectoryError.server("The group message could not be loaded.")
         }
@@ -494,7 +513,7 @@ extension MattermostAccountSync {
                 name: channel.name,
                 displayName: title,
                 purpose: channel.purpose,
-                header: channel.header,
+                header: MattermostMarkdown.parse(channel.header).text,
                 memberCount: counts[channel.id],
                 isArchived: channel.isArchived,
                 isPrivate: channel.type == .privateChannel,
@@ -503,6 +522,25 @@ extension MattermostAccountSync {
             )
         }
         return MattermostChannelPage(channels: result, hasMore: hasMore)
+    }
+
+    func previewPosts(channelId: String, limit: Int) async throws -> [MattermostPreviewPost] {
+        let list = try await self.client.posts(channelId: channelId, perPage: 60)
+        let posts = list.order.compactMap { list.posts[$0] }.filter { $0.rootId.isEmpty && !$0.type.hasPrefix("system_") && $0.deleteAt == 0 }
+        let recent = Array(posts.prefix(limit))
+        await self.ensureUsers(Set(recent.map(\.userId)))
+        return recent.reversed().compactMap { post -> MattermostPreviewPost? in
+            var text = MattermostMarkdown.parse(post.message).text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if text.isEmpty {
+                let files = post.metadata?.files ?? []
+                if files.isEmpty {
+                    return nil
+                }
+                text = files.map { "📎 " + $0.name }.joined(separator: "\n")
+            }
+            let author = self.state.with { state in state.users[post.userId].map(PeerConverter.displayName) } ?? ""
+            return MattermostPreviewPost(id: post.id, author: author, text: text, date: Date(timeIntervalSince1970: Double(post.createAt) / 1000.0))
+        }
     }
 
     func joinChannel(channelId: String) async throws -> PeerId {
@@ -638,6 +676,31 @@ extension MattermostAccountSync {
             await self.refreshChannel(channelState.channel.id)
         }
         MMLog.log("directory: \(userId) is \(isAdmin ? "now" : "no longer") an admin of \(channelState.channel.id)")
+    }
+
+    /// A DM or group message that (re)appears with a new post: `direct_channel_show` / `group_channel_show` back to
+    /// true (as Mattermost's web app does), or the next bootstrap would hide it again.
+    func showDirectChat(channelId: String) async {
+        guard let channelState = self.channelState(channelId) else {
+            return
+        }
+        let preference: Preference
+        switch channelState.channel.type {
+        case .directMessage:
+            guard let partnerId = channelState.channel.directMessagePartnerId(myUserId: self.ownUserId), partnerId != self.ownUserId else {
+                return
+            }
+            preference = Preference(userId: self.ownUserId, category: PreferenceCategory.directChannelShow, name: partnerId, value: "true")
+        case .groupMessage:
+            preference = Preference(userId: self.ownUserId, category: PreferenceCategory.groupChannelShow, name: channelId, value: "true")
+        default:
+            return
+        }
+        do {
+            try await self.client.savePreferences([preference])
+        } catch {
+            MMLog.log("directory: could not show \(channelId) again: \(describeError(error))")
+        }
     }
 
     // MARK: Leaving and closing (Telegram's Leave / Delete Chat)

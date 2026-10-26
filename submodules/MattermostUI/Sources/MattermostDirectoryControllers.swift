@@ -858,6 +858,9 @@ private enum PreviewEntry: ItemListNodeEntry {
     case text(id: Int, text: String)
     case join(title: String, enabled: Bool)
     case info(String)
+    case recentHeader(String)
+    case recent(index: Int, text: String)
+    case recentInfo(String)
 
     var section: ItemListSectionId {
         switch self {
@@ -867,6 +870,8 @@ private enum PreviewEntry: ItemListNodeEntry {
             return Int32(1 + id)
         case .join, .info:
             return 10
+        case .recentHeader, .recent, .recentInfo:
+            return 11
         }
     }
 
@@ -882,6 +887,12 @@ private enum PreviewEntry: ItemListNodeEntry {
             return 100
         case .info:
             return 101
+        case .recentHeader:
+            return 200
+        case let .recent(index, _):
+            return 201 + index
+        case .recentInfo:
+            return 1000
         }
     }
 
@@ -897,8 +908,10 @@ private enum PreviewEntry: ItemListNodeEntry {
             return a == c && b == d
         case let (.join(a, b), .join(c, d)):
             return a == c && b == d
-        case let (.info(a), .info(b)):
+        case let (.info(a), .info(b)), let (.recentHeader(a), .recentHeader(b)), let (.recentInfo(a), .recentInfo(b)):
             return a == b
+        case let (.recent(a, b), .recent(c, d)):
+            return a == c && b == d
         default:
             return false
         }
@@ -917,8 +930,12 @@ private enum PreviewEntry: ItemListNodeEntry {
             return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: title, kind: enabled ? .generic : .disabled, alignment: .center, sectionId: self.section, style: .blocks, action: {
                 arguments.join()
             })
-        case let .info(text):
+        case let .info(text), let .recentInfo(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
+        case let .recentHeader(text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
+        case let .recent(_, text):
+            return ItemListMultilineTextItem(presentationData: presentationData, text: text, enabledEntityTypes: [], sectionId: self.section, style: .blocks)
         }
     }
 }
@@ -931,6 +948,14 @@ func mattermostChannelPreviewController(context: AccountContext, channel: Matter
     let joinDisposable = MetaDisposable()
     var navigationControllerImpl: (() -> NavigationController?)?
     var presentImpl: ((ViewController) -> Void)?
+
+    // A read-only look at the channel: its newest messages.
+    let recentPromise = Promise<[MattermostPreviewPost]?>(nil)
+    recentPromise.set(.single(nil) |> then(MattermostDirectory.previewPosts(accountId: accountId, channelId: channel.id)
+    |> map(Optional.init)
+    |> `catch` { _ -> Signal<[MattermostPreviewPost]?, NoError> in
+        return .single([])
+    }))
 
     let join: () -> Void = {
         if channel.isArchived || joiningValue.swap(true) {
@@ -950,9 +975,9 @@ func mattermostChannelPreviewController(context: AccountContext, channel: Matter
     }
     let arguments = PreviewArguments(context: context, join: join)
 
-    let signal = combineLatest(context.sharedContext.presentationData, joining.get())
+    let signal = combineLatest(context.sharedContext.presentationData, joining.get(), recentPromise.get())
     |> deliverOnMainQueue
-    |> map { presentationData, joining -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, joining, recent -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let strings = presentationData.strings
         var entries: [PreviewEntry] = []
         var subtitle = "~" + channel.name
@@ -972,6 +997,20 @@ func mattermostChannelPreviewController(context: AccountContext, channel: Matter
             entries.append(.info(strings.Relay_ChannelPreview_Archived))
         } else {
             entries.append(.join(title: strings.Relay_ChannelPreview_Join, enabled: !joining))
+        }
+        entries.append(.recentHeader(strings.Relay_ChannelPreview_Recent))
+        if let recent {
+            if recent.isEmpty {
+                entries.append(.recentInfo(strings.Relay_ChannelPreview_NoMessages))
+            }
+            let formatter = DateFormatter()
+            formatter.dateStyle = .short
+            formatter.timeStyle = .short
+            for (index, post) in recent.enumerated() {
+                entries.append(.recent(index: index, text: "\(post.author) · \(formatter.string(from: post.date))\n\(post.text)"))
+            }
+        } else {
+            entries.append(.recentInfo(strings.Relay_Compose_Loading))
         }
         let rightButton: ItemListNavigationButton? = joining ? ItemListNavigationButton(content: .none, style: .activity, enabled: true, action: {}) : nil
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(channel.displayName), leftNavigationButton: nil, rightNavigationButton: rightButton, backNavigationButton: ItemListBackButton(title: strings.Common_Back))
