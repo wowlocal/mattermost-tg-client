@@ -10,7 +10,8 @@ import MattermostSyncCore
 /// sharing a `groupingKey`. A Mattermost post with N files therefore becomes N messages, one per file, which
 /// need N local ids: the post's own id-map entry (part 0, the primary message) and N-1 parts
 /// (`PostParts`). Images come first (one album), then the other files (one file group), each in the
-/// post's order; Telegram can't mix photos and files in one group, so a post with both shows two bubbles.
+/// post's order. A post with both is one group (4F): Telegram's bubble lays the images out as a mosaic and the
+/// files below it, so the post shows as one bubble, as Mattermost shows one post.
 ///
 /// - The text goes on the last file (Telegram shows a file group's text under its file) or, without other
 ///   files, on the first image (an album's caption).
@@ -47,8 +48,16 @@ struct PostLayout: Equatable {
             return
         }
         // Mattermost allows 10 files per post by default; the id map has room for 100 parts.
-        let imageKey = images.count > 1 ? PostLayout.groupingKey(postId: post.id, group: "images") : nil
-        let fileKey = others.count > 1 ? PostLayout.groupingKey(postId: post.id, group: "files") : nil
+        let imageKey: Int64?
+        let fileKey: Int64?
+        if !images.isEmpty && !others.isEmpty {
+            let key = PostLayout.groupingKey(postId: post.id, group: "post")
+            imageKey = key
+            fileKey = key
+        } else {
+            imageKey = images.count > 1 ? PostLayout.groupingKey(postId: post.id, group: "images") : nil
+            fileKey = others.count > 1 ? PostLayout.groupingKey(postId: post.id, group: "files") : nil
+        }
         var parts = images.map { Part(file: $0, isAlbumImage: true, groupingKey: imageKey) }
         parts += others.map { Part(file: $0, isAlbumImage: false, groupingKey: fileKey) }
         self.parts = Array(parts.prefix(PostParts.maximumCount))

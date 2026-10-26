@@ -11,9 +11,10 @@ import MattermostSyncCore
 /// same pass upgrades data written before 3E once.
 extension MattermostAccountSync {
     /// Version of the rendering `rerenderRichContent` brings stored messages to (3E: link previews, headings, list
-    /// indents, tables, emoticons).
+    /// indents, tables, emoticons; 2 (4F): a post with images and other files as one group, attachment colours
+    /// and icons).
     static let richContentCursor = "rich_content"
-    static let richContentVersion = "1"
+    static let richContentVersion = "2"
     /// The settings the stored messages were rendered with (`RichContentSettings.encoded`).
     static let richContentSettingsCursor = "rich_content_settings"
     /// Newest messages per chat re-rendered on a settings change or the upgrade (about a screen and a half).
