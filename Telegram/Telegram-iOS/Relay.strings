@@ -502,3 +502,7 @@
 "Relay.Diagnostics.Export" = "Export Diagnostics";
 "Relay.Diagnostics.ExportFooter" = "Creates a file with Relay's version, your servers' addresses and versions, performance and crash reports from iOS, and the diagnostic log, without messages, passwords, tokens or user ids. Nothing is sent unless you choose where to share it.";
 "Relay.Diagnostics.Failed" = "Relay couldn't prepare the diagnostics.";
+
+/* Release-candidate regression (Phase 4E): Telegram texts on kept screens that named features Relay doesn't have. */
+"PasscodeSettings.Help" = "When you set up an additional passcode, a lock icon will appear on the chats page. Tap it to lock and unlock the app.\n\nNote: if you forget the passcode, you'll need to delete and reinstall the app and log in to your servers again.";
+"PasscodeSettings.HelpBottom" = "Note: if you forget the passcode, you'll need to delete and reinstall the app and log in to your servers again.";

@@ -548,7 +548,8 @@ public func passcodeOptionsController(context: AccountContext, focusOnItemTag: P
             return
         }
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        let alert = textAlertController(context: context, title: presentationData.strings.PasscodeSettings_TurnPasscodeOff, text: current.enabled ? presentationData.strings.PasscodeSettings_TurnOffWalletProtectionWarning : presentationData.strings.PasscodeSettings_TurnPasscodeOff, actions: [
+        // MATTERMOST: no TON wallet in Relay, so no wallet warning (4E).
+        let alert = textAlertController(context: context, title: presentationData.strings.PasscodeSettings_TurnPasscodeOff, text: current.enabled && MattermostFeatures.premium ? presentationData.strings.PasscodeSettings_TurnOffWalletProtectionWarning : presentationData.strings.PasscodeSettings_TurnPasscodeOff, actions: [
             TextAlertAction(type: .genericAction, title: presentationData.strings.Common_Cancel, action: {}),
             TextAlertAction(type: .destructiveAction, title: presentationData.strings.PasscodeSettings_TurnPasscodeOff, action: {
                 guard sessionState.accepts(generation: generation), let operation = sessionState.beginOperation() else { return }

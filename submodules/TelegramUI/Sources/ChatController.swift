@@ -10187,6 +10187,11 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         guard let peer = self.presentationInterfaceState.renderedPeer?.peer else {
             return
         }
+        // MATTERMOST: no voice or video messages yet (the composer hides the record button), so no "Hold to record
+        // audio" tip pointing at nothing on a fresh install (4E).
+        if !MattermostFeatures.voiceMessages && !MattermostFeatures.videoMessages {
+            return
+        }
         
         if self.birthdayTooltipController != nil {
             return
