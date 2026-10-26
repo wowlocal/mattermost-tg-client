@@ -64,6 +64,8 @@ The session token is **not** stored here. It goes in the Keychain (shared access
 
 MattermostSyncCore's allocator (plan 02, option 2) behind `MessageIdStore`, backed by the `posts` table. Namespace `Cloud` for server posts, `Local` for messages being sent. Contract with Postbox (R§3.3): within a peer, local ID order equals `(create_at, post_id)` order.
 
+**Post parts (2C).** A post shown as several messages (one per file, `PostLayout`) owns several ids: its own entry (part 0, the primary message) and parts `<post id>#01`, `#02`, … (`PostParts`). Part keys share the post's `create_at` and sort right after it and before any other post (`#` sorts before `[a-z0-9]`), so the allocator places them like any key. Only cursors (`HistoryHole.cursor`, `fillCursor`, `aroundCursor` return the server post of a part) and deletes (`markDeleted` takes the parts along) know about parts; `insertPost(_:partCount:)` adds missing parts (an edit added files), `removeParts` tombstones extra ones (an edit removed files; a removed part never comes back). Callers turn any entry into its server post with `entry.serverPostId`.
+
 ### Media IDs
 
 `MediaId(namespace: Namespaces.Media.CloudImage | CloudFile, id: Int64)` where `id` is allocated sequentially in `files` (no hash collisions). Shared‑record caveat: the same file in two posts gets the same `MediaId`; that's correct.
@@ -99,8 +101,8 @@ Later launches skip bootstrap and run catch‑up.
    - root posts with replies → `ReplyThreadMessageAttribute(count: reply_count, latestUsers: participants…)`
    - `EditedMessageAttribute` when `edit_at > 0`
    - `ReactionsMessageAttribute` from `metadata.reactions`
-   - media from `metadata.files` (`TelegramMediaImage` for images with dimensions, `TelegramMediaFile` otherwise)
-   - system posts → `TelegramMediaAction` with a Mattermost action payload (needs a new action type or a custom service message; decide in Spike D)
+   - media from `metadata.files` (`TelegramMediaImage` for images with dimensions, `TelegramMediaFile` otherwise); several files → one message per file (see "Rendering (2C)")
+   - system posts → `TelegramMediaAction(.customText)` with mention entities (see "Rendering (2C)")
    - `tags`: `.photoOrVideo`, `.file`, `.webPage`, `.unseenPersonalMessage` (mentions of me) as appropriate
 4. One Postbox transaction: `addMessages`, then `removeHole` for the covered range (see the fill contract), then read‑state adjustments.
 
@@ -150,9 +152,25 @@ Each consumer observes the same Postbox source the Telegram one does (`KeyedOper
 
 **Synthetic configuration** (`SyntheticConfiguration.swift`): at every start the app configuration (ui‑inventory §0.2 keys; `MaxPostSize` from the client config after bootstrap) and an `AvailableReactions` list: about 65 picker emoji (enabled), the server's custom emoji (enabled, `:name:`), every other built‑in emoji (disabled, so existing reactions render), plus the `CloudTopReactions` list the context menu reads. Reaction files are static WebP "custom emoji" files whose `LocalFileMediaResource` ids are hashes in a reserved range; `MattermostReactionImages` renders them on demand (Apple Color Emoji glyph, or the custom emoji image from `GET /emoji/{id}/image`).
 
+## Rendering (2C)
+
+| Mattermost | Telegram | Where |
+|---|---|---|
+| Post with N files | N messages: images first (one `groupingKey`: an album), then other files (another key: a file group); text on the last file, else the album's first image; reactions, reply count, pinned flag, buttons on the primary (part 0), which Telegram reads them from for the whole group; thread/reply references on every part | `PostLayout`, `PostConverter.storeMessages`, `writeMessages` (reconciles parts on edits) |
+| Reaction / reply / edit / delete of any part | the post (`postReference` → `serverPostId`); reactions written to the primary | `OwnPosts`, `OperationConsumers` |
+| Album sent from the app | one post with all files (`MattermostMessageSender.sendMessageGroup`); the Local group is rewritten part by part (paired by uploaded file id) | `PostSender`, `applyOwnPost` |
+| `props.attachments` | pretext, then a block quote (stands in for the colour bar, which Telegram can't colour per message) with author, title (link), text, fields (`Title: value`), footer + date; first `image_url`/`thumb_url` on the server as the photo, text above it (`InvertMediaMessageAttribute`) | `AttachmentConverter` |
+| Buttons / menus | inline keyboard (`ReplyMarkupMessageAttribute`, callback data = `MattermostPostActionData` JSON, styles good/danger/primary); tap → `MattermostPostActions.perform` → `POST /posts/{id}/actions/{id}` (`selected_option` for menus; user/channel menus offer the known users/channels); the integration's update arrives as `post_edited`, its ephemeral answer (`ephemeral_message`) as a toast | `PostActions.swift`; TelegramUI `MattermostPostActions.swift` (hooked into `requestMessageActionCallback`) |
+| `override_username` / `override_icon_url` (webhooks, bots) | a synthetic bot user per override (`override:<name>\n<icon>` in the peers table) as the author: name, avatar and bubble grouping follow without upstream changes | `OverridePeers.swift` |
+| System posts | `.customText` service message from `ServiceAction.formattedText`: users as `TextMention`, new header/purpose/name in bold | `PostConverter.serviceAction` |
+| `:name:` custom emoji in text | `.CustomEmoji` entity over the `:name:` text, file = the reaction image file of `:name:` (static WebP rendered from `/emoji/{id}/image`), stored with `storeMediaIfNotPresent` so `associatedMedia` resolves offline; only names in `metadata.emojis` (others stay text, as on Mattermost) | `PostConverter`, `MattermostReactionImages` |
+| Member count | `/channels/{id}/stats` → `CachedChannelData.participantsSummary.memberCount` (after bootstrap, channel refresh, `user_added`/`user_removed`); the chat title and group info skip Telegram's online-member lists | `MemberCounts.swift`; TelegramUI `ChatControllerContentData`, `PeerInfoData` |
+
+Member *lists* (group info Members pane, @-mention suggestions) still come from `channels.getParticipants` through `ChannelMemberListContext`; feeding them needs a TelegramCore seam in `_internal_channelMembers` (later).
+
 ## Media resources
 
-`MattermostFileResource(fileId, variant)`, `MattermostAvatarResource(userId, lastPictureUpdate)`, `MattermostEmojiResource(emojiId)`, all `TelegramMediaResource` + `PostboxCoding`, registered in `mattermostDeclareEncodables()` (app and every extension; R§6). Type names are part of the storage format: never rename them. Fetched through the auxiliary `fetchResource` hook with a `URLSession` that adds the bearer token and supports byte ranges.
+`MattermostFileResource(fileId, variant)`, `MattermostAvatarResource(userId, lastPictureUpdate)`, `MattermostURLImageResource(url)` (same-origin images only: attachment images, webhook icons; flattened onto white because Telegram draws photos opaque), all `TelegramMediaResource` + `PostboxCoding`, registered in `mattermostDeclareEncodables()` (app and every extension; R§6). Type names are part of the storage format: never rename them. Fetched through the auxiliary `fetchResource` hook with a `URLSession` that adds the bearer token and supports byte ranges.
 
 ## Login (Phase 2B, implemented)
 

@@ -246,9 +246,8 @@ public func mattermostFetchResource(postbox: Postbox, resource: MediaResource) -
             let task = Task {
                 do {
                     let data = try await client.data(for: request)
-                    let image = flattenedImageData(data)
                     subscriber.putNext(.reset)
-                    subscriber.putNext(.dataPart(resourceOffset: 0, data: image, range: 0 ..< Int64(image.count), complete: true))
+                    subscriber.putNext(.dataPart(resourceOffset: 0, data: data, range: 0 ..< Int64(data.count), complete: true))
                     subscriber.putCompletion()
                 } catch {
                     if !Task.isCancelled {
@@ -262,30 +261,6 @@ public func mattermostFetchResource(postbox: Postbox, resource: MediaResource) -
             }
         }
     }
-}
-
-/// Telegram draws photos opaque, so the (arbitrary) colour of transparent pixels would show: images with
-/// an alpha channel (logos, icons) are flattened onto white.
-private func flattenedImageData(_ data: Data) -> Data {
-    guard let image = UIImage(data: data), let cgImage = image.cgImage else {
-        return data
-    }
-    switch cgImage.alphaInfo {
-    case .none, .noneSkipFirst, .noneSkipLast:
-        return data
-    default:
-        break
-    }
-    let size = CGSize(width: cgImage.width, height: cgImage.height)
-    let format = UIGraphicsImageRendererFormat()
-    format.scale = 1.0
-    format.opaque = true
-    let rendered = UIGraphicsImageRenderer(size: size, format: format).image { context in
-        UIColor.white.setFill()
-        context.fill(CGRect(origin: .zero, size: size))
-        image.draw(in: CGRect(origin: .zero, size: size))
-    }
-    return rendered.pngData() ?? data
 }
 
 /// A `MattermostURLImageResource`: a plain GET on the server's origin (static images need no session).
