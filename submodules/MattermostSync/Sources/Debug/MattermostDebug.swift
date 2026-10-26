@@ -170,7 +170,9 @@ extension MattermostAccountSync {
     /// Scrolls through the whole history like the chat screen does: a Postbox history view anchored at the
     /// message next to the nearest hole (older holes first, then newer ones), kept open until that hole
     /// changes, until Postbox has no holes left for the chat. Then checks and dumps the result.
-    func debugPageThroughHistory(channelId: String, startMessageId: MessageId?) async {
+    /// `tag`: page the view of that tag instead (the root-post history of collapsed reply threads); `dump`: write
+    /// the result (else the caller checks it).
+    func debugPageThroughHistory(channelId: String, startMessageId: MessageId?, tag: MessageTags? = nil, dump: Bool = true) async {
         guard let channelState = self.channelState(channelId) else {
             return
         }
@@ -207,7 +209,7 @@ extension MattermostAccountSync {
             }
             steps += 1
             let stepStarted = CFAbsoluteTimeGetCurrent()
-            let progressed = await self.debugWaitForHoleChange(peerId: peerId, anchor: next.anchor, holes: next.holes)
+            let progressed = await self.debugWaitForHoleChange(peerId: peerId, anchor: next.anchor, holes: next.holes, tag: tag)
             slowestStep = max(slowestStep, CFAbsoluteTimeGetCurrent() - stepStarted)
             if !progressed {
                 stalls += 1
@@ -221,12 +223,14 @@ extension MattermostAccountSync {
             }
         }
         MMLog.log("pager: done after \(steps) steps in \(Int(CFAbsoluteTimeGetCurrent() - started)) s (slowest step \(Int(slowestStep * 1000)) ms, \(stalls) stalls)")
-        await self.debugDump(channelId: channelId, peerId: peerId, stalls: stalls, seconds: CFAbsoluteTimeGetCurrent() - started)
+        if dump {
+            await self.debugDump(channelId: channelId, peerId: peerId, stalls: stalls, seconds: CFAbsoluteTimeGetCurrent() - started)
+        }
     }
 
     /// Opens a history view at `anchor` (which makes Postbox request the nearest hole) and waits until the
     /// chat's holes differ from `holes`; false after 30 s without change.
-    private func debugWaitForHoleChange(peerId: PeerId, anchor: HistoryViewInputAnchor, holes: IndexSet) async -> Bool {
+    private func debugWaitForHoleChange(peerId: PeerId, anchor: HistoryViewInputAnchor, holes: IndexSet, tag: MessageTags? = nil) async -> Bool {
         let disposable = self.postbox.aroundMessageHistoryViewForLocation(
             .peer(peerId: peerId, threadId: nil),
             anchor: anchor,
@@ -235,7 +239,7 @@ extension MattermostAccountSync {
             count: 60,
             fixedCombinedReadStates: nil,
             topTaggedMessageIdNamespaces: [],
-            tag: nil,
+            tag: tag.flatMap { .tag($0) },
             appendMessagesFromTheSameGroup: false,
             namespaces: .not(Namespaces.Message.allNonRegular),
             orderStatistics: []

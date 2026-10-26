@@ -85,8 +85,92 @@ public extension MattermostSync {
     }
 }
 
+public extension MattermostSync {
+    /// Pages a chat's root-post history (its main history with collapsed reply threads) to the start, as the chat
+    /// screen does while scrolling, then compares its root posts with the server's
+    /// (`GET /channels/{id}/posts?collapsedThreads=true`, every page).
+    static func debugCheckRootHistory(accountId: AccountRecordId, query: String) -> Signal<[String: Any], NoError> {
+        #if DEBUG
+        return self.signal {
+            guard let sync = await self.waitForRunningSync(accountId: accountId), let channelId = sync.debugFindChannel(query) else {
+                return ["error": "no chat \(query)"]
+            }
+            return await sync.debugCheckRootHistory(channelId: channelId)
+        }
+        #else
+        return .single([:])
+        #endif
+    }
+}
+
 #if DEBUG
 extension MattermostAccountSync {
+    func debugCheckRootHistory(channelId: String) async -> [String: Any] {
+        guard let channelState = self.channelState(channelId) else {
+            return ["error": "unknown channel"]
+        }
+        let started = CFAbsoluteTimeGetCurrent()
+        await self.debugPageThroughHistory(channelId: channelId, startMessageId: nil, tag: .mattermostRootPost, dump: false)
+        let pagedSeconds = CFAbsoluteTimeGetCurrent() - started
+        var serverRoots: [String] = []
+        var page = 0
+        while page < 1000 {
+            guard let list = try? await self.client.posts(channelId: channelId, page: page, perPage: 200, collapsedThreads: true) else {
+                return ["error": "server roots not loaded"]
+            }
+            for postId in list.order {
+                if let post = list.posts[postId], post.rootId.isEmpty, post.deleteAt == 0, !post.type.hasPrefix("system_ephemeral") {
+                    serverRoots.append(post.id)
+                }
+            }
+            if list.order.count < 200 {
+                break
+            }
+            page += 1
+        }
+        let local: (roots: [String], taggedReplies: Int, untaggedRoots: Int, holes: [String]) = await self.postbox.mmTransaction { transaction in
+            var roots: [String] = []
+            var taggedReplies = 0
+            var untaggedRoots = 0
+            transaction.withAllMessages(peerId: channelState.peerId, namespace: Namespaces.Message.Cloud, { message in
+                let isReply = message.attributes.contains(where: { $0 is ReplyMessageAttribute })
+                let isTagged = message.tags.contains(.mattermostRootPost)
+                if isTagged && isReply {
+                    taggedReplies += 1
+                }
+                if !isTagged && !isReply {
+                    untaggedRoots += 1
+                }
+                if isTagged, let entry = self.store.entries(channelId: channelId, fromLocalId: message.id.id, ascending: true, limit: 1).first, entry.localId == message.id.id {
+                    let postId = entry.serverPostId
+                    if roots.last != postId {
+                        roots.append(postId)
+                    }
+                }
+                return true
+            })
+            let holes = transaction.getHoles(peerId: channelState.peerId, namespace: Namespaces.Message.Cloud)
+            return (roots, taggedReplies, untaggedRoots, holes.rangeView.map { "\($0.lowerBound)...\($0.upperBound - 1)" })
+        }
+        let serverSet = Set(serverRoots)
+        let localSet = Set(local.roots)
+        let report: [String: Any] = [
+            "channelId": channelId,
+            "pagedSeconds": Int(pagedSeconds),
+            "serverRoots": serverSet.count,
+            "localRoots": localSet.count,
+            "duplicateRoots": local.roots.count - localSet.count,
+            "missing": Array(serverSet.subtracting(localSet).prefix(20)),
+            "missingCount": serverSet.subtracting(localSet).count,
+            "extra": Array(localSet.subtracting(serverSet).prefix(20)),
+            "taggedReplies": local.taggedReplies,
+            "untaggedRoots": local.untaggedRoots,
+            "holesLeft": local.holes
+        ]
+        MMLog.log("debug: root history of \(channelId): \(report)")
+        return report
+    }
+
     func debugCheckThread(rootPostId: String) async -> [String: Any] {
         guard let root = try? await self.client.post(id: rootPostId), let channelState = self.channelState(root.channelId) else {
             return ["error": "root \(rootPostId) not found"]

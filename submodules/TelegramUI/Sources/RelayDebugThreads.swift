@@ -227,6 +227,15 @@ extension TelegramRootController {
                     completion(true, nil, [:])
                 }
             }
+        case "check-roots":
+            guard let query = command["query"] as? String else {
+                completion(false, "missing query", [:])
+                return true
+            }
+            let _ = (MattermostSync.debugCheckRootHistory(accountId: accountId, query: query)
+            |> deliverOnMainQueue).startStandalone(next: { report in
+                completion(report["error"] == nil, report["error"] as? String, report)
+            })
         case "check-thread":
             guard let postId = command["post"] as? String else {
                 completion(false, "missing post", [:])
