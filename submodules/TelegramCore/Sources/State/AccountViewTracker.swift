@@ -2267,16 +2267,18 @@ public final class AccountViewTracker {
         if let account = self.account {
             let signal: Signal<(MessageHistoryView, ViewUpdateType, InitialMessageHistoryData?), NoError>
             if let peerId = chatLocation.peerId, let threadId = chatLocation.threadId, tag == nil {
-                signal = account.postbox.transaction { transaction -> (Peer?, MessageHistoryThreadData?, MessageIndex?) in
+                signal = account.postbox.transaction { transaction -> (Peer?, MessageHistoryThreadData?, MessageIndex?, MattermostThreadReadState?) in
                     let interfaceState = transaction.getPeerChatThreadInterfaceState(peerId, threadId: threadId)
                     
                     return (
                         transaction.getPeer(peerId),
                         transaction.getMessageHistoryThreadInfo(peerId: peerId, threadId: threadId)?.data.get(MessageHistoryThreadData.self),
-                        interfaceState?.historyScrollMessageIndex
+                        interfaceState?.historyScrollMessageIndex,
+                        // MATTERMOST: see `MattermostChatObserver.threadReadState`.
+                        MattermostBackend.isEnabled ? mattermostThreadReadState(accountPeerId: account.peerId, peerId: peerId, threadId: threadId, transaction: transaction) : nil
                     )
                 }
-                |> mapToSignal { peer, threadInfo, scrollRestorationIndex -> Signal<(MessageHistoryView, ViewUpdateType, InitialMessageHistoryData?), NoError> in
+                |> mapToSignal { peer, threadInfo, scrollRestorationIndex, mattermostReadState -> Signal<(MessageHistoryView, ViewUpdateType, InitialMessageHistoryData?), NoError> in
                     var isSimpleThread = false
                     if peerId == account.peerId {
                         isSimpleThread = true
@@ -2337,6 +2339,29 @@ public final class AccountViewTracker {
                                 useRootInterfaceStateForThread: useRootInterfaceStateForThread
                             )
                         }
+                    }
+                    
+                    // MATTERMOST: a Mattermost thread with unread replies opens at the first one, with the unread
+                    // separator above it (a read state fixed for the view, as Telegram's chats keep theirs).
+                    if let mattermostReadState {
+                        return account.postbox.aroundMessageHistoryViewForLocation(
+                            chatLocation,
+                            anchor: .message(mattermostReadState.firstUnreadMessageId),
+                            ignoreMessagesInTimestampRange: ignoreMessagesInTimestampRange,
+                            ignoreMessageIds: ignoreMessageIds,
+                            count: count,
+                            trackHoles: trackHoles,
+                            fixedCombinedReadStates: .peer([peerId: CombinedPeerReadState(states: [
+                                (Namespaces.Message.Cloud, PeerReadState.idBased(maxIncomingReadId: mattermostReadState.firstUnreadMessageId.id - 1, maxOutgoingReadId: 0, maxKnownId: 0, count: mattermostReadState.unreadCount, markedUnread: false))
+                            ])]),
+                            topTaggedMessageIdNamespaces: [Namespaces.Message.Cloud],
+                            tag: tag,
+                            appendMessagesFromTheSameGroup: false,
+                            namespaces: .not(Namespaces.Message.allNonRegular),
+                            orderStatistics: orderStatistics,
+                            additionalData: wrappedHistoryViewAdditionalData(chatLocation: chatLocation, additionalData: additionalData),
+                            useRootInterfaceStateForThread: useRootInterfaceStateForThread
+                        )
                     }
                     
                     return account.postbox.aroundMessageOfInterestHistoryViewForChatLocation(chatLocation, ignoreMessagesInTimestampRange: ignoreMessagesInTimestampRange, ignoreMessageIds: ignoreMessageIds, count: count, trackHoles: trackHoles, topTaggedMessageIdNamespaces: [Namespaces.Message.Cloud], tag: tag, appendMessagesFromTheSameGroup: appendMessagesFromTheSameGroup, namespaces: .not(Namespaces.Message.allNonRegular), orderStatistics: orderStatistics, customUnreadMessageId: nil, additionalData: wrappedHistoryViewAdditionalData(chatLocation: chatLocation, additionalData: additionalData), useRootInterfaceStateForThread: useRootInterfaceStateForThread)

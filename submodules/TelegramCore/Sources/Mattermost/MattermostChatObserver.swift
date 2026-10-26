@@ -14,6 +14,23 @@ public protocol MattermostChatObserver: AnyObject {
     func peerDataRequested(peerId: PeerId)
     /// A history view of the chat opened (the chat screen, a thread, a profile's media tab).
     func chatHistoryOpened(peerId: PeerId)
+    /// Where a thread view of a Mattermost thread starts (4F): its first unread reply, with the unread separator
+    /// above it, when the user follows the thread and it has unread replies (Postbox keeps no read state for
+    /// these threads). Called inside a Postbox transaction.
+    func threadReadState(peerId: PeerId, threadId: Int64, transaction: Transaction) -> MattermostThreadReadState?
+}
+
+/// See `MattermostChatObserver.threadReadState`.
+public struct MattermostThreadReadState: Equatable {
+    /// The first unread reply (Cloud namespace): the view opens there.
+    public var firstUnreadMessageId: MessageId
+    /// Unread replies (incoming, after the thread's last view).
+    public var unreadCount: Int32
+
+    public init(firstUnreadMessageId: MessageId, unreadCount: Int32) {
+        self.firstUnreadMessageId = firstUnreadMessageId
+        self.unreadCount = unreadCount
+    }
 }
 
 private final class MattermostChatObserverBox {
@@ -45,4 +62,8 @@ func mattermostPeerDataRequested(accountPeerId: PeerId, peerId: PeerId) {
 
 func mattermostChatHistoryOpened(accountPeerId: PeerId, peerId: PeerId) {
     mattermostChatObservers.with({ $0[accountPeerId]?.observer })?.chatHistoryOpened(peerId: peerId)
+}
+
+func mattermostThreadReadState(accountPeerId: PeerId, peerId: PeerId, threadId: Int64, transaction: Transaction) -> MattermostThreadReadState? {
+    return mattermostChatObservers.with({ $0[accountPeerId]?.observer })?.threadReadState(peerId: peerId, threadId: threadId, transaction: transaction)
 }
