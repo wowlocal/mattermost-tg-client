@@ -385,6 +385,7 @@ public enum MattermostSync {
         }))
     }
 
+    #if DEBUG
     /// For debug checks (MattermostUI's debug remote): loaded accounts, Keychain tokens and account
     /// directories on disk.
     public static func debugState() -> [String: Any] {
@@ -410,6 +411,7 @@ public enum MattermostSync {
             "accountDirectories": directories
         ]
     }
+    #endif
 
     private static func forget(accountId: AccountRecordId) {
         self.stopAccount(accountId)

@@ -10,6 +10,8 @@ import SettingsUI
 import MattermostUI
 import ChatMessageItemView
 
+#if DEBUG // MATTERMOST: debug builds only; release builds compile none of this file (Phase 4A)
+
 // MATTERMOST: debug only. Opens a screen at launch so screenshots can be taken without UI automation:
 //
 //   SIMCTL_CHILD_RELAY_DEBUG_OPEN_SCREEN=<screen> xcrun simctl launch <udid> org.relaychat.Relay
@@ -206,3 +208,4 @@ extension TelegramRootController {
     }
     #endif
 }
+#endif

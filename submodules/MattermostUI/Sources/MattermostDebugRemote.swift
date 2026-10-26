@@ -10,6 +10,8 @@ import MattermostKit
 import MattermostSync
 import MattermostPushService
 
+#if DEBUG // MATTERMOST: debug builds only; release builds compile none of this file (Phase 4A)
+
 /// **Debug builds only.** Hooks other modules install into the debug remote.
 public enum MattermostDebugHooks {
     /// Handles a chat-level command (TelegramUI's composer driver, Phase 3D): returns false for actions it
@@ -588,3 +590,4 @@ final class MattermostDebugRemote {
         })
     }
 }
+#endif
