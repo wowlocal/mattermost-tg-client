@@ -30,19 +30,19 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | Upstream checkout | repo root | Done (shallow, submodules shallow) |
 | iOS 27 simulator runtime | `xcodebuild -downloadPlatform iOS` | Downloading (not blocking: iOS 26.5 works) |
 | First simulator build (stock code, our bundle ID) | [BUILD.md](BUILD.md) | Done: builds in ~9 min, launches |
-| MattermostKit (REST + WebSocket client) | [submodules/MattermostKit](../submodules/MattermostKit/README.md) | Done: 139 tests pass (`xcrun swift test`); no Bazel BUILD file yet |
+| MattermostKit (REST + WebSocket client) | [submodules/MattermostKit](../submodules/MattermostKit/README.md) | Done: 139 tests pass; Bazel target builds |
 | MattermostSyncCore (ID allocator, markdown, mapping helpers) | [submodules/MattermostSyncCore](../submodules/MattermostSyncCore/README.md) | Done: 57 tests incl. property tests; BUILD file present, not yet built by Bazel |
 | Local Mattermost server + seed + fixtures | [infra/dev-server](../infra/dev-server/README.md) | Done: Mattermost 11.7.14 ESR (Team Edition) at http://localhost:8065, reset+seed 56 s |
 | Telegram internals map (Spike A prep, assumptions) | [telegram-internals.md](research/telegram-internals.md) | Done |
 | SQLite sync store (ID map, peers, cursors) | `submodules/MattermostSyncCore` | Agent working |
-| Spike A: null network engine + seeded account | TelegramCore, `submodules/MattermostSync` | Agent working (only workstream running Bazel) |
+| Spike A: null network engine + seeded account | TelegramCore, `submodules/MattermostSync` | Done (commit `f0820341`); screenshots in `docs/research/spike-a-*.png` |
 
 ## Phase 0 checklist
 
 - [x] Choose and record the pinned upstream commit; clone with submodules
 - [x] Simulator build with our bundle ID
 - [x] Local Mattermost server seeded
-- [ ] Spike A: boot without MTProto, fake data renders
+- [x] Spike A: boot without MTProto, fake data renders
 - [x] Spike B: MattermostKit skeleton with tests
 - [x] Spike C: message ID allocator with tests
 - [ ] Spike D: real channel history in the chat screen
@@ -76,3 +76,11 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   - Use `xcrun swift` (or `/usr/bin/swift`): the swiftly 6.3.3 `swift` first on PATH can't build against the Xcode 27 SDK.
 - MattermostSyncCore done. Allocator deviations worth knowing: pages squeeze spacing near a full hole; renumbering moves the smaller part of an island (≤10,000 posts) or a small window for repeated late inserts; a late post landing in a hole becomes a one-post island. **Callers must remap every stored local id (read state, thread roots, replies) when applying a renumber plan.** Markdown gaps: reference links, HTML entities, LaTeX, emoticons.
 - Both SwiftPM packages pin `.swift-version` = `xcode` so plain `swift test` uses Xcode's toolchain.
+- **Spike A done.** App boots into a seeded chat list and opens chats with zero sockets (checked with `lsof` sampling, simulator network log, `nettop`). Gotchas for Spike D:
+  - A chat screen only appears once all its loading signals fire; `xcrun simctl launch --console-pty` shows which one is stuck.
+  - Contact sync must be turned off at account setup (as Telegram's login does), or a contacts signal never fires.
+  - Every user needs cached user data written, or DMs and Saved Messages never open.
+  - Channel messages use thread 1, replies the thread of their target, Saved Messages the own peer id as thread; every used thread needs its holes cleared.
+  - Opening a channel still triggers Telegram's channel polling (parked); switch it off before MVP.
+  - Also fixed: the call reflector benchmark sent UDP to Telegram (internal builds); now off.
+  - Debug hook: `SIMCTL_CHILD_RELAY_DEBUG_OPEN_CHAT=1|ios-team|town-square|dm|off-topic|saved`.
