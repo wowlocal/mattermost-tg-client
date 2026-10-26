@@ -111,6 +111,12 @@ final class ModelDecodingTests: XCTestCase {
         XCTAssertEqual(channels[4].type.rawValue, "X")
     }
 
+    func testChannelStats() throws {
+        let stats = try decode(ChannelStats.self, #"{"channel_id":"c1","member_count":5,"guest_count":0,"pinnedpost_count":2,"files_count":7}"#)
+        XCTAssertEqual(stats, ChannelStats(channelId: "c1", memberCount: 5, guestCount: 0, pinnedPostCount: 2, filesCount: 7))
+        XCTAssertEqual(try decode(ChannelStats.self, #"{"channel_id":"c1","member_count":3}"#).memberCount, 3)
+    }
+
     func testChannelTypeRoundTrip() throws {
         let data = try JSONEncoder().encode([ChannelType.privateChannel, .unknown("Z")])
         XCTAssertEqual(String(decoding: data, as: UTF8.self), #"["P","Z"]"#)
