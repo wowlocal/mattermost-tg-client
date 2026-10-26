@@ -245,7 +245,20 @@ public final class NavigationBarImpl: ASDisplayNode, NavigationBar {
         get {
             var accessibilityElements: [Any] = []
             if self.backButtonNodeImpl.view.superview != nil {
-                addAccessibilityChildren(of: self.backButtonNodeImpl, container: self, to: &accessibilityElements)
+                // MATTERMOST: the glass back button is an arrow with no text: its text node is empty and zero wide,
+                // so VoiceOver found an unnamed button it could not focus. It reads "Back" on the arrow's circle.
+                if self.backButtonNodeImpl.manualText.isEmpty, let background = self.leftButtonsBackgroundView?.background, background.superview != nil, !background.bounds.isEmpty {
+                    let element = NavigationBarBackAccessibilityElement(accessibilityContainer: self.view)
+                    element.accessibilityLabel = self.presentationData.strings.back
+                    element.accessibilityTraits = .button
+                    element.accessibilityFrame = UIAccessibility.convertToScreenCoordinates(background.bounds, in: background)
+                    element.activate = { [weak self] in
+                        self?.backButtonNodeImpl.pressed(0)
+                    }
+                    accessibilityElements.append(element)
+                } else {
+                    addAccessibilityChildren(of: self.backButtonNodeImpl, container: self, to: &accessibilityElements)
+                }
             }
             if self.leftButtonNodeImpl.view.superview != nil {
                 addAccessibilityChildren(of: self.leftButtonNodeImpl, container: self, to: &accessibilityElements)
@@ -258,7 +271,9 @@ public final class NavigationBarImpl: ASDisplayNode, NavigationBar {
                 titleView.accessibilityFrame = UIAccessibility.convertToScreenCoordinates(titleView.bounds, in: titleView)
                 accessibilityElements.append(titleView)
             }
-            if self.rightButtonNodeImpl.supernode != nil {
+            // MATTERMOST: was `supernode != nil`, which a glass bar's right buttons never have (their view is added
+            // to the glass container as a subview), so VoiceOver never reached Done, Save, Create, Set….
+            if self.rightButtonNodeImpl.view.superview != nil {
                 addAccessibilityChildren(of: self.rightButtonNodeImpl, container: self, to: &accessibilityElements)
             }
             if let contentNode = self.contentNode {
@@ -1404,5 +1419,15 @@ public final class NavigationBarImpl: ASDisplayNode, NavigationBar {
         }
         
         return result
+    }
+}
+
+// MATTERMOST: VoiceOver's element for the glass back arrow (see `accessibilityElements`).
+private final class NavigationBarBackAccessibilityElement: UIAccessibilityElement {
+    var activate: (() -> Void)?
+
+    override func accessibilityActivate() -> Bool {
+        self.activate?()
+        return true
     }
 }

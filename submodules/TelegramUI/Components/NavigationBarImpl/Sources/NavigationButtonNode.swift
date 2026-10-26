@@ -247,8 +247,16 @@ private final class NavigationButtonItemNode: ImmediateTextNode {
                     self.accessibilityHint = item.accessibilityHint
                     self.accessibilityLabel = item.accessibilityLabel
                 }
+                self.storeAccessibilityProperties()
             }
         }
+    }
+    
+    // MATTERMOST: the getters below only answer when VoiceOver asks this node; when it finds the button by touch it
+    // asks the node's view, which never got a label (the setters are no-ops). Store them on the node as well.
+    private func storeAccessibilityProperties() {
+        super.accessibilityLabel = self.accessibilityLabel
+        super.accessibilityHint = self.accessibilityHint
     }
     
     private var _text: String?
@@ -265,6 +273,7 @@ private final class NavigationButtonItemNode: ImmediateTextNode {
                     self.item?.accessibilityLabel = value
                 }
             }
+            self.storeAccessibilityProperties()
         }
     }
     

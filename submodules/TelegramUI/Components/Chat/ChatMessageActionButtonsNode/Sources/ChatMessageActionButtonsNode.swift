@@ -597,6 +597,21 @@ private final class ChatMessageActionButtonNode: ASDisplayNode {
                     
                     node.accessibilityArea.accessibilityLabel = title
                     node.accessibilityArea.frame = CGRect(origin: CGPoint(), size: CGSize(width: width, height: 42.0))
+                    // MATTERMOST: a Mattermost menu button ("Choose ▾", MattermostSync's AttachmentConverter) reads as
+                    // its name with a hint instead of "down-pointing small triangle"; a disabled button says so.
+                    if MattermostBackend.isEnabled {
+                        if title.hasSuffix(" ▾") {
+                            node.accessibilityArea.accessibilityLabel = String(title.dropLast(2))
+                            node.accessibilityArea.accessibilityHint = strings.Relay_Accessibility_MenuHint
+                        } else {
+                            node.accessibilityArea.accessibilityHint = nil
+                        }
+                        var isButtonEnabled = customInfo?.isEnabled ?? true
+                        if case .disabled = button.action {
+                            isButtonEnabled = false
+                        }
+                        node.accessibilityArea.accessibilityTraits = isButtonEnabled ? .button : [.button, .notEnabled]
+                    }
                     
                     if let buttonView = node.buttonView {
                         let isEnabled = customInfo?.isEnabled ?? true
