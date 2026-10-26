@@ -80,6 +80,26 @@ private func mattermostOpen(_ destination: MattermostLinkDestination, target: Ma
             context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), subject: .message(id: .id(messageId), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil, setupReply: false), keepStack: .always))
         })
     case let .chat(peerId):
+        // 4F: a post in a public channel the user hasn't joined: the channel's preview (3D-2), and after Join the
+        // post itself (in its thread when collapsed reply threads hide it), in place of the preview.
+        if target.isPost, MattermostSync.isPreviewChannel(accountId: context.account.id, peerId: peerId), let channelId = MattermostDirectory.previewChannelId(accountId: context.account.id, peerId: peerId) {
+            var previewController: ViewController?
+            let controller = mattermostChannelPreviewController(context: context, channelId: channelId, afterJoin: { [weak navigationController] _ in
+                let _ = (MattermostSync.linkDestination(target: target)
+                |> deliverOnMainQueue).startStandalone(next: { destination in
+                    guard let navigationController = navigationController else {
+                        return
+                    }
+                    if let previewController = previewController {
+                        navigationController.setViewControllers(navigationController.viewControllers.filter { $0 !== previewController }, animated: false)
+                    }
+                    mattermostOpen(destination, target: target, context: context, navigationController: navigationController)
+                })
+            })
+            previewController = controller
+            navigationController.pushViewController(controller)
+            return
+        }
         let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
         |> deliverOnMainQueue).startStandalone(next: { peer in
             guard let peer = peer else {

@@ -30,6 +30,16 @@ public enum MattermostLinkFailure: Equatable {
 public struct MattermostLinkTarget: Equatable {
     public let accountId: AccountRecordId
     public let route: MattermostLinkRoute
+
+    /// A link to a post (a permalink, a thread) rather than to a chat.
+    public var isPost: Bool {
+        switch self.route {
+        case .post, .thread:
+            return true
+        case .channel, .directMessage, .groupMessage:
+            return false
+        }
+    }
 }
 
 /// Permalinks and app links (Phase 3E). A web link opens in the app when its host, port and path are a signed-in

@@ -958,11 +958,13 @@ func mattermostChannelPreviewController(context: AccountContext, channel: Matter
 }
 
 /// The preview of a public channel by its id (also opened by search for a channel the user hasn't joined, 3C).
-public func mattermostChannelPreviewController(context: AccountContext, channelId: String) -> ViewController {
-    return mattermostChannelPreviewController(context: context, channelId: channelId, loaded: MattermostDirectory.channelPreview(accountId: context.account.id, channelId: channelId))
+/// `afterJoin` replaces opening the chat once the user joined (or was a member already): a permalink into the
+/// channel opens at its post then (4F).
+public func mattermostChannelPreviewController(context: AccountContext, channelId: String, afterJoin: ((PeerId) -> Void)? = nil) -> ViewController {
+    return mattermostChannelPreviewController(context: context, channelId: channelId, loaded: MattermostDirectory.channelPreview(accountId: context.account.id, channelId: channelId), afterJoin: afterJoin)
 }
 
-private func mattermostChannelPreviewController(context: AccountContext, channelId: String, loaded: Signal<MattermostBrowsedChannel, MattermostDirectoryError>) -> ViewController {
+private func mattermostChannelPreviewController(context: AccountContext, channelId: String, loaded: Signal<MattermostBrowsedChannel, MattermostDirectoryError>, afterJoin: ((PeerId) -> Void)? = nil) -> ViewController {
     let accountId = context.account.id
     let joining = ValuePromise<Bool>(false, ignoreRepeated: true)
     let joiningValue = Atomic<Bool>(value: false)
@@ -994,7 +996,11 @@ private func mattermostChannelPreviewController(context: AccountContext, channel
             return
         }
         if let peerId = channel.memberPeerId {
-            mattermostOpenChat(context: context, navigationController: navigationControllerImpl?(), peerId: peerId)
+            if let afterJoin = afterJoin {
+                afterJoin(peerId)
+            } else {
+                mattermostOpenChat(context: context, navigationController: navigationControllerImpl?(), peerId: peerId)
+            }
             return
         }
         if joiningValue.swap(true) {
@@ -1005,7 +1011,11 @@ private func mattermostChannelPreviewController(context: AccountContext, channel
         |> deliverOnMainQueue).start(next: { peerId in
             let _ = joiningValue.swap(false)
             joining.set(false)
-            mattermostOpenChat(context: context, navigationController: navigationControllerImpl?(), peerId: peerId)
+            if let afterJoin = afterJoin {
+                afterJoin(peerId)
+            } else {
+                mattermostOpenChat(context: context, navigationController: navigationControllerImpl?(), peerId: peerId)
+            }
         }, error: { error in
             let _ = joiningValue.swap(false)
             joining.set(false)
