@@ -572,6 +572,18 @@ public func stringForStoryActivityTimestamp(strings: PresentationStrings, dateTi
 }
 
 public func stringAndActivityForUserPresence(strings: PresentationStrings, dateTimeFormat: PresentationDateTimeFormat, presence: EnginePeer.Presence, relativeTo timestamp: Int32, expanded: Bool = false) -> (String, Bool) {
+    // MATTERMOST: Mattermost's away and do-not-disturb statuses (Phase 3F), which Telegram's presence can't express.
+    if let mattermostStatus = presence.mattermostStatus {
+        switch mattermostStatus {
+        case .doNotDisturb:
+            if let until = presence.mattermostStatusUntil, until > timestamp {
+                return (strings.Relay_Presence_DoNotDisturbUntil(mattermostPresenceUntilString(until, relativeTo: timestamp, strings: strings, dateTimeFormat: dateTimeFormat)).string, false)
+            }
+            return (strings.Relay_Presence_DoNotDisturb, false)
+        case .away:
+            return (strings.Relay_Presence_Away, false)
+        }
+    }
     switch presence.status {
     case let .present(statusTimestamp):
         if statusTimestamp >= timestamp {
@@ -716,4 +728,23 @@ public func stringForGiftUpgradeTimestamp(strings: PresentationStrings, dateTime
     let date = strings.Date_ChatDateHeader(monthAtIndex(Int(timeinfo.tm_mon), strings: strings), "\(timeinfo.tm_mday)").string
     
     return "\(time), \(date)"
+}
+
+// MATTERMOST: "17:30" today, "tomorrow, 9:00" or "Oct 28, 9:00" for the end of do-not-disturb (Phase 3F).
+public func mattermostPresenceUntilString(_ until: Int32, relativeTo timestamp: Int32, strings: PresentationStrings, dateTimeFormat: PresentationDateTimeFormat) -> String {
+    var t: time_t = time_t(until)
+    var timeinfo: tm = tm()
+    localtime_r(&t, &timeinfo)
+    var now: time_t = time_t(timestamp)
+    var timeinfoNow: tm = tm()
+    localtime_r(&now, &timeinfoNow)
+    let time = stringForShortTimestamp(hours: timeinfo.tm_hour, minutes: timeinfo.tm_min, dateTimeFormat: dateTimeFormat)
+    if timeinfo.tm_year == timeinfoNow.tm_year && timeinfo.tm_yday == timeinfoNow.tm_yday {
+        return time
+    }
+    if timeinfo.tm_year == timeinfoNow.tm_year && timeinfo.tm_yday == timeinfoNow.tm_yday + 1 {
+        return strings.Relay_Presence_Tomorrow(time).string
+    }
+    let day = strings.Date_ChatDateHeader(monthAtIndex(Int(timeinfo.tm_mon), strings: strings), "\(timeinfo.tm_mday)").string
+    return strings.Time_AtPreciseDate(day, time).string
 }

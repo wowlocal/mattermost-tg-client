@@ -83,24 +83,39 @@ public enum UserPresenceStatus: Comparable, PostboxCoding {
 public final class TelegramUserPresence: PeerPresence, Equatable {
     public let status: UserPresenceStatus
     public let lastActivity: Int32
+    // MATTERMOST: away / do not disturb (Phase 3F, `MattermostPresenceStatus`); nil for Telegram presences.
+    public let mattermostStatus: MattermostPresenceStatus?
+    /// End of do-not-disturb (Unix seconds), when the server reports one.
+    public let mattermostStatusUntil: Int32?
     
-    public init(status: UserPresenceStatus, lastActivity: Int32) {
+    public init(status: UserPresenceStatus, lastActivity: Int32, mattermostStatus: MattermostPresenceStatus? = nil, mattermostStatusUntil: Int32? = nil) {
         self.status = status
         self.lastActivity = lastActivity
+        self.mattermostStatus = mattermostStatus
+        self.mattermostStatusUntil = mattermostStatusUntil
     }
     
     public init(decoder: PostboxDecoder) {
         self.status = UserPresenceStatus(decoder: decoder)
         self.lastActivity = decoder.decodeInt32ForKey("la", orElse: 0)
+        self.mattermostStatus = decoder.decodeOptionalInt32ForKey("mms").flatMap(MattermostPresenceStatus.init(rawValue:))
+        self.mattermostStatusUntil = decoder.decodeOptionalInt32ForKey("mmu")
     }
     
     public func encode(_ encoder: PostboxEncoder) {
         self.status.encode(encoder)
         encoder.encodeInt32(self.lastActivity, forKey: "la")
+        // Telegram presences (no mark) encode as before.
+        if let mattermostStatus = self.mattermostStatus {
+            encoder.encodeInt32(mattermostStatus.rawValue, forKey: "mms")
+        }
+        if let mattermostStatusUntil = self.mattermostStatusUntil {
+            encoder.encodeInt32(mattermostStatusUntil, forKey: "mmu")
+        }
     }
     
     public static func ==(lhs: TelegramUserPresence, rhs: TelegramUserPresence) -> Bool {
-        return lhs.status == rhs.status && lhs.lastActivity == rhs.lastActivity
+        return lhs.status == rhs.status && lhs.lastActivity == rhs.lastActivity && lhs.mattermostStatus == rhs.mattermostStatus && lhs.mattermostStatusUntil == rhs.mattermostStatusUntil
     }
     
     public func isEqual(to: PeerPresence) -> Bool {

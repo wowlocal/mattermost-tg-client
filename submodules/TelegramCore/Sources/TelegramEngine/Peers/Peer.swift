@@ -51,10 +51,15 @@ public enum EnginePeer: Equatable {
 
         public var status: Status
         public var lastActivity: Int32
+        // MATTERMOST: away / do not disturb (Phase 3F); nil for Telegram presences.
+        public var mattermostStatus: MattermostPresenceStatus?
+        public var mattermostStatusUntil: Int32?
 
-        public init(status: Status, lastActivity: Int32) {
+        public init(status: Status, lastActivity: Int32, mattermostStatus: MattermostPresenceStatus? = nil, mattermostStatusUntil: Int32? = nil) {
             self.status = status
             self.lastActivity = lastActivity
+            self.mattermostStatus = mattermostStatus
+            self.mattermostStatusUntil = mattermostStatusUntil
         }
     }
 
@@ -391,7 +396,7 @@ public extension EnginePeer.Presence {
                 mappedStatus = .lastMonth(isHidden: isHidden)
             }
 
-            self.init(status: mappedStatus, lastActivity: presence.lastActivity)
+            self.init(status: mappedStatus, lastActivity: presence.lastActivity, mattermostStatus: presence.mattermostStatus, mattermostStatusUntil: presence.mattermostStatusUntil) // MATTERMOST
         } else {
             preconditionFailure()
         }
@@ -411,7 +416,7 @@ public extension EnginePeer.Presence {
         case let .lastMonth(isHidden):
             mappedStatus = .lastMonth(isHidden: isHidden)
         }
-        return TelegramUserPresence(status: mappedStatus, lastActivity: self.lastActivity)
+        return TelegramUserPresence(status: mappedStatus, lastActivity: self.lastActivity, mattermostStatus: self.mattermostStatus, mattermostStatusUntil: self.mattermostStatusUntil) // MATTERMOST
     }
 }
 
