@@ -1190,9 +1190,9 @@ public final class PendingMessageManager {
     }
     
     private func sendGroupMessagesContent(network: Network, postbox: Postbox, stateManager: AccountStateManager, accountPeerId: PeerId, group: [(messageId: MessageId, content: PendingMessageUploadedContentAndReuploadInfo)]) -> Signal<Void, NoError> {
-        // MATTERMOST: one post per message, in order (albums as one multi-file post come later).
+        // MATTERMOST: a group (album, grouped files) is one post with several files.
         if MattermostBackend.isEnabled {
-            return self.mattermostSendMessages(group.map { $0.messageId })
+            return self.mattermostSendMessageGroup(group.map { $0.messageId })
         }
         let queue = self.queue
         return postbox.transaction { [weak self] transaction -> Signal<Void, NoError> in
@@ -2599,6 +2599,32 @@ extension PendingMessageManager {
         return .signal(result, .media)
     }
     
+    /// Sends a group of messages as one post; the delivered messages are reported to `deliveredMessageEvents`.
+    fileprivate func mattermostSendMessageGroup(_ ids: [MessageId]) -> Signal<Void, NoError> {
+        if ids.count < 2 {
+            return self.mattermostSendMessages(ids)
+        }
+        let queue = self.queue
+        let postbox = self.postbox
+        return self.mattermostInstalledSender
+        |> castError(MattermostSendError.self)
+        |> mapToSignal { sender -> Signal<[MessageId], MattermostSendError> in
+            return sender.sendMessageGroup(messageIds: ids)
+        }
+        |> deliverOn(queue)
+        |> map { [weak self] deliveredIds -> Void in
+            guard let self, let context = self.peerSummaryContexts[ids[0].peerId] else {
+                return
+            }
+            for subscriber in context.messageDeliveredSubscribers.copyItems() {
+                subscriber(deliveredIds.map { PeerPendingMessageDelivered(id: $0, isSilent: false, isPendingProcessing: false) })
+            }
+        }
+        |> `catch` { _ -> Signal<Void, NoError> in
+            return failMessages(postbox: postbox, ids: ids)
+        }
+    }
+
     /// Sends the messages one after another; each delivered message is reported to `deliveredMessageEvents`.
     fileprivate func mattermostSendMessages(_ ids: [MessageId]) -> Signal<Void, NoError> {
         let queue = self.queue

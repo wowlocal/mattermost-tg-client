@@ -26,6 +26,11 @@ public protocol MattermostMessageSender: AnyObject {
     /// and completes. Transient network errors are retried by the sender; an error fails the message.
     func sendMessage(messageId: MessageId) -> Signal<MessageId, MattermostSendError>
 
+    /// Creates one post for a group of outgoing messages (an album or grouped files: one post with all their
+    /// files) and rewrites the `Local` messages into the post's `Cloud` messages. Emits the `Cloud` ids once
+    /// and completes; an error fails every message of the group.
+    func sendMessageGroup(messageIds: [MessageId]) -> Signal<[MessageId], MattermostSendError>
+
     /// Edits the text of a sent message. Emits `.done` after the edited message is written to Postbox.
     func editMessage(messageId: MessageId, text: String, entities: TextEntitiesMessageAttribute?) -> Signal<RequestEditMessageResult, RequestEditMessageError>
 }
