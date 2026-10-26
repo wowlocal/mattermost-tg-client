@@ -2377,6 +2377,10 @@ public final class SharedAccountContextImpl: SharedAccountContext {
     }
     
     public func makeComposeController(context: AccountContext) -> ViewController {
+        // MATTERMOST: New Message is the Mattermost user directory (DMs, group messages, new and browsed channels).
+        if MattermostBackend.isEnabled {
+            return mattermostComposeController(context: context)
+        }
         return ComposeControllerImpl(context: context)
     }
     

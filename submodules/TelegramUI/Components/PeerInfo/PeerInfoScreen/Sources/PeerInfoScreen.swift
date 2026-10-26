@@ -1604,6 +1604,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                         }
                         strongSelf.controller?.push(controller)
                     }
+                } else if strongSelf.mattermostOpenChannelSettings() { // MATTERMOST: a channel's settings are Mattermost's
                 } else {
                     strongSelf.activateEdit()
                 }
@@ -4330,6 +4331,9 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
         guard let data = self.data, let peer = data.peer else {
             return
         }
+        if self.mattermostPerformMemberAction(member: member, action: action) { // MATTERMOST: remove, channel admin
+            return
+        }
         switch action {
         case .editRank:
             let rank: String?
@@ -4618,6 +4622,9 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             return
         }
         guard let data = self.data, let groupPeer = data.peer else {
+            return
+        }
+        if self.mattermostOpenAddMembers() { // MATTERMOST: the team's users who aren't in the channel
             return
         }
         
@@ -7087,6 +7094,9 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
     
     override public func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        #if DEBUG
+        self.controllerNode.relayDebugRegister() // MATTERMOST: debug remote (`info-*` commands)
+        #endif
         
         DispatchQueue.main.async { [weak self] in
             self?.didAppear = true

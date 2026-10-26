@@ -57,6 +57,9 @@ extension PeerInfoScreenNode {
             if case .admin = member.role {
                 actionTitle = self.presentationData.strings.GroupInfo_ActionEditAdmin
             }
+            if MattermostBackend.isEnabled { // MATTERMOST: "Make / Remove Channel Admin"
+                actionTitle = mattermostPromoteTitle(member: member, strings: self.presentationData.strings)
+            }
             items.append(.action(ContextMenuActionItem(text: actionTitle, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Promote"), color: theme.contextMenu.primaryColor) }, action: { [weak self] c, _ in
                 c?.dismiss {
                     guard let self else {
@@ -68,7 +71,7 @@ extension PeerInfoScreenNode {
         }
         
         if actions.contains(.restrict) {
-            if case .channel = enclosingPeer {
+            if case .channel = enclosingPeer, !MattermostBackend.isEnabled { // MATTERMOST: no restrictions
                 items.append(.action(ContextMenuActionItem(text: self.presentationData.strings.GroupInfo_ActionRestrict, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Restrict"), color: theme.contextMenu.primaryColor) }, action: { [weak self] c, _ in
                     c?.dismiss {
                         guard let self else {
@@ -79,7 +82,8 @@ extension PeerInfoScreenNode {
                 })))
             }
             
-            items.append(.action(ContextMenuActionItem(text: self.presentationData.strings.GroupInfo_ActionRemove, textColor: .destructive, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Delete"), color: theme.contextMenu.destructiveColor) }, action: { [weak self] c, _ in
+            // MATTERMOST: "Remove from Channel".
+            items.append(.action(ContextMenuActionItem(text: MattermostBackend.isEnabled ? self.presentationData.strings.Relay_Members_Remove : self.presentationData.strings.GroupInfo_ActionRemove, textColor: .destructive, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Delete"), color: theme.contextMenu.destructiveColor) }, action: { [weak self] c, _ in
                 c?.dismiss {
                     guard let self else {
                         return

@@ -136,7 +136,7 @@ private final class PeerInfoScreenMemberItemNode: PeerInfoScreenItemNode {
             case .member:
                 var canEditRank = false
                 if item.member.id == item.context.accountPeerId {
-                    if case let .channel(channel) = item.enclosingPeer, channel.hasPermission(.editRank) {
+                    if case let .channel(channel) = item.enclosingPeer, channel.hasPermission(.editRank), !MattermostBackend.isEnabled { // MATTERMOST: no member tags
                         canEditRank = true
                     } else if case let .legacyGroup(group) = item.enclosingPeer, !group.hasBannedPermission(.banEditRank) {
                         canEditRank = true
@@ -166,17 +166,18 @@ private final class PeerInfoScreenMemberItemNode: PeerInfoScreenItemNode {
         
         var options: [ItemListPeerItemRevealOption] = []
         if actions.contains(.promote), case .channel = item.enclosingPeer {
-            options.append(ItemListPeerItemRevealOption(type: .neutral, title: presentationData.strings.GroupInfo_ActionPromote, action: {
+            // MATTERMOST: "Make / Remove Channel Admin".
+            options.append(ItemListPeerItemRevealOption(type: .neutral, title: MattermostBackend.isEnabled ? mattermostPromoteTitle(member: item.member, strings: presentationData.strings) : presentationData.strings.GroupInfo_ActionPromote, action: {
                 item.action?(.promote)
             }))
         }
         if actions.contains(.restrict) {
-            if case .channel = item.enclosingPeer {
+            if case .channel = item.enclosingPeer, !MattermostBackend.isEnabled { // MATTERMOST: no restrictions
                 options.append(ItemListPeerItemRevealOption(type: .warning, title: presentationData.strings.GroupInfo_ActionRestrict, action: {
                     item.action?(.restrict)
                 }))
             }
-            options.append(ItemListPeerItemRevealOption(type: .destructive, title: presentationData.strings.Common_Delete, action: {
+            options.append(ItemListPeerItemRevealOption(type: .destructive, title: MattermostBackend.isEnabled ? presentationData.strings.Relay_Members_RemoveAction : presentationData.strings.Common_Delete, action: { // MATTERMOST
                 item.action?(.remove)
             }))
         }
