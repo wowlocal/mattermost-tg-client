@@ -62,6 +62,14 @@ public enum MattermostFeatures {
     public static let telegramSupport = telegram
     /// Telegram's alternate app icons.
     public static let alternateAppIcons = telegram
+    /// Telegram polls and checklists (Mattermost polls are a server plugin).
+    public static let polls = telegram
+    /// Telegram rich-text (Instant View style) posts from the attach menu.
+    public static let richTextPosts = telegram
+    /// Telegram's downloadable language packs (the Language row); Relay is English-only for now.
+    public static let languagePacks = telegram
+    /// Telegram's server chat themes (Appearance → Chat Themes).
+    public static let chatThemes = telegram
 
     // 06 "Later"
     public static let voiceMessages = telegram
