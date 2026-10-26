@@ -767,6 +767,8 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                             // stickers, history preloading); MattermostSync takes its place.
                             if !MattermostBackend.isEnabled {
                                 account.resetStateManagement()
+                            } else if applicationBindings.isMainApp {
+                                MattermostSync.startAccount(account)
                             }
                             hadUpdates = true
                         }
@@ -823,10 +825,10 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                 }
                 
                 if self.activeAccountsValue!.primary == nil && self.activeAccountsValue!.currentAuth == nil {
-                    // MATTERMOST: no Telegram phone login. Until the Mattermost login exists, a debug path
-                    // creates an authorized account with local fake data (Spike A).
+                    // MATTERMOST: no Telegram phone login. Until the Mattermost login exists, a debug-only
+                    // login with credentials from the launch environment creates the account (Spike D).
                     if MattermostBackend.isEnabled {
-                        MattermostSpikeSeeder.createSeededAccountIfNeeded(accountManager: accountManager, rootPath: rootPath, encryptionParameters: encryptionParameters)
+                        MattermostDebugLogin.createAccountIfNeeded(accountManager: accountManager, rootPath: rootPath, encryptionParameters: encryptionParameters)
                     } else {
                         self.beginNewAuth(testingEnvironment: self.testingEnvironment)
                     }

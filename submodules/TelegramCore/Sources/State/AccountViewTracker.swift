@@ -1875,6 +1875,11 @@ public final class AccountViewTracker {
     }
     
     public func polledChannel(peerId: PeerId) -> Signal<Void, NoError> {
+        // MATTERMOST: channel polling is `updates.getChannelDifference` (MTProto); MattermostSync keeps
+        // channels up to date from its WebSocket instead.
+        if MattermostBackend.isEnabled {
+            return .never()
+        }
         return Signal { subscriber in
             let disposable = MetaDisposable()
             self.queue.async {
@@ -1975,7 +1980,9 @@ public final class AccountViewTracker {
                     strongSelf.updatePendingWebpages(viewId: viewId, threadId: chatLocation.threadId, messageIds: messageIds, localWebpages: localWebpages)
                     let (pollMessageIds, pollMessageDict) = pollMessages(entries: next.0.entries)
                     strongSelf.updatePolls(viewId: viewId, messageIds: pollMessageIds, messages: pollMessageDict)
-                    if case let .peer(peerId, _) = chatLocation, peerId.namespace == Namespaces.Peer.CloudChannel {
+                    // MATTERMOST: history validation re-requests channel history over MTProto.
+                    if MattermostBackend.isEnabled {
+                    } else if case let .peer(peerId, _) = chatLocation, peerId.namespace == Namespaces.Peer.CloudChannel {
                         strongSelf.historyViewStateValidationContexts.updateView(id: viewId, view: next.0, location: chatLocation)
                     } else if case let .thread(peerId, _, _) = chatLocation, peerId.namespace == Namespaces.Peer.CloudChannel {
                         strongSelf.historyViewStateValidationContexts.updateView(id: viewId, view: next.0, location: chatLocation)
@@ -2012,7 +2019,9 @@ public final class AccountViewTracker {
         case .customChatContents:
             peerId = nil
         }
-        if let peerId = peerId, peerId.namespace == Namespaces.Peer.CloudChannel {
+        // MATTERMOST: no channel polling gate (and no read-state reset or full hole for channels without a
+        // chat-list index): MattermostSync's channels are always up to date.
+        if !MattermostBackend.isEnabled, let peerId = peerId, peerId.namespace == Namespaces.Peer.CloudChannel {
             return Signal<(MessageHistoryView, ViewUpdateType, InitialMessageHistoryData?), NoError> { subscriber in
                 let combinedDisposable = MetaDisposable()
                 self.queue.async {

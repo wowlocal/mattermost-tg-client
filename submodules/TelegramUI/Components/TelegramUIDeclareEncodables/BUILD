@@ -24,6 +24,7 @@ swift_library(
         "//submodules/LocationUI",
         "//submodules/ChatInterfaceState",
         "//submodules/ICloudResources",
+        "//submodules/MattermostSync:MattermostSync",
     ],
     visibility = [
         "//visibility:public",

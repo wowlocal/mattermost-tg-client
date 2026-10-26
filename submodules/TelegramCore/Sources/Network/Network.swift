@@ -998,6 +998,22 @@ public final class Network: NSObject {
         return self.engine.kind
     }
     
+    // MATTERMOST: MattermostSync reports its WebSocket state as the connection status, so the title shows
+    // "Connecting…" while the WebSocket is down. Only while `MattermostBackend.isEnabled` (NullNetworkEngine).
+    public func mattermostSetConnectionState(isConnected: Bool, isNetworkAvailable: Bool) {
+        guard MattermostBackend.isEnabled else {
+            return
+        }
+        self.mainSessionDelegate.networkSessionConnectionStateChanged(NetworkEngineConnectionState(
+            isNetworkAvailable: isNetworkAvailable,
+            isConnected: isConnected,
+            isUpdatingConnectionContext: false,
+            isPerformingServiceTasks: false,
+            proxyAddress: nil,
+            proxyHasConnectionIssues: false
+        ))
+    }
+    
     fileprivate init(queue: Queue, datacenterId: Int, context: MTContext, engine: NetworkEngine, switchingEngine: SwitchingNetworkEngine?, engineFactory: NetworkEngineFactory?, rustEngineDisabled: Bool, rustEngineWaitsForWebProxy: Bool, mainSession: NetworkEngineSession, mainSessionDelegate: NetworkMainSessionDelegate, telemetry: NetworkTelemetry?, _connectionStatus: Promise<ConnectionStatus>, basePath: String, appDataDisposable: Disposable, encryptionProvider: EncryptionProvider, useRequestTimeoutTimers: Bool, useBetaFeatures: Bool, useExperimentalFeatures: Bool, baseTcpConnectionInterfaceFactory: ((MTTcpConnectionInterfaceDelegate, DispatchQueue) -> MTTcpConnectionInterface)?, isAppExtension: Bool, initialWebProxyActive: Bool) {
         self.encryptionProvider = encryptionProvider
         

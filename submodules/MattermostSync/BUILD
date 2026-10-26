@@ -13,6 +13,8 @@ swift_library(
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/Postbox:Postbox",
         "//submodules/TelegramCore:TelegramCore",
+        "//submodules/MattermostKit:MattermostKit",
+        "//submodules/MattermostSyncCore:MattermostSyncCore",
     ],
     visibility = [
         "//visibility:public",

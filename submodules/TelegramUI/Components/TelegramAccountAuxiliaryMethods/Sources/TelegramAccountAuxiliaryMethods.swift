@@ -16,9 +16,14 @@ import FetchVideoMediaResource
 import FetchAudioMediaResource
 import Display
 import UIKit
+import MattermostSync
 
 public func makeTelegramAccountAuxiliaryMethods(uploadInBackground: ((Postbox, MediaResource) -> Signal<String?, NoError>)?) -> AccountAuxiliaryMethods {
     return AccountAuxiliaryMethods(fetchResource: { postbox, resource, ranges, _ in
+        // MATTERMOST: files and avatars from the Mattermost REST API (bearer token), see MattermostResources.
+        if let signal = mattermostFetchResource(postbox: postbox, resource: resource) {
+            return signal
+        }
         if let resource = resource as? VideoLibraryMediaResource {
             return postbox.transaction { transaction -> Bool in
                 var useModernPipeline = true

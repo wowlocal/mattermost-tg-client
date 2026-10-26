@@ -12,6 +12,7 @@ import MediaResources
 import LocationUI
 import ChatInterfaceState
 import ICloudResources
+import MattermostSync
 
 private var telegramUIDeclaredEncodables: Void = {
     engineDeclareEncodable(VideoLibraryMediaResource.self, f: { VideoLibraryMediaResource(decoder: $0) })
@@ -20,6 +21,8 @@ private var telegramUIDeclaredEncodables: Void = {
     engineDeclareEncodable(LocalFileGifMediaResource.self, f: { LocalFileGifMediaResource(decoder: $0) })
     engineDeclareEncodable(PhotoLibraryMediaResource.self, f: { PhotoLibraryMediaResource(decoder: $0) })
     engineDeclareEncodable(ICloudFileResource.self, f: { ICloudFileResource(decoder: $0) })
+    // MATTERMOST: MattermostSync's media resources.
+    mattermostDeclareEncodables()
     return
 }()
 

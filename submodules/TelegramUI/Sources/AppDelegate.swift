@@ -1416,12 +1416,18 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                     
                     self.resetIntentsIfNeeded(context: context.context)
                     
-                    // MATTERMOST: debug only. Opens a seeded chat for screenshots without UI automation
-                    // (`SIMCTL_CHILD_RELAY_DEBUG_OPEN_CHAT=1 xcrun simctl launch …`).
+                    // MATTERMOST: debug only. Opens a chat or a permalink for screenshots without UI automation
+                    // (`SIMCTL_CHILD_RELAY_DEBUG_OPEN_CHAT=firehose` / `…_OPEN_POST=<post id>`; see MattermostDebug).
                     #if DEBUG
-                    if firstTime, let peerId = MattermostSpikeSeeder.debugChatToOpen() {
-                        Queue.mainQueue().after(1.0, {
-                            context.openChatWithPeerId(peerId: peerId, threadId: nil, storyId: nil)
+                    if firstTime {
+                        let _ = (MattermostDebug.chatToOpen(account: context.context.account)
+                        |> deliverOnMainQueue).start(next: { target in
+                            guard let target = target else {
+                                return
+                            }
+                            Queue.mainQueue().after(1.0, {
+                                context.openChatWithPeerId(peerId: target.peerId, threadId: nil, messageId: target.messageId, storyId: nil, alwaysKeepMessageId: true)
+                            })
                         })
                     }
                     #endif

@@ -1740,6 +1740,12 @@ public class Account {
         }
     }
     
+    // MATTERMOST: typing of other users from the Mattermost WebSocket (`user_typing`). Telegram fills the
+    // same manager from MTProto updates, which never run while `MattermostBackend.isEnabled`.
+    public func mattermostAddRemoteInputActivity(chatPeerId: PeerActivitySpace, peerId: PeerId, activity: PeerInputActivity) {
+        self.peerInputActivityManager.addActivity(chatPeerId: chatPeerId, peerId: peerId, activity: activity)
+    }
+    
     public func updateLocalInputActivity(peerId: PeerActivitySpace, activity: PeerInputActivity, isPresent: Bool) {
         self.localInputActivityManager.transaction { manager in
             if isPresent {
