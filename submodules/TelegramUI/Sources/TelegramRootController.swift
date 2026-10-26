@@ -197,7 +197,16 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
     public func addRootControllers(showCallsTab: Bool) {
         let tabBarController = TabBarControllerImpl(theme: self.presentationData.theme, strings: self.presentationData.strings)
         tabBarController.navigationPresentation = .master
-        let chatListController = self.context.sharedContext.makeChatListController(context: self.context, location: .chatList(groupId: .root), controlsHistoryPreload: true, hideNetworkActivityStatus: false, previewing: false, enableDebugActions: !GlobalExperimentalSettings.isAppStoreBuild)
+        // MATTERMOST: Relay release builds have none of Telegram's hidden tab-bar debug gestures, whatever the build
+        // configuration (Phase 4A): 10 taps on Chats crash on purpose (`preconditionFailure("debug tap")` unless
+        // `is_appstore_build`), 10 on Settings open Telegram's debug menu (sends logs to Telegram chats, switches
+        // Telegram features).
+        #if DEBUG
+        let telegramDebugGestures = true
+        #else
+        let telegramDebugGestures = !MattermostBackend.isEnabled
+        #endif
+        let chatListController = self.context.sharedContext.makeChatListController(context: self.context, location: .chatList(groupId: .root), controlsHistoryPreload: true, hideNetworkActivityStatus: false, previewing: false, enableDebugActions: telegramDebugGestures && !GlobalExperimentalSettings.isAppStoreBuild)
         if let sharedContext = self.context.sharedContext as? SharedAccountContextImpl {
             chatListController.tabBarItem.badgeValue = sharedContext.switchingData.chatListBadge
         }
@@ -238,6 +247,11 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
             }
             strongSelf.pushViewController(debugController(sharedContext: strongSelf.context.sharedContext, context: strongSelf.context))
         }
+        #if !DEBUG
+        if !telegramDebugGestures {
+            accountSettingsController.tabBarItemDebugTapAction = nil // MATTERMOST: see telegramDebugGestures
+        }
+        #endif
         accountSettingsController.parentController = self
         controllers.append(accountSettingsController)
                 
@@ -252,7 +266,9 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         self.rootTabController = tabBarController
         self.pushViewController(tabBarController, animated: false)
         
+        #if DEBUG
         self.relayDebugOpenScreenIfRequested() // MATTERMOST: debug only (RelayDebugScreens.swift)
+        #endif
     }
         
     public func updateRootControllers(showCallsTab: Bool) {

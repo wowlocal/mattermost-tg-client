@@ -43,7 +43,8 @@ def main(argv):
     with open(os.path.join(directory, "command.json"), "w") as f:
         json.dump(command, f)
     subprocess.check_call(["xcrun", "simctl", "spawn", udid, "notifyutil", "-p", "org.relaychat.Relay.debug"])
-    deadline = time.time() + 15
+    timeout = float(os.environ.get("RELAY_REMOTE_TIMEOUT", "15"))
+    deadline = time.time() + timeout
     while time.time() < deadline:
         try:
             with open(result_path) as f:
@@ -54,7 +55,7 @@ def main(argv):
         except (OSError, ValueError):
             pass
         time.sleep(0.2)
-    sys.exit("no result within 15 s (is a debug build running?)")
+    sys.exit("no result within %.0f s (is a debug build running? RELAY_REMOTE_TIMEOUT sets the wait)" % timeout)
 
 
 if __name__ == "__main__":

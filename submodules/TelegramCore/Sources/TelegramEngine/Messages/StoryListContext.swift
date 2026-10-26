@@ -877,7 +877,8 @@ public final class PeerStoryListContext: StoryListContext {
                 return transaction.getPeer(peerId).flatMap(apiInputPeer)
             }
             |> mapToSignal { inputPeer -> Signal<([State.Item], Int, PeerReference?, [State.Folder], Bool), NoError> in
-                guard let inputPeer else {
+                // MATTERMOST: as for a peer Telegram can't address (Phase 4B: nothing reaches the null network engine).
+                guard let inputPeer, !MattermostBackend.isEnabled else {
                     return .single(([], 0, nil, [], false))
                 }
                 
@@ -2634,7 +2635,8 @@ public final class PeerExpiringStoryListContext {
                 return transaction.getPeer(peerId).flatMap(apiInputPeer)
             }
             |> mapToSignal { inputPeer -> Signal<Never, NoError> in
-                guard let inputPeer = inputPeer else {
+                // MATTERMOST: as for a peer Telegram can't address (Phase 4B: nothing reaches the null network engine).
+                guard let inputPeer = inputPeer, !MattermostBackend.isEnabled else {
                     return .complete()
                 }
                 return account.network.request(Api.functions.stories.getPeerStories(peer: inputPeer))
@@ -2816,7 +2818,8 @@ public func _internal_pollPeerStories(postbox: Postbox, network: Network, accoun
         return transaction.getPeer(peerId).flatMap(apiInputPeer) ?? peerReference?.inputPeer
     }
     |> mapToSignal { inputPeer -> Signal<Never, NoError> in
-        guard let inputPeer = inputPeer else {
+        // MATTERMOST: as for a peer Telegram can't address (Phase 4B: nothing reaches the null network engine).
+        guard let inputPeer = inputPeer, !MattermostBackend.isEnabled else {
             return .complete()
         }
         

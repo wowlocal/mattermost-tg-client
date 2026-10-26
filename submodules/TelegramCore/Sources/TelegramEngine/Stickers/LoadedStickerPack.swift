@@ -43,6 +43,11 @@ public enum LoadedStickerPack {
 }
 
 func updatedRemoteStickerPack(postbox: Postbox, network: Network, reference: StickerPackReference) -> Signal<(StickerPackCollectionInfo, [StickerPackItem])?, NoError> {
+    // MATTERMOST: Telegram's sticker sets (animated emoji, dice, emoji packs, …) don't exist on a Mattermost
+    // server: a pack that isn't stored locally loads as `.none` instead of fetching forever (`messages.getStickerSet`).
+    if MattermostBackend.isEnabled {
+        return .single(nil)
+    }
     return network.request(Api.functions.messages.getStickerSet(stickerset: reference.apiInputStickerSet, hash: 0))
         |> map(Optional.init)
         |> `catch` { _ -> Signal<Api.messages.StickerSet?, NoError> in

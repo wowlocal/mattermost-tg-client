@@ -43,6 +43,11 @@ private final class AccountPresenceManagerImpl {
     }
     
     private func updatePresence(_ isOnline: Bool) {
+        // MATTERMOST: `account.updateStatus` every 30 s while in front; Mattermost keeps the user's status from
+        // the WebSocket and the user's choice (MattermostSync, 3F).
+        if MattermostBackend.isEnabled {
+            return
+        }
         let request: Signal<Api.Bool, MTRpcError>
         if isOnline {
             let timer = SignalKitTimer(timeout: 30.0, repeat: false, completion: { [weak self] in

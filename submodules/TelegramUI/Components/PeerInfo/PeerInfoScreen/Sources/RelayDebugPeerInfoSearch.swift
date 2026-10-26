@@ -3,6 +3,8 @@ import Display
 import SwiftSignalKit
 import PeerInfoPaneNode
 
+#if DEBUG // MATTERMOST: debug builds only; release builds compile none of this file (Phase 4A)
+
 // MATTERMOST: debug only (Phase 3C). The debug remote's `peerinfo-search` (TelegramUI `RelayDebugSearch.swift`):
 // a media pane's search, as the pane's search button and the keyboard do, for checks without UI automation.
 #if DEBUG
@@ -40,4 +42,5 @@ public extension PeerInfoScreenImpl {
         }
     }
 }
+#endif
 #endif

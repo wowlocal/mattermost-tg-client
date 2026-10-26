@@ -139,6 +139,10 @@ func resolveMissingStickerSets(network: Network, postbox: Postbox, stickerSets: 
 }
 
 func updatedFeaturedStickerPacks(network: Network, postbox: Postbox, category: FeaturedStickerPacksCategory) -> Signal<Void, NoError> {
+    // MATTERMOST: no featured sticker or emoji packs (`messages.getFeaturedStickers`, `getFeaturedEmojiStickers`).
+    if MattermostBackend.isEnabled {
+        return .complete()
+    }
     return postbox.transaction { transaction -> Signal<Void, NoError> in
         let initialPacks = transaction.getOrderedListItems(collectionId: category.itemListNamespace)
         var initialPackMap: [Int64: FeaturedStickerPackItem] = [:]

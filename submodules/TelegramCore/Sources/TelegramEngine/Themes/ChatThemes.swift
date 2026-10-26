@@ -196,6 +196,10 @@ extension ChatTheme {
 
 func _internal_getChatThemes(accountManager: AccountManager<TelegramAccountManagerTypes>, network: Network, forceUpdate: Bool = false, onlyCached: Bool = false) -> Signal<[TelegramTheme], NoError> {
     let fetch: ([TelegramTheme]?, Int64?) -> Signal<[TelegramTheme], NoError> = { current, hash in
+        // MATTERMOST: no cloud chat themes (`account.getChatThemes`) (Phase 4B: nothing reaches the null network engine).
+        if MattermostBackend.isEnabled {
+            return .complete()
+        }
         return network.request(Api.functions.account.getChatThemes(hash: hash ?? 0))
         |> retryRequestIfNotFrozen
         |> mapToSignal { result -> Signal<[TelegramTheme], NoError> in

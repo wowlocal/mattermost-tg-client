@@ -7,6 +7,8 @@ import TelegramCore
 import AccountContext
 import MattermostSync
 
+#if DEBUG // MATTERMOST: debug builds only; release builds compile none of this file (Phase 4A)
+
 /// **Debug builds only.** The debug remote's Phase 3D-2 commands (directory and membership), each through the code
 /// path of the tap it stands for (`tools/relay-remote.py`, docs/BUILD.md "Phase 3D-2"):
 /// - `new-message`: the chat list's compose button (`ChatListController.activateCompose`);
@@ -135,3 +137,4 @@ public enum MattermostDirectoryDebug {
         return result
     }
 }
+#endif

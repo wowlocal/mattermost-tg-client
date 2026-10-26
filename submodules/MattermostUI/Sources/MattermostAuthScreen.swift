@@ -38,8 +38,10 @@ struct MattermostAuthScreenContent {
 /// A screen in the look of Telegram's own login (title, short text, fields, a big button), used for the
 /// server and credentials steps. Everything sits in a scroll view that keeps the focused field and the
 /// button above the keyboard.
-final class MattermostAuthScreen: ViewController, MattermostDebugDrivable {
+final class MattermostAuthScreen: ViewController {
+    #if DEBUG
     let debugScreenName: String
+    #endif
     private let sharedContext: SharedAccountContext
     private let presentationData: PresentationData
     private let content: MattermostAuthScreenContent
@@ -69,7 +71,9 @@ final class MattermostAuthScreen: ViewController, MattermostDebugDrivable {
     }
 
     init(debugScreenName: String, sharedContext: SharedAccountContext, presentationData: PresentationData, content: MattermostAuthScreenContent) {
+        #if DEBUG
         self.debugScreenName = debugScreenName
+        #endif
         self.sharedContext = sharedContext
         self.presentationData = presentationData
         self.content = content
@@ -120,7 +124,9 @@ final class MattermostAuthScreen: ViewController, MattermostDebugDrivable {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        #if DEBUG
         MattermostDebugRemote.screenAppeared(self)
+        #endif
         if !self.didActivateInput {
             self.didActivateInput = true
             self.screenNode.activateInput()
@@ -158,6 +164,31 @@ final class MattermostAuthScreen: ViewController, MattermostDebugDrivable {
         self.present(alert, in: .window(.root))
     }
 
+    /// Presents a confirmation alert whose default action the debug remote can press (`press button=confirm`).
+    func presentConfirmation(_ alert: ViewController, confirm: @escaping () -> Void) {
+        #if DEBUG
+        self.debugConfirmation = (alert, confirm)
+        #endif
+        self.present(alert, in: .window(.root))
+    }
+
+    /// After a successful login: empties password fields the debug remote filled, so iOS doesn't offer to
+    /// save the password (that sheet would cover scripted screenshots). Typed passwords stay untouched.
+    func clearDebugFilledPasswords() {
+        #if DEBUG
+        for field in self.debugFilledPasswordFields {
+            self.setText("", field: field)
+        }
+        self.debugFilledPasswordFields.removeAll()
+        #endif
+    }
+
+    // MARK: MattermostDebugDrivable (debug builds only, Phase 4A)
+
+    #if DEBUG
+    private var debugConfirmation: (alert: ViewController, action: () -> Void)?
+    private var debugFilledPasswordFields = Set<String>()
+
     func debugDismissAlerts() -> Bool {
         guard let alert = self.presentedAlert else {
             return false
@@ -166,18 +197,6 @@ final class MattermostAuthScreen: ViewController, MattermostDebugDrivable {
         self.presentedAlert = nil
         return true
     }
-
-    private var debugConfirmation: (alert: ViewController, action: () -> Void)?
-
-    /// Presents a confirmation alert whose default action the debug remote can press (`press button=confirm`).
-    func presentConfirmation(_ alert: ViewController, confirm: @escaping () -> Void) {
-        self.debugConfirmation = (alert, confirm)
-        self.present(alert, in: .window(.root))
-    }
-
-    // MARK: MattermostDebugDrivable
-
-    private var debugFilledPasswordFields = Set<String>()
 
     func debugFill(field: String, text: String) -> Bool {
         guard let fieldDescription = self.content.fields.first(where: { $0.id == field }) else {
@@ -188,15 +207,6 @@ final class MattermostAuthScreen: ViewController, MattermostDebugDrivable {
         }
         self.setText(text, field: field)
         return true
-    }
-
-    /// After a successful login: empties password fields the debug remote filled, so iOS doesn't offer to
-    /// save the password (that sheet would cover scripted screenshots). Typed passwords stay untouched.
-    func clearDebugFilledPasswords() {
-        for field in self.debugFilledPasswordFields {
-            self.setText("", field: field)
-        }
-        self.debugFilledPasswordFields.removeAll()
     }
 
     func debugPress(button: String) -> Bool {
@@ -236,7 +246,13 @@ final class MattermostAuthScreen: ViewController, MattermostDebugDrivable {
             return true
         }
     }
+    #endif
 }
+
+#if DEBUG
+extension MattermostAuthScreen: MattermostDebugDrivable {
+}
+#endif
 
 /// Text sizes of the login screens: Telegram's own login keeps fixed sizes, Relay's follow the app's text size
 /// (Settings → Appearance → Text Size, or the system's Dynamic Type while "Use System Text Size" is on), so nothing

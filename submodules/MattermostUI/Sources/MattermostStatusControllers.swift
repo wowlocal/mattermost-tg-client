@@ -443,10 +443,13 @@ public func mattermostStatusController(context: AccountContext, openCustomStatus
     }
 
     let controller = MattermostDirectoryListController(context: context, state: signal)
+    #if DEBUG
     controller.debugName = "status"
+    #endif
     presentImpl = { [weak controller] c in
         controller?.present(c, in: .window(.root))
     }
+    #if DEBUG
     controller.debugState = {
         let own = MattermostProfile.currentOwnStatus(accountId: accountId)
         let state = stateValue.with { $0 }
@@ -483,6 +486,7 @@ public func mattermostStatusController(context: AccountContext, openCustomStatus
             arguments.openCustomStatus()
         }
     ]
+    #endif
     return controller
 }
 
@@ -858,7 +862,9 @@ public func mattermostCustomStatusController(context: AccountContext, pickEmoji:
     }
 
     let controller = MattermostDirectoryListController(context: context, state: signal)
+    #if DEBUG
     controller.debugName = "custom-status"
+    #endif
     controller.navigationPresentation = .modal
     presentImpl = { [weak controller] c in
         controller?.present(c, in: .window(.root))
@@ -877,6 +883,7 @@ public func mattermostCustomStatusController(context: AccountContext, pickEmoji:
         }
         return controller.view
     }
+    #if DEBUG
     controller.debugState = {
         let state = stateValue.with { $0 }
         var duration = "date_and_time"
@@ -935,5 +942,6 @@ public func mattermostCustomStatusController(context: AccountContext, pickEmoji:
             arguments.clear()
         }
     ]
+    #endif
     return controller
 }

@@ -24,6 +24,10 @@ public struct TelegramPeerPhoto {
 }
 
 func _internal_requestPeerPhotos(accountPeerId: PeerId, postbox: Postbox, network: Network, peerId: PeerId) -> Signal<[TelegramPeerPhoto], NoError> {
+    // MATTERMOST: a Mattermost user has one picture, the peer's current photo (`photos.getUserPhotos`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .single([])
+    }
     return postbox.transaction{ transaction -> Peer? in
         return transaction.getPeer(peerId)
     }

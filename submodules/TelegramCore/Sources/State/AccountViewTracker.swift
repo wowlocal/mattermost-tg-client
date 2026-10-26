@@ -699,6 +699,10 @@ public final class AccountViewTracker {
     }
     
     public func updateViewCountForMessageIds(messageIds: Set<MessageId>, clientId: Int32) {
+        // MATTERMOST: view counts (`messages.getMessagesViews`) (Phase 4B: nothing reaches the null network engine in normal use).
+        if MattermostBackend.isEnabled {
+            return
+        }
         self.queue.async { [self] in
             var addedMessageIds: [MessageId] = []
             let updatedState = ViewCountContextState(timestamp: Int32(CFAbsoluteTimeGetCurrent()), clientId: clientId, result: nil)
@@ -841,6 +845,10 @@ public final class AccountViewTracker {
     }
     
     public func updateReactionsForMessageIds(messageIds: Set<MessageId>, force: Bool = false) {
+        // MATTERMOST: reaction polling (`messages.getMessagesReactions`); reactions come from the WebSocket (Phase 4B: nothing reaches the null network engine in normal use).
+        if MattermostBackend.isEnabled {
+            return
+        }
         self.queue.async { [self] in
             var addedMessageIds: [MessageId] = []
             let timestamp = Int32(CFAbsoluteTimeGetCurrent())
@@ -943,6 +951,10 @@ public final class AccountViewTracker {
     }
     
     public func updateSeenLiveLocationForMessageIds(messageIds: Set<MessageId>) {
+        // MATTERMOST: no live locations (Phase 4B: nothing reaches the null network engine in normal use).
+        if MattermostBackend.isEnabled {
+            return
+        }
         self.queue.async { [self] in
             var addedMessageIds: [MessageId] = []
             let timestamp = Int32(CFAbsoluteTimeGetCurrent())
@@ -999,6 +1011,10 @@ public final class AccountViewTracker {
     }
     
     public func updatedExtendedMediaForMessageIds(messageIds: Set<MessageId>) {
+        // MATTERMOST: no paid media (Phase 4B: nothing reaches the null network engine in normal use).
+        if MattermostBackend.isEnabled {
+            return
+        }
         self.queue.async { [self] in
             var addedMessageIds: [MessageId] = []
             let timestamp = Int32(CFAbsoluteTimeGetCurrent())
@@ -1052,6 +1068,10 @@ public final class AccountViewTracker {
     }
     
     public func updateUnsupportedMediaForMessageIds(messageIds: Set<MessageAndThreadId>) {
+        // MATTERMOST: no refetch of unsupported media (Phase 4B: nothing reaches the null network engine in normal use).
+        if MattermostBackend.isEnabled {
+            return
+        }
         self.queue.async { [self] in
             var addedMessageIds: [MessageAndThreadId] = []
             let timestamp = Int32(CFAbsoluteTimeGetCurrent())
@@ -1153,6 +1173,10 @@ public final class AccountViewTracker {
     }
     
     public func refreshSecretMediaMediaForMessageIds(messageIds: Set<MessageId>) {
+        // MATTERMOST: no secret chats (Phase 4B: nothing reaches the null network engine in normal use).
+        if MattermostBackend.isEnabled {
+            return
+        }
         self.queue.async { [self] in
             var addedMessageIds: [MessageId] = []
             let timestamp = Int32(CFAbsoluteTimeGetCurrent())
@@ -1246,6 +1270,10 @@ public final class AccountViewTracker {
     }
     
     public func refreshStoriesForMessageIds(messageIds: Set<MessageId>) {
+        // MATTERMOST: no stories (Phase 4B: nothing reaches the null network engine in normal use).
+        if MattermostBackend.isEnabled {
+            return
+        }
         self.queue.async { [self] in
             var addedMessageIds: [MessageId] = []
             let timestamp = Int32(CFAbsoluteTimeGetCurrent())
@@ -1326,6 +1354,10 @@ public final class AccountViewTracker {
     }
     
     public func refreshInlineGroupCallsForMessageIds(messageIds: Set<MessageId>) {
+        // MATTERMOST: no group calls (Phase 4B: nothing reaches the null network engine in normal use).
+        if MattermostBackend.isEnabled {
+            return
+        }
         self.queue.async { [self] in
             var addedMessageIds: [MessageId] = []
             let timestamp = Int32(CFAbsoluteTimeGetCurrent())
@@ -1390,6 +1422,10 @@ public final class AccountViewTracker {
     }
     
     public func refreshStoryStatsForPeerIds(peerIds: [PeerId]) {
+        // MATTERMOST: no stories (`stories.getPeerMaxIDs`) (Phase 4B: nothing reaches the null network engine in normal use).
+        if MattermostBackend.isEnabled {
+            return
+        }
         self.queue.async {
             self.pendingRefreshStoriesForPeerIds.append(contentsOf: peerIds)
             
@@ -1492,6 +1528,10 @@ public final class AccountViewTracker {
     }
     
     public func refreshCanSendMessagesForPeerIds(peerIds: [PeerId]) {
+        // MATTERMOST: no paid messages (`users.getRequirementsToContact`) (Phase 4B: nothing reaches the null network engine in normal use).
+        if MattermostBackend.isEnabled {
+            return
+        }
         self.queue.async {
             self.pendingRefreshCanSendMessagesForPeerIds.append(contentsOf: peerIds)
             
@@ -2020,7 +2060,11 @@ public final class AccountViewTracker {
             peerId = nil
         }
         // MATTERMOST: no channel polling gate (and no read-state reset or full hole for channels without a
-        // chat-list index): MattermostSync's channels are always up to date.
+        // chat-list index): MattermostSync's channels are always up to date. It is told that the chat opened
+        // instead (`MattermostChatObserver`: a channel the last catch-up skipped is caught up now).
+        if MattermostBackend.isEnabled, let peerId = peerId, let accountPeerId = self.account?.peerId {
+            mattermostChatHistoryOpened(accountPeerId: accountPeerId, peerId: peerId)
+        }
         if !MattermostBackend.isEnabled, let peerId = peerId, peerId.namespace == Namespaces.Peer.CloudChannel {
             return Signal<(MessageHistoryView, ViewUpdateType, InitialMessageHistoryData?), NoError> { subscriber in
                 let combinedDisposable = MetaDisposable()

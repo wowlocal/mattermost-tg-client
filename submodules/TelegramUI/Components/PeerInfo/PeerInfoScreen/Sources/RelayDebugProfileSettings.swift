@@ -6,6 +6,8 @@ import TelegramCore
 import ContextUI
 import MattermostSync
 
+#if DEBUG // MATTERMOST: debug builds only; release builds compile none of this file (Phase 4A)
+
 // MATTERMOST: debug only (Phase 3F). What the debug remote's profile commands run on the Settings screen
 // (TelegramUI `RelayDebugProfile.swift`), each through the handler a tap runs. Release builds compile none of this.
 public extension PeerInfoScreenImpl {
@@ -243,4 +245,5 @@ private final class RelayDebugContextMenuController: ViewController, ContextCont
         }))
     }
 }
+#endif
 #endif

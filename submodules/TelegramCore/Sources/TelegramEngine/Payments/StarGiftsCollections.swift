@@ -98,7 +98,8 @@ private func intListSimpleHash(_ list: [Int64]) -> Int64 {
 
 private func _internal_getStarGiftCollections(postbox: Postbox, network: Network, peerId: EnginePeer.Id) -> Signal<[StarGiftCollection]?, NoError> {
     return postbox.transaction { transaction -> (Api.InputPeer, [StarGiftCollection]?)? in
-        guard let inputPeer = transaction.getPeer(peerId).flatMap(apiInputPeer) else {
+        // MATTERMOST: as for a peer Telegram can't address (Phase 4B: nothing reaches the null network engine).
+        guard let inputPeer = transaction.getPeer(peerId).flatMap(apiInputPeer), !MattermostBackend.isEnabled else {
             return nil
         }
         let collections = transaction.retrieveItemCacheEntry(id: entryId(peerId: peerId))?.get(CachedProfileGiftsCollections.self)

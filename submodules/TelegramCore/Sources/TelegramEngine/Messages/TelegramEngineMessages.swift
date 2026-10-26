@@ -603,6 +603,10 @@ public extension TelegramEngine {
         }
 
         public func refreshMessageTagStats(peerId: EnginePeer.Id, threadId: Int64?, tags: [EngineMessage.Tags]) -> Signal<Never, NoError> {
+            // MATTERMOST: media tab counts come from the stored history (`messages.search` with limit 1 per tag).
+            if MattermostBackend.isEnabled {
+                return .complete()
+            }
             let account = self.account
             return self.account.postbox.transaction { transaction -> (Api.InputPeer?, Api.InputPeer?) in
                 let chatPeer = transaction.getPeer(peerId)

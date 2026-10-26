@@ -143,6 +143,20 @@ public final class MattermostAccountSync: @unchecked Sendable {
     let reactionList = MMLocked<(customNames: [String], usedEmoji: [String], listed: Set<String>)>(([], [], []))
     /// Phase 3F: the own status and the client config values the profile screens need.
     let ownProfile = MattermostOwnProfileState()
+    /// Phase 4B: the running catch-up, joined by later requests (a reconnect, the app becoming active, a
+    /// background refresh) instead of starting another (`CatchUp.swift`).
+    let catchUpInFlight = MMLocked<Task<Void, Never>?>(nil)
+    /// Phase 4B (`ChatObserver.swift`): when each channel's member count was last asked for; channels the last
+    /// catch-up skipped (nil until loaded from the store); stale channels being caught up because they opened.
+    let memberCountsRequested = MMLocked<[String: Double]>([:])
+    let staleChannels = MMLocked<StaleChannels?>(nil)
+    let staleCatchUpsInFlight = MMLocked<Set<String>>([])
+    /// Threads reloads per team in flight (`reloadThreadsCoalesced`): true when another run was asked for.
+    let threadReloads = MMLocked<[String: Bool]>([:])
+    /// Phase 4B: the WebSocket waits out its backoff (`reconnectSoon`); when the last early reconnect was asked for.
+    let isWaitingToReconnect = MMLocked<Bool>(false)
+    private let lastEarlyReconnect = MMLocked<Double>(0)
+    private var chatObserver: ChatObserver?
 
     init(account: Account, client: MattermostClient, store: MattermostSyncStore, server: MattermostServerInfo) {
         self.account = account
@@ -189,6 +203,11 @@ public final class MattermostAccountSync: @unchecked Sendable {
         let searchProvider = SearchProvider(sync: self)
         self.searchProvider = searchProvider
         self.account.mattermostSetSearchProvider(searchProvider)
+
+        // Phase 4B: peer views and opened chats (member counts, stale channels), instead of Telegram's requests.
+        let chatObserver = ChatObserver(sync: self)
+        self.chatObserver = chatObserver
+        self.account.mattermostSetChatObserver(chatObserver)
 
         let holeFiller = HoleFiller(sync: self)
         self.holeFiller = holeFiller
@@ -308,6 +327,7 @@ public final class MattermostAccountSync: @unchecked Sendable {
         case let .connected(info):
             MMLog.log("websocket connected (connection \(info.connectionId), resumed: \(info.resumed))")
             self.isConnected.with { $0 = true }
+            self.isWaitingToReconnect.with { $0 = false }
             self.connectionGeneration.with { $0 += 1 }
             self.account.network.mattermostSetConnectionState(isConnected: true, isNetworkAvailable: true)
             if !info.resumed {
@@ -319,8 +339,13 @@ public final class MattermostAccountSync: @unchecked Sendable {
                     await self?.refreshOwnProfile()
                 })
             }
-        case .connecting, .waitingToReconnect:
+        case .connecting:
             self.isConnected.with { $0 = false }
+            self.isWaitingToReconnect.with { $0 = false }
+            self.account.network.mattermostSetConnectionState(isConnected: false, isNetworkAvailable: true)
+        case .waitingToReconnect:
+            self.isConnected.with { $0 = false }
+            self.isWaitingToReconnect.with { $0 = true }
             self.account.network.mattermostSetConnectionState(isConnected: false, isNetworkAvailable: true)
         case .disconnected:
             self.isConnected.with { $0 = false }
@@ -330,6 +355,57 @@ public final class MattermostAccountSync: @unchecked Sendable {
             MMLog.log("websocket: the server rejected the session token")
             self.account.network.mattermostSetConnectionState(isConnected: false, isNetworkAvailable: true)
             MattermostSync.sessionExpired(accountId: self.account.id, reason: "the WebSocket was rejected")
+        }
+    }
+
+    /// Phase 4B: the app became active after `seconds` in the background (suspended, its WebSocket possibly dead
+    /// without knowing it). A connection that doesn't answer a ping within 3 s, or one waiting for its next attempt,
+    /// reconnects now; the reconnect resumes (missed events replayed) or catches up.
+    func appBecameActive(afterBackground seconds: Double) {
+        guard let socket = self.socket, !self.isStopped else {
+            return
+        }
+        let wasConnected = self.isConnected.current
+        self.addTask(Task { [weak self] in
+            let started = CFAbsoluteTimeGetCurrent()
+            var action = "alive"
+            if wasConnected {
+                do {
+                    try await socket.ping(timeout: 3.0)
+                } catch {
+                    action = "no answer (\(error)), reconnecting"
+                    await socket.reconnectNow()
+                }
+            } else {
+                action = "not connected, reconnecting now"
+                await socket.reconnectNow()
+            }
+            if self != nil {
+                MMLog.log("foreground: active after \(Int(seconds)) s in the background; websocket \(action) (\(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms)")
+            }
+        })
+    }
+
+    /// Phase 4B: the server answered a REST request, or the network path came back, while the WebSocket waits out
+    /// its backoff (up to a minute after a long outage): reconnect now, at most every 5 s.
+    func reconnectSoon(reason: String) {
+        guard let socket = self.socket, !self.isStopped, self.isWaitingToReconnect.current else {
+            return
+        }
+        let now = CFAbsoluteTimeGetCurrent()
+        let due = self.lastEarlyReconnect.with { last -> Bool in
+            if now - last < 5.0 {
+                return false
+            }
+            last = now
+            return true
+        }
+        if !due {
+            return
+        }
+        MMLog.log("websocket: reconnecting now (\(reason))")
+        Task {
+            await socket.reconnectNow()
         }
     }
 
@@ -405,7 +481,12 @@ public final class MattermostAccountSync: @unchecked Sendable {
             return
         }
         do {
-            let users = try await self.client.users(ids: Array(missing))
+            // At most 100 ids per request (a bootstrap batch can reference several hundred users).
+            let ids = Array(missing)
+            var users: [User] = []
+            for start in stride(from: 0, to: ids.count, by: 100) {
+                users.append(contentsOf: try await self.client.users(ids: Array(ids[start ..< min(ids.count, start + 100)])))
+            }
             await self.postbox.mmTransaction { transaction in
                 self.writeUsers(users, transaction: transaction)
             }

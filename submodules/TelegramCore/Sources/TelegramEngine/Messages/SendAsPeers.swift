@@ -93,6 +93,10 @@ func _internal_cachedPeerSendAsAvailablePeers(account: Account, peerId: PeerId) 
 }
 
 func _internal_peerSendAsAvailablePeers(accountPeerId: PeerId, network: Network, postbox: Postbox, peerId: PeerId) -> Signal<[SendAsPeer], NoError> {
+    // MATTERMOST: posts are always sent as the user (`channels.getSendAs`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .single([])
+    }
     return postbox.transaction { transaction -> Peer? in
         return transaction.getPeer(peerId)
     }

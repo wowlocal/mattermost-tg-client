@@ -1151,6 +1151,10 @@ func _internal_updatedRemotePeer(accountPeerId: PeerId, postbox: Postbox, networ
 }
 
 func _internal_refreshGlobalPostSearchState(account: Account) -> Signal<Never, NoError> {
+    // MATTERMOST: no public post search (`channels.checkSearchPostsFlood`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .complete()
+    }
     return account.network.request(Api.functions.channels.checkSearchPostsFlood(flags: 0, query: nil))
     |> map(Optional.init)
     |> `catch` { _ -> Signal<Api.SearchPostsFlood?, NoError> in

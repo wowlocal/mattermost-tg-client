@@ -15,6 +15,7 @@ import MattermostSyncCore
 // position are inputs on that screen), and the notification preferences: the user's (Settings → Notifications →
 // Push and Mentions) and a chat's (the profile's Notifications → Customize).
 
+#if DEBUG
 /// Debug remote arguments arrive as strings (`tools/relay-remote.py key=value`); JSON numbers and booleans work too.
 func mattermostDebugInt(_ command: [String: Any], _ key: String) -> Int? {
     if let value = command[key] as? Int {
@@ -32,6 +33,7 @@ func mattermostDebugBool(_ command: [String: Any], _ key: String, default defaul
     }
     return defaultValue
 }
+#endif
 
 private func profileErrorText(_ error: MattermostProfileError, strings: PresentationStrings) -> String {
     switch error {
@@ -282,11 +284,14 @@ private func mattermostProfileFieldController(context: AccountContext, name: Str
     }
 
     let controller = MattermostDirectoryListController(context: context, state: signal)
+    #if DEBUG
     controller.debugName = name
+    #endif
     dismissImpl = { [weak controller] in
         controller?.view.endEditing(true)
         let _ = (controller?.navigationController as? NavigationController)?.popViewController(animated: true)
     }
+    #if DEBUG
     controller.debugState = {
         let state = stateValue.with { $0 }
         return ["screen": name, "values": name == "email" ? [state.values[0], state.values.count > 1 && !state.values[1].isEmpty ? "(password)" : ""] : state.values, "error": state.error ?? "", "busy": state.busy]
@@ -299,6 +304,7 @@ private func mattermostProfileFieldController(context: AccountContext, name: Str
             submit()
         }
     ]
+    #endif
     return controller
 }
 
@@ -565,10 +571,13 @@ public func mattermostNotificationPreferencesController(context: AccountContext)
     }
 
     let controller = MattermostDirectoryListController(context: context, state: signal)
+    #if DEBUG
     controller.debugName = "notification-preferences"
+    #endif
     presentImpl = { [weak controller] c in
         controller?.present(c, in: .window(.root))
     }
+    #if DEBUG
     controller.debugState = {
         guard let preferences = current.with({ $0 }) else {
             return ["screen": "notification-preferences", "loaded": false]
@@ -600,6 +609,7 @@ public func mattermostNotificationPreferencesController(context: AccountContext)
             arguments.commitKeywords()
         }
     ]
+    #endif
     return controller
 }
 
@@ -820,10 +830,13 @@ public func mattermostChannelNotificationsController(context: AccountContext, pe
     }
 
     let controller = MattermostDirectoryListController(context: context, state: signal)
+    #if DEBUG
     controller.debugName = "channel-notifications"
+    #endif
     presentImpl = { [weak controller] c in
         controller?.present(c, in: .window(.root))
     }
+    #if DEBUG
     controller.debugState = {
         guard let preferences = preferencesValue.with({ $0 }) else {
             return ["screen": "channel-notifications", "loaded": false]
@@ -848,5 +861,6 @@ public func mattermostChannelNotificationsController(context: AccountContext, pe
             arguments.setAutoFollow(mattermostDebugBool(command, "value"))
         }
     ]
+    #endif
     return controller
 }

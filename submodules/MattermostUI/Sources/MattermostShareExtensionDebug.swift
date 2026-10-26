@@ -3,6 +3,8 @@ import UIKit
 import ObjectiveC
 import UniformTypeIdentifiers
 
+#if DEBUG // MATTERMOST: debug builds only; release builds compile none of this file (Phase 4A)
+
 /// **Debug builds only** (Phase 3F). Hosts the app's own share extension (`<bundle id>.Share`) with real input items,
 /// as `UIActivityViewController` does for another app: `NSExtension` loads the extension and hands back its remote
 /// view controller, which is presented here. Simulator taps don't reach the extension's windows on this setup, so the
@@ -98,3 +100,4 @@ enum MattermostShareExtensionDebug {
         #endif
     }
 }
+#endif

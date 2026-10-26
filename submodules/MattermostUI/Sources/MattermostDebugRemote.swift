@@ -10,6 +10,8 @@ import MattermostKit
 import MattermostSync
 import MattermostPushService
 
+#if DEBUG // MATTERMOST: debug builds only; release builds compile none of this file (Phase 4A)
+
 /// **Debug builds only.** Hooks other modules install into the debug remote.
 public enum MattermostDebugHooks {
     /// Handles a chat-level command (TelegramUI's composer driver, Phase 3D): returns false for actions it
@@ -265,6 +267,11 @@ final class MattermostDebugRemote {
                     self.writeResult(id: id, ok: true, error: nil)
                 })
             })
+        case "runtime":
+            // Phase 4B: requests parked by the null network engine per Telegram function (total, still live,
+            // `stacks=1`: where the first one started) and the app's memory footprint.
+            self.lastExtra = MattermostDebugRemote.runtimeReport(stacks: (command["stacks"] as? String) == "1")
+            self.writeResult(id: id, ok: true, error: nil)
         case "threads-row":
             let index = (command["index"] as? String).flatMap(Int.init) ?? 0
             if let openRow = MattermostThreadsDebug.openRow {
@@ -302,6 +309,40 @@ final class MattermostDebugRemote {
     }
 
     private var lastChatInfo: [String: Any]?
+
+    // MARK: Runtime hygiene (Phase 4B)
+
+    static func runtimeReport(stacks: Bool) -> [String: Any] {
+        let parked = NullNetworkStatistics.snapshot()
+        var functions: [[String: Any]] = []
+        for item in parked {
+            var entry: [String: Any] = ["function": item.function, "total": item.total, "live": item.live]
+            if stacks {
+                entry["stack"] = item.firstStack
+            }
+            functions.append(entry)
+        }
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) { pointer in
+            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { reboundPointer in
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), reboundPointer, &count)
+            }
+        }
+        var memory: [String: Any] = [:]
+        if result == KERN_SUCCESS {
+            memory["physFootprintMB"] = Double(info.phys_footprint) / 1_048_576.0
+            memory["residentMB"] = Double(info.resident_size) / 1_048_576.0
+        }
+        return [
+            "parked": functions,
+            "parkedKinds": parked.count,
+            "parkedTotal": parked.reduce(0) { $0 + $1.total },
+            "parkedLive": parked.reduce(0) { $0 + $1.live },
+            "memory": memory,
+            "uptime": ProcessInfo.processInfo.systemUptime
+        ]
+    }
 
     // MARK: Interactive dialogs (Phase 3D)
 
@@ -593,3 +634,4 @@ final class MattermostDebugRemote {
         })
     }
 }
+#endif

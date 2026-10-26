@@ -106,6 +106,40 @@ extension MattermostAccountSync {
         }
     }
 
+    /// `reloadThreads`, but while one runs for the team further requests only ask for one more run afterwards.
+    func reloadThreadsCoalesced(teamId: String) {
+        let start = self.threadReloads.with { reloads -> Bool in
+            if reloads[teamId] != nil {
+                reloads[teamId] = true
+                return false
+            }
+            reloads[teamId] = false
+            return true
+        }
+        if !start {
+            return
+        }
+        self.addTask(Task { [weak self] in
+            guard let self = self else {
+                return
+            }
+            while true {
+                await self.reloadThreads(teamId: teamId)
+                let again = self.threadReloads.with { reloads -> Bool in
+                    if reloads[teamId] == true {
+                        reloads[teamId] = false
+                        return true
+                    }
+                    reloads[teamId] = nil
+                    return false
+                }
+                if !again || Task.isCancelled {
+                    break
+                }
+            }
+        })
+    }
+
     func clearThreads() {
         self.state.with { $0.threads = [:] }
         self.threadsChanged()
@@ -174,9 +208,10 @@ extension MattermostAccountSync {
             MMLog.log("live: thread \(thread.id) updated (\(thread.replyCount) replies, \(thread.unreadReplies) unread, \(thread.unreadMentions) mentions)")
         case .threadReadChanged:
             guard let threadId = event.data["thread_id"]?.stringValue, !threadId.isEmpty else {
-                // A whole channel or team was marked read.
+                // A whole channel or team was marked read. Phase 4B: marking many channels read (another client's
+                // "mark all as read") sends one event per channel; reloads of a team run one at a time and coalesce.
                 for teamId in teamIds {
-                    await self.reloadThreads(teamId: teamId)
+                    self.reloadThreadsCoalesced(teamId: teamId)
                 }
                 return
             }
@@ -238,9 +273,17 @@ extension MattermostAccountSync {
     /// The roots of the replies among `posts` get their reply count from `POST /posts/ids` (channel pages and
     /// `since=` lists say 0 for every root), with the replies' authors in front of their latest repliers.
     func refreshThreadRoots(channelId: String, posts: [Post]) async {
-        var repliesByRoot: [String: [Post]] = [:]
-        for post in posts where !post.rootId.isEmpty && post.deleteAt == 0 {
-            repliesByRoot[post.rootId, default: []].append(post)
+        await self.refreshThreadRoots(postsByChannel: [channelId: posts])
+    }
+
+    /// The same for posts of several channels (Phase 4B: the bootstrap's batches), with one request per 100 roots
+    /// and one transaction.
+    func refreshThreadRoots(postsByChannel: [String: [Post]]) async {
+        var repliesByRoot: [String: (channelId: String, replies: [Post])] = [:]
+        for (channelId, posts) in postsByChannel {
+            for post in posts where !post.rootId.isEmpty && post.deleteAt == 0 {
+                repliesByRoot[post.rootId, default: (channelId, [])].replies.append(post)
+            }
         }
         if repliesByRoot.isEmpty {
             return
@@ -254,9 +297,12 @@ extension MattermostAccountSync {
             roots.append(contentsOf: chunk)
         }
         await self.postbox.mmTransaction { transaction in
-            for root in roots where root.channelId == channelId && root.deleteAt == 0 {
-                let authors = (repliesByRoot[root.id] ?? []).sorted(by: { $0.createAt > $1.createAt }).map { $0.userId }
-                self.updateThreadRootSummary(channelId: channelId, rootPostId: root.id, replyCount: root.replyCount, latestUserIds: authors, mergingStoredUsers: true, transaction: transaction)
+            for root in roots where root.deleteAt == 0 {
+                guard let entry = repliesByRoot[root.id], root.channelId == entry.channelId else {
+                    continue
+                }
+                let authors = entry.replies.sorted(by: { $0.createAt > $1.createAt }).map { $0.userId }
+                self.updateThreadRootSummary(channelId: entry.channelId, rootPostId: root.id, replyCount: root.replyCount, latestUserIds: authors, mergingStoredUsers: true, transaction: transaction)
             }
         }
     }

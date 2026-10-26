@@ -6,8 +6,10 @@ import MtProtoKit
 // `resolveNetworkEngine`). Nothing it does reaches Telegram:
 // - Requests are parked: they never complete and never fail, like requests waiting for a connection in
 //   airplane mode, which every Telegram code path already handles. Completing them with an error would
-//   be worse: most callers wrap requests in `retryRequest`, which retries forever. Disposing the returned
-//   disposable drops the request (an `EmptyDisposable` would mean "refused").
+//   be worse: most callers wrap requests in `retryRequest`, which retries forever. The returned disposable
+//   is a real one (an `EmptyDisposable` would mean "refused"); the request itself is not kept (Phase 4B).
+// - Nothing should reach it in normal use: the Telegram managers and fetchers that would are switched off
+//   at their start sites (docs/PROGRESS.md, 4B). `NullNetworkStatistics` counts what still does.
 // - The main session reports itself connected, so `Network.connectionStatus` is `.online`. Later the
 //   Mattermost WebSocket state drives it.
 // - `activate()` takes over what `MTContext` would do on the network by itself (making auth keys,
@@ -64,27 +66,92 @@ final class NullNetworkEngine: NetworkEngine {
     }
 }
 
-/// Requests of all sessions of one engine, kept until their callers dispose them.
+/// MATTERMOST: what reached the null engines of this process, per API function: every request parked so far
+/// and how many of them their callers have not disposed ("live": a screen still waiting, or a fire-and-forget
+/// caller that never will; the requests themselves are not kept). Read by the debug remote (`runtime`) for the
+/// parked-request audit (docs/PROGRESS.md, 4B).
+public struct NullNetworkParkedFunction {
+    public let function: String
+    public let total: Int
+    public let live: Int
+    /// Debug builds: the call stack of the first request of this function (where it was started).
+    public let firstStack: [String]
+}
+
+public enum NullNetworkStatistics {
+    fileprivate struct Entry {
+        var total: Int = 0
+        var live: Int = 0
+        var firstStack: [String] = []
+    }
+
+    private static let lock = NSLock()
+    private static var entries: [String: Entry] = [:]
+
+    public static func snapshot() -> [NullNetworkParkedFunction] {
+        self.lock.lock()
+        defer {
+            self.lock.unlock()
+        }
+        return self.entries.map { NullNetworkParkedFunction(function: $0.key, total: $0.value.total, live: $0.value.live, firstStack: $0.value.firstStack) }.sorted(by: { $0.total > $1.total })
+    }
+
+    /// Records a parked request; returns its number among the requests of its function (1 for the first).
+    fileprivate static func parked(_ function: String) -> (count: Int, live: Int) {
+        #if DEBUG
+        self.lock.lock()
+        let needsStack = self.entries[function] == nil
+        self.lock.unlock()
+        let stack = needsStack ? Array(Thread.callStackSymbols.dropFirst(3).prefix(40)) : []
+        #else
+        let stack: [String] = []
+        #endif
+        self.lock.lock()
+        var entry = self.entries[function] ?? Entry()
+        entry.total += 1
+        entry.live += 1
+        if entry.firstStack.isEmpty {
+            entry.firstStack = stack
+        }
+        self.entries[function] = entry
+        self.lock.unlock()
+        return (entry.total, entry.live)
+    }
+
+    fileprivate static func dropped(_ function: String) {
+        self.lock.lock()
+        if var entry = self.entries[function] {
+            entry.live = max(0, entry.live - 1)
+            self.entries[function] = entry
+        }
+        self.lock.unlock()
+    }
+}
+
+/// Requests of all sessions of one engine. A parked request is not kept (Phase 4B): it can never complete, and
+/// holding it would hold its subscriber chain (closures, the caller's state) until the caller disposes it, which
+/// fire-and-forget callers (`let _ = signal.start()`) never do. Its caller sees exactly what a kept request gives:
+/// no value, no error, no completion. Only its function name is kept, for the statistics.
 private final class NullNetworkParkedRequests {
     private let lock = NSLock()
     private var nextId: Int = 0
-    private var requests: [Int: NetworkEngineRequest] = [:]
-    private var seenFunctions = Set<String>()
+    private var requests: [Int: String] = [:]
 
     func park(_ request: NetworkEngineRequest) -> Disposable {
         let name = request.shortMetadata.functionName ?? "unknown"
         self.lock.lock()
         let id = self.nextId
         self.nextId += 1
-        self.requests[id] = request
-        let isFirstOfKind = self.seenFunctions.insert(name).inserted
+        self.requests[id] = name
         let totalParked = self.nextId
         self.lock.unlock()
 
-        if isFirstOfKind {
-            Logger.shared.log("NullNetworkEngine", "parked \(name) (first of its kind, \(totalParked) parked in total)")
+        let (count, live) = NullNetworkStatistics.parked(name)
+        // The first request of each function, then every tenfold: a function that keeps being called shows up.
+        if count == 1 || count == 10 || count == 100 || count == 1000 || count == 10000 {
+            Logger.shared.log("NullNetworkEngine", "parked \(name) (#\(count) of its kind, \(live) of them live, \(totalParked) parked in total)")
             #if DEBUG
-            NSLog("[NullNetworkEngine] parked %@ (first of its kind, %d parked in total)", name, totalParked)
+            NSLog("[NullNetworkEngine] parked %@ (#%d of its kind, %d of them live, %d parked in total)", name, count, live, totalParked)
             #endif
         }
 
@@ -95,10 +162,11 @@ private final class NullNetworkParkedRequests {
 
     private func drop(id: Int) {
         self.lock.lock()
-        let request = self.requests.removeValue(forKey: id)
+        let function = self.requests.removeValue(forKey: id)
         self.lock.unlock()
-        // Released outside the lock: its closures may hold the last references to their subscribers.
-        let _ = request
+        if let function = function {
+            NullNetworkStatistics.dropped(function)
+        }
     }
 }
 

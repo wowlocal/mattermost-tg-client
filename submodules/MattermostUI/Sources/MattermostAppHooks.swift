@@ -142,6 +142,7 @@ final class MattermostSessionExpiryPresenter {
         })
     }
 
+    #if DEBUG // MATTERMOST: the debug remote's hooks (Phase 4A: debug builds only)
     /// Debug: "Not Now" on the visible "Session Expired" alert.
     func debugDismissAlert() -> Bool {
         guard let alert = self.currentAlert else {
@@ -176,4 +177,5 @@ final class MattermostSessionExpiryPresenter {
             "reloginVisible": self.currentLogin != nil
         ]
     }
+    #endif
 }

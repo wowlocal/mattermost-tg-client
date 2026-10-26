@@ -55,6 +55,10 @@ func _internal_updateGlobalPrivacySettings(account: Account) -> Signal<Never, No
 }
 
 func _internal_requestAccountPrivacySettings(account: Account) -> Signal<AccountPrivacySettings, NoError> {
+    // MATTERMOST: no Telegram privacy settings (`account.getPrivacy`, `getAccountTTL`, `getGlobalPrivacySettings`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .never()
+    }
     let lastSeenPrivacy = account.network.request(Api.functions.account.getPrivacy(key: .inputPrivacyKeyStatusTimestamp))
     let groupPrivacy = account.network.request(Api.functions.account.getPrivacy(key: .inputPrivacyKeyChatInvite))
     let voiceCallPrivacy = account.network.request(Api.functions.account.getPrivacy(key: .inputPrivacyKeyPhoneCall))

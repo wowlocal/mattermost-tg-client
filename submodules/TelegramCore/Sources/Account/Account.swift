@@ -488,6 +488,10 @@ public struct TwoStepAuthData {
 }
 
 func _internal_twoStepAuthData(_ network: Network) -> Signal<TwoStepAuthData, MTRpcError> {
+    // MATTERMOST: no Telegram two-step verification (`account.getPassword`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .never()
+    }
     return network.request(Api.functions.account.getPassword())
     |> map { config -> TwoStepAuthData in
         switch config {
@@ -1344,7 +1348,8 @@ public class Account {
         
         self.peerInputActivityManager = PeerInputActivityManager()
         
-        if !supplementary {
+        // MATTERMOST: no stories (`stories.getAllStories`).
+        if !supplementary && !MattermostBackend.isEnabled {
             self.filteredStorySubscriptionsContext = StorySubscriptionsContext(accountPeerId: peerId, postbox: postbox, network: network, isHidden: false)
             self.hiddenStorySubscriptionsContext = StorySubscriptionsContext(accountPeerId: peerId, postbox: postbox, network: network, isHidden: true)
         } else {
@@ -1681,6 +1686,11 @@ public class Account {
     }
     
     private func restartConfigurationUpdates() {
+        // MATTERMOST: `help.getConfig` and `messages.getDefaultHistoryTTL`; MattermostSync writes the configuration
+        // the UI reads (SyntheticConfiguration).
+        if MattermostBackend.isEnabled {
+            return
+        }
         self.managedOperationsDisposable.add(managedConfigurationUpdates(accountManager: self.accountManager, postbox: self.postbox, network: self.network).start())
     }
     

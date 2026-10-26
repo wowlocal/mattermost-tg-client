@@ -389,7 +389,9 @@ public func mattermostCreateChannelController(context: AccountContext, teamId: S
     }
 
     let controller = MattermostDirectoryListController(context: context, state: signal)
+    #if DEBUG
     controller.debugName = "new-channel"
+    #endif
     controller.titleControlValueChanged = { index in
         if index >= 0 && index < teams.count {
             let _ = selectedTeamValue.swap(teams[index].id)
@@ -413,6 +415,7 @@ public func mattermostCreateChannelController(context: AccountContext, teamId: S
     presentImpl = { [weak controller] c in
         controller?.present(c, in: .window(.root))
     }
+    #if DEBUG
     controller.debugState = {
         let state = stateValue.with { $0 }
         return ["screen": "new-channel", "teamId": selectedTeamValue.with { $0 }, "displayName": state.displayName, "urlName": state.urlName, "private": state.isPrivate, "purpose": state.purpose, "header": state.header, "errors": state.errors, "busy": state.busy]
@@ -444,6 +447,7 @@ public func mattermostCreateChannelController(context: AccountContext, teamId: S
             create()
         }
     ]
+    #endif
     return controller
 }
 
@@ -525,7 +529,9 @@ public func mattermostChannelSettingsController(context: AccountContext, peerId:
             TextAlertAction(type: .genericAction, title: presentationData.strings.Common_Cancel, action: {}),
             TextAlertAction(type: destructive ? .destructiveAction : .defaultAction, title: action, action: f)
         ], parseMarkdown: true)
+        #if DEBUG
         MattermostDirectoryDebug.alertPresented(alert, confirm: f)
+        #endif
         presentImpl?(alert)
     }
 
@@ -691,7 +697,9 @@ public func mattermostChannelSettingsController(context: AccountContext, peerId:
     }
 
     let controller = MattermostDirectoryListController(context: context, state: signal)
+    #if DEBUG
     controller.debugName = "channel-settings"
+    #endif
     presentImpl = { [weak controller] c in
         controller?.present(c, in: .window(.root))
     }
@@ -699,6 +707,7 @@ public func mattermostChannelSettingsController(context: AccountContext, peerId:
         controller?.view.endEditing(true)
         let _ = (controller?.navigationController as? NavigationController)?.popViewController(animated: true)
     }
+    #if DEBUG
     controller.debugState = {
         let state = stateValue.with { $0 }
         var result: [String: Any] = ["screen": "channel-settings", "displayName": state.fields.displayName, "urlName": state.fields.urlName, "purpose": state.fields.purpose, "header": state.fields.header, "errors": state.fields.errors, "busy": state.fields.busy, "loadError": state.loadError ?? ""]
@@ -748,6 +757,7 @@ public func mattermostChannelSettingsController(context: AccountContext, peerId:
             arguments.unarchive()
         }
     ]
+    #endif
     reload()
     return controller
 }

@@ -11,6 +11,10 @@ public enum TwoStepVerificationConfiguration {
 }
 
 func _internal_twoStepVerificationConfiguration(account: Account) -> Signal<TwoStepVerificationConfiguration, NoError> {
+    // MATTERMOST: no Telegram two-step verification (`account.getPassword`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .never()
+    }
     return account.network.request(Api.functions.account.getPassword())
     |> retryRequest
     |> map { result -> TwoStepVerificationConfiguration in

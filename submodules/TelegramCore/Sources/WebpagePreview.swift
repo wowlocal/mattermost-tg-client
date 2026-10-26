@@ -40,6 +40,11 @@ public enum WebpagePreviewWithProgressResult {
 }
 
 public func webpagePreviewWithProgress(account: Account, urls: [String], webpageId: MediaId? = nil, forPeerId: PeerId? = nil) -> Signal<WebpagePreviewWithProgressResult, NoError> {
+    // MATTERMOST: no composer link previews (`messages.getWebPagePreview`); the Mattermost server makes a post's
+    // preview once it is posted (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .single(.result(nil))
+    }
     return account.postbox.transaction { transaction -> Signal<WebpagePreviewWithProgressResult, NoError> in
         if let webpageId = webpageId, let webpage = transaction.getMedia(webpageId) as? TelegramMediaWebpage, let url = webpage.content.url {
             var sourceUrl = url

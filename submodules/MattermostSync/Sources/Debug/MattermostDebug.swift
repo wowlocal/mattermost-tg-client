@@ -5,6 +5,8 @@ import TelegramCore
 import MattermostKit
 import MattermostSyncCore
 
+#if DEBUG // MATTERMOST: debug builds only; release builds compile none of this file (Phase 4A)
+
 /// Where a debug hook wants the app to navigate.
 public struct MattermostDebugTarget {
     public let peerId: PeerId
@@ -389,3 +391,4 @@ extension MattermostAccountSync {
         self.debugWrite(report, name: "\(channelId).json")
     }
 }
+#endif

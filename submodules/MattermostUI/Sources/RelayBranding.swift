@@ -42,7 +42,8 @@ enum RelayBranding {
     }
 
     /// Whether `http://` is accepted for local servers: debug builds only (the dev server is
-    /// `http://localhost:8065`).
+    /// `http://localhost:8065`). Matches App Transport Security (Telegram/BUILD, Phase 4A): debug builds allow local
+    /// networking, release builds allow no plain HTTP for the app's own connections; a server needs HTTPS there.
     static var allowsInsecureLocalServers: Bool {
         #if DEBUG
         return true

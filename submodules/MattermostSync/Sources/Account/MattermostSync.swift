@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import SwiftSignalKit
 import Postbox
 import TelegramCore
@@ -74,6 +75,10 @@ public enum MattermostSync {
     private static let lifecycle = MMLocked<Lifecycle?>(nil)
     private static let lifecycleDisposable = MetaDisposable()
     private static let activationObserver = MMLocked<NSObjectProtocol?>(nil)
+    private static let backgroundObserver = MMLocked<NSObjectProtocol?>(nil)
+    private static let pathMonitor = MMLocked<NWPathMonitor?>(nil)
+    /// Phase 4B: when the app last entered the background (nil while it is active).
+    private static let enteredBackgroundAt = MMLocked<Double?>(nil)
 
     static let userAgent = "Relay/0.1 (iOS; MattermostSync)"
     /// Sync-store cursors kept by the account lifecycle.
@@ -125,6 +130,13 @@ public enum MattermostSync {
         var configuration = MattermostClient.Configuration(serverURL: url, userAgent: self.userAgent)
         configuration.onUnauthorized = {
             MattermostSync.reportUnauthorized(accountId: accountId)
+        }
+        let serverURL = server.url
+        configuration.onServerReached = {
+            // Every account on this server: one account's answer says the server is back for all of them.
+            for sync in MattermostSync.accounts.with({ Array($0.values) }) where sync.server.url == serverURL {
+                sync.reconnectSoon(reason: "the server answered a request")
+            }
         }
         let client = MattermostClient(configuration: configuration, token: token)
         let sync = MattermostAccountSync(account: account, client: client, store: store, server: server)
@@ -216,6 +228,74 @@ public enum MattermostSync {
         for id in ids {
             self.verifySession(accountId: id, reason: "the token was rejected when the app became active")
         }
+    }
+
+    /// Phase 4B: when the network path becomes usable again (airplane mode off, Wi-Fi back), WebSockets waiting out
+    /// their backoff reconnect at once.
+    private static func startPathMonitor() {
+        let monitor = NWPathMonitor()
+        let wasSatisfied = MMLocked<Bool?>(nil)
+        monitor.pathUpdateHandler = { path in
+            let satisfied = path.status == .satisfied
+            let previous = wasSatisfied.with { value -> Bool? in
+                let previous = value
+                value = satisfied
+                return previous
+            }
+            if satisfied && previous == false {
+                for sync in self.accounts.with({ Array($0.values) }) {
+                    sync.reconnectSoon(reason: "the network is back")
+                }
+            }
+        }
+        monitor.start(queue: DispatchQueue(label: "org.relaychat.MattermostSync.path"))
+        self.pathMonitor.with { $0 = monitor }
+    }
+
+    /// Phase 4B: after more than 10 s in the background, every running account checks that its WebSocket
+    /// survived the suspension (a dead one would otherwise only be noticed by the next 30-second ping).
+    private static func checkConnectionsOnActivation() {
+        guard let since = self.enteredBackgroundAt.with({ value -> Double? in
+            let since = value
+            value = nil
+            return since
+        }) else {
+            return
+        }
+        let seconds = CFAbsoluteTimeGetCurrent() - since
+        if seconds < 10.0 {
+            return
+        }
+        for sync in self.accounts.with({ Array($0.values) }) {
+            sync.appBecameActive(afterBackground: seconds)
+        }
+    }
+
+    /// Phase 4B: a background refresh (`BGAppRefreshTask`, registered by the app): waits up to `timeout` seconds
+    /// for the accounts to start (the system may have launched the app for this task), then catches every running
+    /// account up. Returns false when it ran out of time or was cancelled.
+    public static func backgroundRefresh(timeout: Double) async -> Bool {
+        let started = CFAbsoluteTimeGetCurrent()
+        MMLog.log("background refresh: started")
+        var syncs: [MattermostAccountSync] = []
+        while CFAbsoluteTimeGetCurrent() - started < timeout && !Task.isCancelled {
+            syncs = self.accounts.with { Array($0.values) }
+            if !syncs.isEmpty && syncs.allSatisfy({ $0.state.with { $0.isBootstrapped } }) {
+                break
+            }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        syncs = syncs.filter { $0.state.with { $0.isBootstrapped } }
+        await withTaskGroup(of: Void.self) { group in
+            for sync in syncs {
+                group.addTask {
+                    await sync.catchUp()
+                }
+            }
+        }
+        let ok = !syncs.isEmpty && !Task.isCancelled
+        MMLog.log("background refresh: \(syncs.count) account(s) caught up in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms\(ok ? "" : " (incomplete)")")
+        return ok
     }
 
     /// Stops the account's sync and marks its session expired (also called for a rejected WebSocket).
@@ -329,8 +409,15 @@ public enum MattermostSync {
         // `UIApplication.didBecomeActiveNotification` (MattermostSync doesn't import UIKit).
         let observer = NotificationCenter.default.addObserver(forName: Notification.Name("UIApplicationDidBecomeActiveNotification"), object: nil, queue: nil, using: { _ in
             MattermostSync.verifySessionsOnActivation()
+            MattermostSync.checkConnectionsOnActivation()
         })
         self.activationObserver.with { $0 = observer }
+        // `UIApplication.didEnterBackgroundNotification` (Phase 4B: how long the app was away).
+        let backgroundObserver = NotificationCenter.default.addObserver(forName: Notification.Name("UIApplicationDidEnterBackgroundNotification"), object: nil, queue: nil, using: { _ in
+            MattermostSync.enteredBackgroundAt.with { $0 = CFAbsoluteTimeGetCurrent() }
+        })
+        self.backgroundObserver.with { $0 = backgroundObserver }
+        self.startPathMonitor()
         let handled = MMLocked<Set<AccountRecordId>>([])
         let isFirstView = MMLocked<Bool>(true)
         self.lifecycleDisposable.set(accountManager.accountRecords().start(next: { view in
@@ -385,6 +472,7 @@ public enum MattermostSync {
         }))
     }
 
+    #if DEBUG
     /// For debug checks (MattermostUI's debug remote): loaded accounts, Keychain tokens and account
     /// directories on disk.
     public static func debugState() -> [String: Any] {
@@ -410,6 +498,7 @@ public enum MattermostSync {
             "accountDirectories": directories
         ]
     }
+    #endif
 
     private static func forget(accountId: AccountRecordId) {
         self.stopAccount(accountId)

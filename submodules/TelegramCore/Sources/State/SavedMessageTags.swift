@@ -133,6 +133,10 @@ func _internal_setSavedMessageTags(transaction: Transaction, savedMessageTags: S
 }
 
 func managedSynchronizeSavedMessageTags(postbox: Postbox, network: Network, accountPeerId: PeerId) -> Signal<Never, NoError> {
+    // MATTERMOST: no saved-message reaction tags (`messages.getSavedReactionTags`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .complete()
+    }
     let poll = Signal<Never, NoError> { subscriber in
         let key: PostboxViewKey = .pendingMessageActions(type: .updateReaction)
         let waitForApplySignal: Signal<Never, NoError> = postbox.combinedView(keys: [key])

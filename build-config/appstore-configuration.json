@@ -1,0 +1,14 @@
+{
+	"bundle_id": "org.relaychat.Relay",
+	"api_id": "0",
+	"api_hash": "unused",
+	"team_id": "REPLACE_ME",
+	"app_center_id": "0",
+	"is_internal_build": "false",
+	"is_appstore_build": "true",
+	"appstore_id": "0",
+	"app_specific_url_scheme": "relay",
+	"premium_iap_product_id": "",
+	"enable_siri": false,
+	"enable_icloud": false
+}

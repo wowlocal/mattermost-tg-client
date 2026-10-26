@@ -32,6 +32,10 @@ public final class ArchivedStickerPackItem {
 }
 
 func _internal_archivedStickerPacks(account: Account, namespace: ArchivedStickerPacksNamespace = .stickers) -> Signal<[ArchivedStickerPackItem], NoError> {
+    // MATTERMOST: no archived sticker packs (`messages.getArchivedStickers`) (Phase 4B: nothing reaches the null network engine).
+    if MattermostBackend.isEnabled {
+        return .single([])
+    }
     var flags: Int32 = 0
     if case .masks = namespace {
         flags |= 1 << 0

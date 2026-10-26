@@ -52,7 +52,9 @@ public enum MattermostMemberActions {
             TextAlertAction(type: .genericAction, title: presentationData.strings.Common_Cancel, action: {}),
             TextAlertAction(type: .destructiveAction, title: presentationData.strings.Relay_Members_RemoveAction, action: run)
         ], parseMarkdown: true)
+        #if DEBUG
         MattermostDirectoryDebug.alertPresented(alert, confirm: run)
+        #endif
         present(alert)
     }
 
