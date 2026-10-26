@@ -3,8 +3,8 @@ import Foundation
 /// Parses the inline content of one block (paragraph, heading, list item text, table cell).
 ///
 /// Follows CommonMark's inline algorithm: code spans, autolinks and Mattermost tokens (bare URLs,
-/// emails, `@mentions`, `~channels`, `#hashtags`, `:emoji:`) are atomic; `*`, `_` and `~~` runs
-/// are paired with the delimiter-stack algorithm (including the `_` intraword and
+/// emails, `@mentions`, `~channels`, `#hashtags`, `:emoji:`, emoticons, `$inline latex$`) are atomic;
+/// `*`, `_` and `~~` runs are paired with the delimiter-stack algorithm (including the `_` intraword and
 /// "multiple of 3" rules); `[text](url)` links use the bracket stack.
 struct InlineParser {
     private struct Node {
@@ -45,6 +45,7 @@ struct InlineParser {
     }
 
     private let scalars: [Unicode.Scalar]
+    private let options: MattermostMarkdown.Options
     private var position = 0
     private var nodes: [Node] = []
     private var delimiters: [Delimiter] = []
@@ -54,13 +55,14 @@ struct InlineParser {
     /// Start of the last backtick run of each length, so an unmatched opener fails in O(1).
     private let lastBacktickRunStart: [Int: Int]
 
-    static func parse(_ text: String) -> FormattedText {
-        var parser = InlineParser(scalars: Array(text.unicodeScalars))
+    static func parse(_ text: String, options: MattermostMarkdown.Options = .default) -> FormattedText {
+        var parser = InlineParser(scalars: Array(text.unicodeScalars), options: options)
         return parser.run()
     }
 
-    private init(scalars: [Unicode.Scalar]) {
+    private init(scalars: [Unicode.Scalar], options: MattermostMarkdown.Options) {
         self.scalars = scalars
+        self.options = options
         var lastRuns: [Int: Int] = [:]
         var index = 0
         while index < scalars.count {
@@ -104,7 +106,7 @@ struct InlineParser {
             case "]":
                 handleCloseBracket()
             case "<":
-                if !handleAngleAutolink() {
+                if !handleEmoticon() && !handleAngleAutolink() {
                     appendText(c)
                 }
             case "@":
@@ -116,11 +118,22 @@ struct InlineParser {
                     appendText(c)
                 }
             case ":":
-                if !handleEmoji() {
+                if !handleEmoji() && !handleEmoticon() {
+                    appendText(c)
+                }
+            case ";":
+                if !handleEmoticon() {
+                    appendText(c)
+                }
+            case "$":
+                if !handleInlineLatex() {
                     appendText(c)
                 }
             default:
                 if c.isASCII, isASCIIAlphanumeric(c), !isASCIIAlphanumeric(peek(-1)) {
+                    if (c == "x" || c == "X") && handleEmoticon() {
+                        continue
+                    }
                     if tryBareURL() || tryEmail() {
                         continue
                     }
@@ -744,6 +757,94 @@ struct InlineParser {
             }
             appendAtom(":" + name + ":", entity: .customEmoji(name: lowercased), isAutoEntity: false)
         }
+        position = end + 1
+        return true
+    }
+
+    // MARK: Emoticons and inline LaTeX
+
+    /// Emoticons Mattermost's clients render as emoji (webapp `utils/emoticons`), longest first; `ignoresCase`:
+    /// letters match in either case.
+    private static let emoticons: [(text: [Unicode.Scalar], name: String, ignoresCase: Bool)] = [
+        (":-)", "slightly_smiling_face", false), (":)", "slightly_smiling_face", false),
+        (";-)", "wink", false), (";)", "wink", false),
+        (":-o", "scream", true), (":o", "open_mouth", true),
+        (":-]", "smirk", false), (":]", "smirk", false),
+        (":-d", "smile", true), (":d", "smile", true),
+        ("x-d", "stuck_out_tongue_closed_eyes", true),
+        (":-p", "stuck_out_tongue", true), (":p", "stuck_out_tongue", true),
+        (":-@", "rage", false), (":@", "rage", false), (":-[", "rage", false), (":[", "rage", false),
+        (":-(", "slightly_frowning_face", false), (":(", "slightly_frowning_face", false),
+        (":`-(", "cry", false), (":'-(", "cry", false), (":\u{2019}-(", "cry", false),
+        (":`(", "cry", false), (":'(", "cry", false), (":\u{2019}(", "cry", false),
+        (":-/", "confused", false), (":/", "confused", false),
+        (":-s", "confounded", true), (":s", "confounded", true),
+        (":-|", "neutral_face", false), (":|", "neutral_face", false),
+        (":-$", "flushed", false), (":$", "flushed", false),
+        (":-x", "mask", true),
+        ("</3", "broken_heart", false), ("<3", "heart", false),
+    ].map { (Array($0.0.unicodeScalars), $0.1, $0.2) }
+
+    /// An emoticon at the position: only between non-word characters (the webapp's `(^|\B)…($|\B)` patterns),
+    /// so `http://`, `10:30` or `Note:D` stay text.
+    private mutating func handleEmoticon() -> Bool {
+        guard options.emoticons, !isWordCharacter(peek(-1)) else {
+            return false
+        }
+        for emoticon in InlineParser.emoticons {
+            let candidate = emoticon.text
+            guard position + candidate.count <= scalars.count else {
+                continue
+            }
+            var matches = true
+            for (offset, expected) in candidate.enumerated() {
+                var actual = scalars[position + offset]
+                if emoticon.ignoresCase, actual.value >= 65, actual.value <= 90, let lowered = Unicode.Scalar(actual.value + 32) {
+                    actual = lowered
+                }
+                if actual != expected {
+                    matches = false
+                    break
+                }
+            }
+            guard matches, !isWordCharacter(scalar(at: position + candidate.count)), let emoji = EmojiTable.unicode(forName: emoticon.name) else {
+                continue
+            }
+            appendAtom(emoji, entity: nil, isAutoEntity: false)
+            position += candidate.count
+            return true
+        }
+        return false
+    }
+
+    private func isWordCharacter(_ s: Unicode.Scalar?) -> Bool {
+        guard let s = s else {
+            return false
+        }
+        return isASCIIAlphanumeric(s) || s == "_"
+    }
+
+    /// `$x^2$` (with the server's inline LaTeX on) as inline code without the dollars: the app doesn't typeset
+    /// TeX. Like Mattermost: no space just inside the dollars, one line, and no digit right after the closing one,
+    /// so "$5 and $10" stays text.
+    private mutating func handleInlineLatex() -> Bool {
+        guard options.inlineLatex, !isASCIIAlphanumeric(peek(-1)), peek(-1) != "\\", let first = peek(1), first != "$", !first.properties.isWhitespace else {
+            return false
+        }
+        var end = position + 1
+        while let s = scalar(at: end), s != "$" {
+            if s == "\n" {
+                return false
+            }
+            end += 1
+        }
+        guard end < scalars.count, let last = scalar(at: end - 1), !last.properties.isWhitespace, last != "\\" else {
+            return false
+        }
+        if let next = scalar(at: end + 1), next.properties.numericType != nil {
+            return false
+        }
+        appendAtom(string((position + 1) ..< end), entity: .code, isAutoEntity: false)
         position = end + 1
         return true
     }

@@ -33,25 +33,29 @@ public enum TextEntityType: Hashable, Sendable {
     case hashtag
     /// `:name:` with no built-in Unicode emoji; the text keeps `:name:` as a fallback.
     case customEmoji(name: String)
+    /// A heading (`#`…`######`, setext `===`/`---`), level 1–6. Always paired with `.bold` over the same range, so
+    /// renderers without heading sizes show bold text (Telegram: `MattermostCustomEntity.heading`).
+    case heading(level: Int)
 
     /// Stable order used to sort entities that share a range (outer first).
     var sortRank: Int {
         switch self {
         case .blockQuote: return 0
-        case .pre: return 1
-        case .textUrl: return 2
-        case .bold: return 3
-        case .italic: return 4
-        case .underline: return 5
-        case .strikethrough: return 6
-        case .code: return 7
-        case .url: return 8
-        case .email: return 9
-        case .mention: return 10
-        case .channelMention: return 11
-        case .specialMention: return 12
-        case .hashtag: return 13
-        case .customEmoji: return 14
+        case .heading: return 1
+        case .pre: return 2
+        case .textUrl: return 3
+        case .bold: return 4
+        case .italic: return 5
+        case .underline: return 6
+        case .strikethrough: return 7
+        case .code: return 8
+        case .url: return 9
+        case .email: return 10
+        case .mention: return 11
+        case .channelMention: return 12
+        case .specialMention: return 13
+        case .hashtag: return 14
+        case .customEmoji: return 15
         }
     }
 }
