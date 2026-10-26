@@ -729,6 +729,50 @@ extension MattermostAccountSync {
         }
     }
 
+    /// `direct_channel_show` / `group_channel_show` changed on another client (4F, `preferences_changed`): a DM or
+    /// group message closed there leaves the chat list at once and is forgotten, as after closing it here (its next
+    /// post brings it back); one opened again there comes back.
+    func applyDirectChannelVisibility(_ preferences: [Preference]) async {
+        for preference in preferences where preference.category == PreferenceCategory.directChannelShow || preference.category == PreferenceCategory.groupChannelShow {
+            let isDirect = preference.category == PreferenceCategory.directChannelShow
+            if isDirect && preference.name == self.ownUserId {
+                continue
+            }
+            let ownUserId = self.ownUserId
+            let known = self.state.with { state -> ChannelState? in
+                if isDirect {
+                    return state.channels.values.first(where: { $0.channel.type == .directMessage && $0.channel.directMessagePartnerId(myUserId: ownUserId) == preference.name })
+                } else {
+                    return state.channels[preference.name]
+                }
+            }
+            if preference.value == "false" {
+                guard let channelState = known else {
+                    continue
+                }
+                await self.postbox.mmTransaction { transaction in
+                    transaction.updatePeerChatListInclusion(channelState.peerId, inclusion: .notIncluded)
+                }
+                self.state.with { state in
+                    state.channels.removeValue(forKey: channelState.channel.id)
+                    state.channelIdByPeerId.removeValue(forKey: channelState.peerId)
+                }
+                MMLog.log("live: \(isDirect ? "DM" : "group message") \(channelState.channel.id) closed on another client")
+            } else if preference.value == "true", known == nil {
+                var channelId = preference.name
+                if isDirect {
+                    await self.ensureUsers([preference.name])
+                    guard let channel = try? await self.client.createDirectChannel(userId: ownUserId, otherUserId: preference.name) else {
+                        continue
+                    }
+                    channelId = channel.id
+                }
+                await self.refreshChannel(channelId)
+                MMLog.log("live: \(isDirect ? "DM" : "group message") \(channelId) opened on another client")
+            }
+        }
+    }
+
     // MARK: Leaving and closing (Telegram's Leave / Delete Chat)
 
     /// `CloudChatRemoveChatOperation` (Telegram's Leave Group and Delete Chat, after its own confirmation): the chat

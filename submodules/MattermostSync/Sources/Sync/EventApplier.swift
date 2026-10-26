@@ -117,6 +117,8 @@ extension MattermostAccountSync {
                 }
                 await self.applyPreferencesChanged(changed)
                 await self.applyRichContentPreferences(changed)
+                // DMs and group messages closed or opened on another client (4F).
+                await self.applyDirectChannelVisibility(changed)
                 if changed.contains(where: { $0.category == PreferenceCategory.displaySettings && $0.name == "name_format" }) {
                     await self.reloadPushNameFormat()
                 }
