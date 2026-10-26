@@ -51,6 +51,10 @@ public func textInputStateContextQueryRangeAndType(_ inputState: ChatTextInputSt
 }
 
 public func textInputStateContextQueryRangeAndType(inputText: NSAttributedString, selectionRange: Range<Int>) -> [(NSRange, PossibleContextQueryTypes, NSRange?)] {
+    // MATTERMOST: Mattermost's triggers (`@`, `~`, `:`, `#`, a leading `/`; MattermostContextQueries.swift).
+    if MattermostBackend.isEnabled {
+        return mattermostContextQueryRangeAndType(inputText: inputText, selectionRange: selectionRange)
+    }
     if selectionRange.count != 0 {
         return []
     }

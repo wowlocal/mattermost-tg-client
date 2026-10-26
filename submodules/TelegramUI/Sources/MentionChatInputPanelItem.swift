@@ -182,8 +182,13 @@ final class MentionChatInputPanelItemNode: ListViewItemNode {
             let string = NSMutableAttributedString()
             string.append(NSAttributedString(string: title, font: primaryFont, textColor: item.presentationData.theme.list.itemPrimaryTextColor))
             if let addressName = item.peer.addressName, !addressName.isEmpty {
-                string.append(NSAttributedString(string: " @\(addressName)", font: secondaryFont, textColor: item.presentationData.theme.list.itemSecondaryTextColor))
-                username = "@\(addressName)"
+                // MATTERMOST: channels are mentioned as `~name`.
+                var prefix = "@"
+                if MattermostBackend.isEnabled, case .channel = item.peer {
+                    prefix = "~"
+                }
+                string.append(NSAttributedString(string: " \(prefix)\(addressName)", font: secondaryFont, textColor: item.presentationData.theme.list.itemSecondaryTextColor))
+                username = "\(prefix)\(addressName)"
             }
             
             let (textLayout, textApply) = makeTextLayout(TextNodeLayoutArguments(attributedString: string, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: params.width - leftInset - rightInset, height: 100.0), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))

@@ -54,6 +54,10 @@ func contextQueryResultStateForChatInterfacePresentationState(_ chatPresentation
 }
 
 private func updatedContextQueryResultStateForQuery(context: AccountContext, peer: EngineRawPeer?, chatLocation: ChatLocation, inputQuery: ChatPresentationInputQuery, previousQuery: ChatPresentationInputQuery?, requestBotLocationStatus: @escaping (EnginePeer.Id) -> Void) -> Signal<(ChatPresentationInputQueryResult?) -> ChatPresentationInputQueryResult?, ChatContextQueryError> {
+    // MATTERMOST: users, channels, emoji and slash commands from the Mattermost server (MattermostComposerQueries.swift).
+    if let signal = mattermostContextQueryResult(context: context, chatLocation: chatLocation, inputQuery: inputQuery, previousQuery: previousQuery) {
+        return signal
+    }
     switch inputQuery {
         case let .emoji(query):
             var signal: Signal<(ChatPresentationInputQueryResult?) -> ChatPresentationInputQueryResult?, ChatContextQueryError> = .complete()

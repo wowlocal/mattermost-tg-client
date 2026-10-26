@@ -146,7 +146,7 @@ final class MentionChatInputContextPanelNode: ChatInputContextPanelNode {
                 strongSelf.revealedPeerId = peerId
                 strongSelf.updateResults(strongSelf.currentResults)
             }
-        }, peerSelected: { [weak self] peer in
+        }, peerSelected: mattermostDebugMentionPick(entries.map { $0.peer }, { [weak self] peer in // MATTERMOST: debug pick (RelayDebugComposer.swift)
             if let strongSelf = self, let interfaceInteraction = strongSelf.interfaceInteraction {
                 switch strongSelf.mode {
                     case .input:
@@ -179,7 +179,7 @@ final class MentionChatInputContextPanelNode: ChatInputContextPanelNode {
                         interfaceInteraction.beginMessageSearch(.member(peer._asPeer()), "")
                 }
             }
-        }, removeRequested: { [weak self] peerId in
+        }), removeRequested: { [weak self] peerId in
             if let strongSelf = self {
                 let _ = strongSelf.context.engine.peers.removeRecentlyUsedInlineBot(peerId: peerId).startStandalone()
                 

@@ -153,3 +153,24 @@
 
 /* Interactive messages (TelegramUI MattermostPostActions). */
 "Relay.PostActions.NoOptions" = "No options";
+
+/* Composer autocomplete and slash commands (TelegramUI MattermostComposerQueries, Phase 3D). */
+"Relay.Mention.Channel" = "Everyone in this channel";
+"Relay.Mention.Here" = "Everyone online in this channel";
+"Relay.Mention.All" = "Everyone in this channel";
+"Relay.Command.NotFoundTitle" = "Unknown Command";
+"Relay.Command.NotFoundText" = "%@\n\nSend it as a message instead?";
+"Relay.Command.SendAsMessage" = "Send as Message";
+
+/* Interactive dialogs (MattermostUI MattermostDialogController, Phase 3D). */
+"Relay.Dialog.Submit" = "Submit";
+"Relay.Dialog.Select" = "Select";
+"Relay.Dialog.Search" = "Search";
+"Relay.Dialog.Loading" = "Loading…";
+"Relay.Dialog.Optional" = "optional";
+"Relay.Dialog.Required" = "This field is required.";
+"Relay.Dialog.TooShort" = "Must be at least %@ characters.";
+"Relay.Dialog.TooLong" = "Must be at most %@ characters.";
+"Relay.Dialog.InvalidEmail" = "Must be a valid email address.";
+"Relay.Dialog.InvalidNumber" = "Must be a number.";
+"Relay.Dialog.InvalidURL" = "Must start with http:// or https://.";

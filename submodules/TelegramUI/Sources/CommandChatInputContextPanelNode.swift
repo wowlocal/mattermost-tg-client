@@ -362,13 +362,21 @@ final class CommandChatInputContextPanelNode: ChatInputContextPanelNode {
     private func prepareTransition(from: [CommandChatInputContextPanelEntry]? , to: [CommandChatInputContextPanelEntry]) {
         let firstTime = self.currentEntries == nil
         let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
-        let transition = preparedTransition(from: from ?? [], to: to, context: self.context, presentationData: presentationData, commandSelected: { [weak self] command, sendImmediately in
+        // MATTERMOST: the debug remote can pick an entry (RelayDebugComposer.swift).
+        let debugCommands = to.compactMap { entry -> ChatInputTextCommand? in
+            if case let .command(command) = entry.content {
+                return command.command
+            }
+            return nil
+        }
+        let transition = preparedTransition(from: from ?? [], to: to, context: self.context, presentationData: presentationData, commandSelected: mattermostDebugCommandPick(debugCommands, { [weak self] command, sendImmediately in
             guard let strongSelf = self, let interfaceInteraction = strongSelf.interfaceInteraction else {
                 return
             }
             switch command {
             case let .command(command):
-                if sendImmediately {
+                // MATTERMOST: a tap inserts the command line (commands take arguments), as Mattermost's clients do.
+                if sendImmediately && !MattermostBackend.isEnabled {
                     interfaceInteraction.sendBotCommand(command.peer._asPeer(), "/" + command.command.text)
                 } else {
                     interfaceInteraction.updateTextInputStateAndMode { textInputState, inputMode in
@@ -391,7 +399,7 @@ final class CommandChatInputContextPanelNode: ChatInputContextPanelNode {
                     interfaceInteraction.sendShortcut(shortcutId)
                 }
             }
-        }, openEditShortcuts: { [weak self] in
+        }), openEditShortcuts: { [weak self] in
             guard let self, let interfaceInteraction = self.interfaceInteraction else {
                 return
             }

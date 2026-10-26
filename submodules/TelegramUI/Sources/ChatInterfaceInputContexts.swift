@@ -78,13 +78,17 @@ func inputContextQueriesForChatPresentationIntefaceState(_ chatPresentationInter
             if possibleQueryRange.lowerBound == 1 && MattermostFeatures.botWebApps {
                 types.insert(.contextBots)
             }
+            // MATTERMOST: `~channel` suggestions (MattermostContextQueries.swift).
+            if MattermostBackend.isEnabled, possibleQueryRange.location > 0, inputString.character(at: possibleQueryRange.location - 1) == 0x7E {
+                types = [.mattermostChannels]
+            }
             result.append(.mention(query: query, types: types))
         } else if possibleTypes == [.command] {
             result.append(.command(query))
         } else if possibleTypes == [.contextRequest], MattermostFeatures.botWebApps, let additionalStringRange = additionalStringRange { // MATTERMOST: no inline bots
             let additionalString = inputString.substring(with: additionalStringRange)
             result.append(.contextRequest(addressName: query, query: additionalString))
-        } else if possibleTypes == [.emojiSearch], !query.isEmpty, let inputLanguage = chatPresentationInterfaceState.interfaceState.inputLanguage {
+        } else if possibleTypes == [.emojiSearch], !query.isEmpty, let inputLanguage = chatPresentationInterfaceState.interfaceState.inputLanguage ?? (MattermostBackend.isEnabled ? "en" : nil) { // MATTERMOST: Mattermost's emoji names don't depend on the keyboard language
             result.append(.emojiSearch(query: query, languageCode: inputLanguage, range: possibleQueryRange))
         }
     }

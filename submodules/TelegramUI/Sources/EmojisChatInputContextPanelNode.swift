@@ -466,7 +466,7 @@ final class EmojisChatInputContextPanelNode: ChatInputContextPanelNode {
     
     private func prepareTransition(from: [EmojisChatInputContextPanelEntry]? , to: [EmojisChatInputContextPanelEntry]) {
         let firstTime = self.currentEntries == nil
-        let transition = preparedTransition(from: from ?? [], to: to, context: self.context, animationCache: self.animationCache, animationRenderer: self.animationRenderer, emojiSelected: { [weak self] text, file in
+        let transition = preparedTransition(from: from ?? [], to: to, context: self.context, animationCache: self.animationCache, animationRenderer: self.animationRenderer, emojiSelected: mattermostDebugEmojiPick(to.map { ($0.symbol, $0.file) }, { [weak self] text, file in // MATTERMOST: debug pick (RelayDebugComposer.swift)
             guard let strongSelf = self, let interfaceInteraction = strongSelf.interfaceInteraction else {
                 return
             }
@@ -509,7 +509,7 @@ final class EmojisChatInputContextPanelNode: ChatInputContextPanelNode {
                 }
                 return (textInputState, inputMode)
             }
-        })
+        }))
         self.currentEntries = to
         self.enqueueTransition(transition, firstTime: firstTime)
         
