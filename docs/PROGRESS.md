@@ -45,7 +45,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 - [ ] Spike B: MattermostKit skeleton with tests
 - [ ] Spike C: message ID allocator with tests
 - [ ] Spike D: real channel history in the chat screen
-- [ ] TelegramEngine inventory for kept screens
+- [x] TelegramEngine inventory for kept screens (research doc §7)
 - [x] Assumptions in 09 verified (code reading; see research doc table)
 
 ## Log
@@ -65,3 +65,5 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   - Each server's own user needs a distinct local `PeerId`, or the shared context deletes one account.
   - Every channel needs a chat-list inclusion, or its history stays "loading".
 - Spike A started (agent): null `NetworkEngine`, skip `resetStateManagement`, seeded authorized account.
+- iOS 27.0 simulator runtime installed (iOS 26.5 sim still used for the spike).
+- Wrote [MattermostSync design](design/mattermost-sync.md): module layout, SQLite ID map store, bootstrap order, hole-fill contract, managed-operation replacements, Spike D scope.
