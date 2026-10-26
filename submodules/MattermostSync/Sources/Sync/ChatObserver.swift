@@ -127,6 +127,7 @@ extension MattermostAccountSync {
     }
 
     func clearStale(_ channelIds: [String]) {
+        self.loadStaleChannelsIfNeeded()
         let present = self.staleChannels.with { stale in channelIds.contains(where: { stale?.since[$0] != nil }) }
         if !present {
             return
@@ -135,6 +136,15 @@ extension MattermostAccountSync {
             for channelId in channelIds {
                 stale.since[channelId] = nil
             }
+        }
+    }
+
+    /// Forgets stale channels the user is no longer a member of.
+    func pruneStale(keeping channelIds: Set<String>) {
+        self.loadStaleChannelsIfNeeded()
+        let gone = self.staleChannels.with { stale in (stale?.since.keys).map { Array($0) } ?? [] }.filter { !channelIds.contains($0) }
+        if !gone.isEmpty {
+            self.clearStale(gone)
         }
     }
 
