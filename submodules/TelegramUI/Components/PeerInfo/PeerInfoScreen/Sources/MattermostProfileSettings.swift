@@ -103,35 +103,38 @@ func mattermostSettingsEditingItems(data: PeerInfoScreenData, state: PeerInfoSta
     var result: [(AnyHashable, [PeerInfoScreenItem])] = []
     result.append(("mm-help", [PeerInfoScreenCommentItem(id: "mm-name-help", text: strings.EditProfile_NameAndPhotoOrVideoHelp)]))
 
-    var details: [PeerInfoScreenItem] = []
+    // Nickname and position, each under its name (Telegram's edit screen has no labels on its inputs).
+    var nicknameItems: [PeerInfoScreenItem] = [PeerInfoScreenHeaderItem(id: "mm-nickname-header", text: strings.Relay_Profile_Edit_Nickname.uppercased())]
     if access.nickname {
-        details.append(PeerInfoScreenMultilineInputItem(id: "mm-nickname", text: draft.nickname, placeholder: strings.Relay_Profile_Edit_Nickname, textUpdated: { text in
+        nicknameItems.append(PeerInfoScreenMultilineInputItem(id: "mm-nickname", text: draft.nickname, placeholder: strings.Relay_Profile_Edit_Nickname, textUpdated: { text in
             draft.nickname = text
         }, action: {
             interaction.dismissInput()
         }, maxLength: 64))
     } else {
-        details.append(PeerInfoScreenDisclosureItem(id: "mm-nickname", label: .text(fields?.nickname ?? ""), text: strings.Relay_Profile_Edit_Nickname, hasArrow: false, action: nil))
+        nicknameItems.append(PeerInfoScreenDisclosureItem(id: "mm-nickname", label: .text(fields?.nickname ?? ""), text: strings.Relay_Profile_Edit_Nickname, hasArrow: false, action: nil))
     }
+    result.append(("mm-nickname", nicknameItems))
+    var positionItems: [PeerInfoScreenItem] = [PeerInfoScreenHeaderItem(id: "mm-position-header", text: strings.Relay_Profile_Edit_Position.uppercased())]
     if access.position {
-        details.append(PeerInfoScreenMultilineInputItem(id: "mm-position", text: draft.position, placeholder: strings.Relay_Profile_Edit_Position, textUpdated: { text in
+        positionItems.append(PeerInfoScreenMultilineInputItem(id: "mm-position", text: draft.position, placeholder: strings.Relay_Profile_Edit_Position, textUpdated: { text in
             draft.position = text
         }, action: {
             interaction.dismissInput()
         }, maxLength: 128))
     } else {
-        details.append(PeerInfoScreenDisclosureItem(id: "mm-position", label: .text(fields?.position ?? ""), text: strings.Relay_Profile_Edit_Position, hasArrow: false, action: nil))
+        positionItems.append(PeerInfoScreenDisclosureItem(id: "mm-position", label: .text(fields?.position ?? ""), text: strings.Relay_Profile_Edit_Position, hasArrow: false, action: nil))
     }
-    details.append(PeerInfoScreenCommentItem(id: "mm-details-help", text: strings.Relay_Profile_Edit_Help))
-    result.append(("mm-details", details))
+    positionItems.append(PeerInfoScreenCommentItem(id: "mm-details-help", text: strings.Relay_Profile_Edit_Help))
+    result.append(("mm-position", positionItems))
 
     var info: [PeerInfoScreenItem] = []
     let username = fields.map { "@" + $0.username } ?? ""
-    info.append(PeerInfoScreenDisclosureItem(id: "mm-username", label: .text(username), text: strings.Relay_Username_Title, icon: PresentationResourcesSettings.email, hasArrow: access.username, action: access.username ? {
+    info.append(PeerInfoScreenDisclosureItem(id: "mm-username", label: .text(username), text: strings.Relay_Username_Title, icon: PresentationResourcesSettings.privateChats, hasArrow: access.username, action: access.username ? {
         interaction.openSettings(.mattermostUsername)
     } : nil))
     if let email = fields?.email, !email.isEmpty {
-        info.append(PeerInfoScreenDisclosureItem(id: "mm-email", label: .text(email), text: strings.Relay_Email_Title, icon: PresentationResourcesSettings.recentCalls, hasArrow: access.email, action: access.email ? {
+        info.append(PeerInfoScreenDisclosureItem(id: "mm-email", label: .text(email), text: strings.Relay_Email_Title, icon: PresentationResourcesSettings.email, hasArrow: access.email, action: access.email ? {
             interaction.openSettings(.mattermostEmail)
         } : nil))
     }

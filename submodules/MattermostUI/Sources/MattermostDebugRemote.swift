@@ -207,6 +207,11 @@ final class MattermostDebugRemote {
             self.runNotificationCommand(action: action, command: command, id: id)
         case "simulate-push":
             self.simulatePush(command: command, id: id)
+        case "share-extension":
+            // Phase 3F: the app's share extension with generated items (MattermostShareExtensionDebug).
+            MattermostShareExtensionDebug.present(text: command["text"] as? String, url: (command["url"] as? String).flatMap(URL.init(string:)), imageCount: Int((command["images"] as? String) ?? "") ?? 0, fileCount: Int((command["files"] as? String) ?? "") ?? 0, completion: { [weak self] ok, error in
+                self?.writeResult(id: id, ok: ok, error: error)
+            })
         case "dialog", "dialog-set", "dialog-submit", "dialog-cancel", "dialog-picker":
             self.runDialogCommand(action: action, command: command, id: id)
         case "dismiss-alerts":
