@@ -13,12 +13,17 @@ public final class MattermostClient: Sendable {
         public var timeoutInterval: TimeInterval
         /// Extra headers sent with every request.
         public var additionalHeaders: [String: String]
+        /// Called when the server answers 401 to a request sent with a token, the usual sign of an expired
+        /// or revoked session. Requests sent without a token (login) never call it. A few endpoints use 401
+        /// for other errors, so confirm with `isTokenAccepted()` before acting.
+        public var onUnauthorized: (@Sendable () -> Void)?
 
-        public init(serverURL: URL, userAgent: String? = nil, timeoutInterval: TimeInterval = 30, additionalHeaders: [String: String] = [:]) {
+        public init(serverURL: URL, userAgent: String? = nil, timeoutInterval: TimeInterval = 30, additionalHeaders: [String: String] = [:], onUnauthorized: (@Sendable () -> Void)? = nil) {
             self.serverURL = serverURL
             self.userAgent = userAgent
             self.timeoutInterval = timeoutInterval
             self.additionalHeaders = additionalHeaders
+            self.onUnauthorized = onUnauthorized
         }
     }
 
@@ -113,7 +118,15 @@ public final class MattermostClient: Sendable {
         } catch {
             throw MattermostError.wrap(error)
         }
-        let http = try validate(response: response, body: data)
+        let http: HTTPURLResponse
+        do {
+            http = try validate(response: response, body: data)
+        } catch MattermostError.unauthorized(let appError) {
+            if urlRequest.value(forHTTPHeaderField: "Authorization") != nil {
+                configuration.onUnauthorized?()
+            }
+            throw MattermostError.unauthorized(appError)
+        }
         return (data, http)
     }
 
