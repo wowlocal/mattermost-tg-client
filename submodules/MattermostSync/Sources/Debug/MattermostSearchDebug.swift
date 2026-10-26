@@ -5,6 +5,8 @@ import TelegramCore
 import MattermostKit
 import MattermostSyncCore
 
+#if DEBUG // MATTERMOST: debug builds only; release builds compile none of this file (Phase 4A)
+
 // Debug only (Phase 3C): lookups for the debug remote's search commands (TelegramUI `RelayDebugSearch.swift`).
 public extension MattermostSync {
     /// The peer of a user by username (fetched and written when not known yet).
@@ -23,3 +25,4 @@ public extension MattermostSync {
         #endif
     }
 }
+#endif

@@ -9,10 +9,9 @@ import PresentationDataUtils
 import CodeInputView
 
 /// The MFA step: six digits from the user's authenticator app, submitted as soon as all are entered.
-final class MattermostMFAScreen: ViewController, MattermostDebugDrivable {
+final class MattermostMFAScreen: ViewController {
     static let codeLength = 6
 
-    let debugScreenName = "mfa"
     private let sharedContext: SharedAccountContext
     private let presentationData: PresentationData
     private let subtitle: String
@@ -62,7 +61,9 @@ final class MattermostMFAScreen: ViewController, MattermostDebugDrivable {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        #if DEBUG
         MattermostDebugRemote.screenAppeared(self)
+        #endif
         self.screenNode.activateInput()
     }
 
@@ -85,7 +86,12 @@ final class MattermostMFAScreen: ViewController, MattermostDebugDrivable {
         self.present(alert, in: .window(.root))
     }
 
-    // MARK: MattermostDebugDrivable
+    // MARK: MattermostDebugDrivable (debug builds only, Phase 4A)
+
+    #if DEBUG
+    var debugScreenName: String {
+        return "mfa"
+    }
 
     func debugFill(field: String, text: String) -> Bool {
         guard field == "code" else {
@@ -111,7 +117,13 @@ final class MattermostMFAScreen: ViewController, MattermostDebugDrivable {
         self.presentedAlert = nil
         return true
     }
+    #endif
 }
+
+#if DEBUG
+extension MattermostMFAScreen: MattermostDebugDrivable {
+}
+#endif
 
 final class MattermostMFAScreenNode: ASDisplayNode {
     private let presentationData: PresentationData

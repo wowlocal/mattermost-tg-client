@@ -178,6 +178,7 @@ public final class MattermostPostListController: ViewController {
         })
     }
 
+    #if DEBUG
     /// Debug: what the list shows (`RelayDebugSearch`).
     public var debugMessages: [EngineMessage] {
         return self.isNodeLoaded ? self.controllerNode.currentMessages : []
@@ -196,6 +197,7 @@ public final class MattermostPostListController: ViewController {
         self.open(message: messages[index])
         return true
     }
+    #endif
 }
 
 private final class MattermostPostListControllerNode: ASDisplayNode {

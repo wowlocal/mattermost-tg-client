@@ -828,7 +828,8 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                 if self.activeAccountsValue!.primary == nil && self.activeAccountsValue!.currentAuth == nil {
                     // MATTERMOST: the auth record shows the Mattermost login (MattermostUI, see
                     // UnauthorizedApplicationContext). Debug builds launched with RELAY_DEBUG_MM_* credentials
-                    // log in without it.
+                    // log in without it (release builds have no debug login at all).
+                    #if DEBUG
                     if MattermostBackend.isEnabled && MattermostDebugLogin.isRequested {
                         MattermostDebugLogin.createAccountIfNeeded(accountManager: accountManager, rootPath: rootPath, encryptionParameters: encryptionParameters, fallback: {
                             guard self.activeAccountsValue?.primary == nil, self.activeAccountsValue?.currentAuth == nil else {
@@ -839,6 +840,9 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                     } else {
                         self.beginNewAuth(testingEnvironment: self.testingEnvironment)
                     }
+                    #else
+                    self.beginNewAuth(testingEnvironment: self.testingEnvironment)
+                    #endif
                 }
             }))
         })

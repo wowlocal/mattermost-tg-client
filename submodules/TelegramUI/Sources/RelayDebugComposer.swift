@@ -9,6 +9,7 @@ import ChatInterfaceState
 import MattermostUI
 import MattermostSync
 
+
 // MATTERMOST: debug only (Phase 3D). Drives the composer of the visible chat through the debug remote
 // (`tools/relay-remote.py`), since the simulator takes no scripted touches or typing here:
 // - `compose` (`text`): sets the composer's text, cursor at the end, as typing it would (the suggestion
@@ -20,10 +21,13 @@ import MattermostSync
 //   `text` first);
 // - `input`: the composer text;
 // - `open-thread` (`post`): the thread view of a loaded root post of the visible chat (as a tap on its replies).
-// Release builds compile none of the driver; the panel wrappers just return their closure.
+// Release builds compile none of the driver; the panel wrappers just return their closure and never evaluate
+// their item lists (`@autoclosure`).
 
-func mattermostDebugMentionPick(_ peers: [EnginePeer], _ select: @escaping (EnginePeer) -> Void) -> (EnginePeer) -> Void {
+@inline(__always)
+func mattermostDebugMentionPick(_ peers: @autoclosure () -> [EnginePeer], _ select: @escaping (EnginePeer) -> Void) -> (EnginePeer) -> Void {
     #if DEBUG
+    let peers = peers()
     RelayDebugComposer.shared.register(kind: "mentions", items: peers.map { "\($0.compactDisplayTitle) \($0.addressName.map { "@" + $0 } ?? "")" }, select: { index in
         guard index >= 0 && index < peers.count else {
             return false
@@ -35,8 +39,10 @@ func mattermostDebugMentionPick(_ peers: [EnginePeer], _ select: @escaping (Engi
     return select
 }
 
-func mattermostDebugCommandPick(_ commands: [ChatInputTextCommand], _ select: @escaping (ChatInputTextCommand, Bool) -> Void) -> (ChatInputTextCommand, Bool) -> Void {
+@inline(__always)
+func mattermostDebugCommandPick(_ commands: @autoclosure () -> [ChatInputTextCommand], _ select: @escaping (ChatInputTextCommand, Bool) -> Void) -> (ChatInputTextCommand, Bool) -> Void {
     #if DEBUG
+    let commands = commands()
     RelayDebugComposer.shared.register(kind: "commands", items: commands.map { command in
         if case let .command(value) = command {
             return "/\(value.command.text)  \(value.command.description)"
@@ -54,8 +60,10 @@ func mattermostDebugCommandPick(_ commands: [ChatInputTextCommand], _ select: @e
     return select
 }
 
-func mattermostDebugEmojiPick(_ items: [(String, TelegramMediaFile?)], _ select: @escaping (String, TelegramMediaFile?) -> Void) -> (String, TelegramMediaFile?) -> Void {
+@inline(__always)
+func mattermostDebugEmojiPick(_ items: @autoclosure () -> [(String, TelegramMediaFile?)], _ select: @escaping (String, TelegramMediaFile?) -> Void) -> (String, TelegramMediaFile?) -> Void {
     #if DEBUG
+    let items = items()
     RelayDebugComposer.shared.register(kind: "emojis", items: items.map { symbol, file in
         if let file {
             for attribute in file.attributes {

@@ -448,8 +448,9 @@ public final class MattermostLoginController: NavigationController {
         sharedContext.mainWindow?.present(status, on: .root)
         Task {
             do {
-                // The address was accepted at the first login.
-                let server = try await MattermostAccountSetup.probe(address: session.serverURL, allowInsecureLocal: true)
+                // The address was accepted at the first login; the same http policy as the login applies (Phase 4A:
+                // plain http only for local servers in debug builds).
+                let server = try await MattermostAccountSetup.probe(address: session.serverURL, allowInsecureLocal: RelayBranding.allowsInsecureLocalServers)
                 await MainActor.run {
                     status.dismiss()
                     let controller = MattermostLoginController(sharedContext: sharedContext, expiredSession: session, server: server, presentationData: presentationData)

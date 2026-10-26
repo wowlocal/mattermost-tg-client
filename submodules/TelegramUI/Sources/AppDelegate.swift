@@ -41,7 +41,7 @@ import MediaEditor
 import TelegramUIDeclareEncodables
 import ContextMenuScreen
 import MetalEngine
-import RecaptchaEnterprise
+// MATTERMOST: no RecaptchaEnterprise (Google's closed-source SDK for Telegram's signup captcha) in Relay (Phase 4A).
 import NavigationBarImpl
 import ContextUI
 import ContextControllerImpl
@@ -345,7 +345,6 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     private let voipDeviceToken = Promise<Data?>(nil)
     private let regularDeviceToken = Promise<Data?>(nil)
     
-    private var recaptchaClientsBySiteKey: [String: Promise<RecaptchaClient>] = [:]
         
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         precondition(!testIsLaunched)
@@ -611,69 +610,10 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 return data
             },
             externalRequestVerificationStream: self.firebaseRequestVerificationSecretStream.get(),
-            externalRecaptchaRequestVerification: { method, siteKey in
-                return Signal<String?, NoError> { subscriber in
-                    // Recaptcha.fetchClient's completion is @Sendable, so it does not inherit this
-                    // closure's inferred main-actor isolation: from inside it neither the Promise (a
-                    // lock-based pre-concurrency class, so not Sendable) nor self's mutable state may
-                    // be touched. Both spellings are diagnosed, and Xcode 26's compiler raises them to
-                    // errors under -warnings-as-errors (Xcode 27's leaves them as warnings). The
-                    // promise is in fact only ever set on the main queue, which Queue.mainQueue()
-                    // guarantees and the compiler cannot see - hence the explicit opt-out.
-                    nonisolated(unsafe) let recaptchaClient: Promise<RecaptchaClient>
-                    if let current = self.recaptchaClientsBySiteKey[siteKey] {
-                        recaptchaClient = current
-                    } else {
-                        recaptchaClient = Promise<RecaptchaClient>()
-                        self.recaptchaClientsBySiteKey[siteKey] = recaptchaClient
-                        
-                        Recaptcha.fetchClient(withSiteKey: siteKey) { client, error in
-                            Queue.mainQueue().async {
-                                guard let client else {
-                                    Logger.shared.log("App \(self.episodeId)", "RecaptchaClient creation error: \(String(describing: error)).")
-                                    return
-                                }
-                                recaptchaClient.set(.single(client))
-                            }
-                        }
-                    }
-                    
-                    return (recaptchaClient.get()
-                    |> take(1)
-                    |> mapToSignal { recaptchaClient -> Signal<String?, NoError> in
-                        return Signal { subscriber in
-                            var recaptchaAction: RecaptchaAction?
-                            switch method {
-                            case "signup":
-                                recaptchaAction = RecaptchaAction.signup
-                            default:
-                                break
-                            }
-                            
-                            guard let recaptchaAction else {
-                                subscriber.putNext(nil)
-                                subscriber.putCompletion()
-                                
-                                return EmptyDisposable
-                            }
-                            recaptchaClient.execute(withAction: recaptchaAction) { token, error in
-                                if let token {
-                                    subscriber.putNext(token)
-                                    Logger.shared.log("App \(self.episodeId)", "RecaptchaClient executed successfully")
-                                } else {
-                                    subscriber.putNext(nil)
-                                    Logger.shared.log("App \(self.episodeId)", "RecaptchaClient execute error: \(String(describing: error))")
-                                }
-                                subscriber.putCompletion()
-                            }
-                            
-                            return ActionDisposable {
-                            }
-                        }
-                        |> runOn(Queue.mainQueue())
-                    }).startStandalone(next: subscriber.putNext, error: subscriber.putError, completed: subscriber.putCompletion)
-                }
-                |> runOn(Queue.mainQueue())
+            // MATTERMOST: Telegram's signup captcha (RecaptchaEnterprise) is not linked into Relay (Phase 4A): a
+            // closed-source binary can't be part of the GPL source offer, and Relay never signs up on Telegram.
+            externalRecaptchaRequestVerification: { _, _ in
+                return .single(nil)
             },
             autolockDeadine: autolockDeadine,
             encryptionProvider: OpenSSLEncryptionProvider(),

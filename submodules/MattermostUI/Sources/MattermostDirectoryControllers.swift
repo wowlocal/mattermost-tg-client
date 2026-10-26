@@ -466,6 +466,7 @@ func mattermostUserDirectoryController(context: AccountContext, mode: Mattermost
     }
 
     let controller = MattermostDirectoryListController(context: context, state: signal)
+    #if DEBUG
     controller.debugName = {
         switch mode {
         case .compose:
@@ -476,6 +477,7 @@ func mattermostUserDirectoryController(context: AccountContext, mode: Mattermost
             return "add-members"
         }
     }()
+    #endif
     controller.visibleBottomContentOffsetChanged = { offset in
         if case let .known(value) = offset, value < 400.0 {
             load(false)
@@ -494,6 +496,7 @@ func mattermostUserDirectoryController(context: AccountContext, mode: Mattermost
         controller?.view.endEditing(true)
         let _ = (controller?.navigationController as? NavigationController)?.popViewController(animated: true)
     }
+    #if DEBUG
     controller.debugState = {
         let state = stateValue.with { $0 }
         return [
@@ -532,6 +535,7 @@ func mattermostUserDirectoryController(context: AccountContext, mode: Mattermost
             arguments.browseChannels()
         }
     ]
+    #endif
     load(true)
     return controller
 }
@@ -539,13 +543,17 @@ func mattermostUserDirectoryController(context: AccountContext, mode: Mattermost
 /// An `ItemListController` the debug remote can drive (no UI automation on this setup): its state and the
 /// actions its rows run when tapped.
 final class MattermostDirectoryListController: ItemListController {
+    #if DEBUG
     var debugName: String = ""
     var debugState: (() -> [String: Any])?
     var debugActions: [String: ([String: Any]) -> Void] = [:]
+    #endif
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        #if DEBUG
         MattermostDirectoryDebug.screenAppeared(self)
+        #endif
     }
 }
 
@@ -779,7 +787,9 @@ public func mattermostBrowseChannelsController(context: AccountContext, teamId: 
     }
 
     let controller = MattermostDirectoryListController(context: context, state: signal)
+    #if DEBUG
     controller.debugName = "browse"
+    #endif
     controller.titleControlValueChanged = { index in
         if index >= 0 && index < teams.count {
             updateState { state in
@@ -801,6 +811,7 @@ public func mattermostBrowseChannelsController(context: AccountContext, teamId: 
     navigationControllerImpl = { [weak controller] in
         return controller?.navigationController as? NavigationController
     }
+    #if DEBUG
     controller.debugState = {
         let state = stateValue.with { $0 }
         return [
@@ -836,6 +847,7 @@ public func mattermostBrowseChannelsController(context: AccountContext, teamId: 
             pushImpl?(mattermostCreateChannelController(context: context, teamId: stateValue.with { $0.teamId }))
         }
     ]
+    #endif
     load(true)
     return controller
 }
@@ -1054,13 +1066,16 @@ private func mattermostChannelPreviewController(context: AccountContext, channel
     }
 
     let controller = MattermostDirectoryListController(context: context, state: signal)
+    #if DEBUG
     controller.debugName = "channel-preview"
+    #endif
     navigationControllerImpl = { [weak controller] in
         return controller?.navigationController as? NavigationController
     }
     presentImpl = { [weak controller] c in
         controller?.present(c, in: .window(.root))
     }
+    #if DEBUG
     controller.debugState = {
         let channel = channelValue.with { $0 }
         return ["screen": "channel-preview", "channelId": channelId, "name": channel?.name ?? "", "archived": channel?.isArchived ?? false, "joined": channel?.memberPeerId != nil, "joining": joiningValue.with { $0 }]
@@ -1070,5 +1085,6 @@ private func mattermostChannelPreviewController(context: AccountContext, channel
             join()
         }
     ]
+    #endif
     return controller
 }

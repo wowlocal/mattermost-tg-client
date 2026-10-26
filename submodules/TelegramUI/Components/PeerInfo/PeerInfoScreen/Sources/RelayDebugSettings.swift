@@ -1,5 +1,7 @@
 import Foundation
 
+#if DEBUG // MATTERMOST: debug builds only; release builds compile none of this file (Phase 4A)
+
 // MATTERMOST: debug only (`RELAY_DEBUG_OPEN_SCREEN=settings:add-account` in TelegramUI's RelayDebugScreens): runs
 // the Settings screen's "Add Account" handler, as a tap on the row does. Release builds compile none of this.
 public extension PeerInfoScreenImpl {
@@ -9,3 +11,4 @@ public extension PeerInfoScreenImpl {
         #endif
     }
 }
+#endif

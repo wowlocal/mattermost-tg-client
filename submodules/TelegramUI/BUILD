@@ -64,7 +64,8 @@ swift_library(
         "-warnings-as-errors",
     ],
     deps = [
-        "//third-party/recaptcha:RecaptchaEnterprise",
+        # MATTERMOST: no RecaptchaEnterprise in Relay (see AppDelegate, externalRecaptchaRequestVerification).
+        #"//third-party/recaptcha:RecaptchaEnterprise",
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/SSignalKit/SSignalKit:SSignalKit",
         "//submodules/AsyncDisplayKit:AsyncDisplayKit",

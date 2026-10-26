@@ -1,0 +1,100 @@
+# Privacy: App Store labels and privacy manifest (draft)
+
+> Draft for the person who publishes Relay. Not legal advice. The App Store answers depend on **who runs the
+> push proxy** and **how it logs**; both are open until the distribution decision (D1) is made.
+
+## How data flows
+
+```
+Relay (device) ──HTTPS──▶ the user's own Mattermost server(s)          ← everything: login, messages, files, profile
+Mattermost server ──▶ push proxy (whoever operates it) ──▶ Apple APNs ──▶ device   ← only when push is enabled
+```
+
+- Relay has **no backend of its own** and **no analytics, crash reporting, advertising or tracking SDKs**.
+  Nothing is sent to the publisher of the app.
+- Everything the app sends goes to the Mattermost server address the user typed at login (or a link into a
+  signed-in server). The server belongs to the user or their organisation; it is not the developer's and not a
+  "third-party partner" of the developer in Apple's sense.
+- Link previews never contact the linked site from the device: preview images load from the server or through
+  the server's image proxy (Phase 3E). The map in a shared location uses Apple's MapKit.
+- **Push notifications** are the one path through infrastructure that may be the publisher's: a Mattermost server
+  sends each push to the push proxy configured on the server, which signs it with Relay's APNs key and hands it to
+  Apple. Only the holder of Relay's APNs key can run that proxy (`infra/push-proxy/README.md`), so for an App
+  Store or TestFlight build it is normally the publisher. The proxy receives the APNs device token and the push
+  payload: in the server's `full` content mode that includes the sender, the channel name and the message text;
+  `generic` sends no message text, `id_loaded` sends only ids (the device fetches the text from the server).
+  The proxy forwards and forgets; it stores nothing, and with `EnableFileLog: false` (our template) its log goes
+  to the container's console only.
+- On the device: messages and media are cached in the app's data container (Telegram's encrypted Postbox
+  database); Mattermost session tokens are in the Keychain (app group access group, `AfterFirstUnlock`), shared
+  only with Relay's extensions.
+
+## App Store Connect: App Privacy answers (proposal)
+
+Apple's definition: data is **collected** when it is "transmitted off the device in a way that allows you and/or
+your third-party partners to access it for a period longer than what is necessary to service the transmitted
+request in real time". Data that only goes to a server the user chose, and that the developer cannot access, is
+not collected by the developer.
+
+**Proposed answer: "Data Not Collected"**, on these conditions (each must stay true):
+
+1. The app contains no analytics/crash/ads SDK (true today; re-check before each release, see "Checks" below).
+2. The push proxy (if the publisher runs it) does not retain payloads or device tokens beyond forwarding them:
+   no file logs, console logs not shipped to a log store, or at least no payload contents at the configured
+   log level. If its logs are kept, answer instead:
+   - **User Content → Other User Content** (message text in pushes, `full` mode) and **Identifiers → Device ID**
+     (APNs token): *App Functionality*, **not linked** to identity unless the logs also hold the user id (the
+     push payload carries the Mattermost user/channel/post ids → then **linked**), **not used for tracking**.
+   - Or require servers to use `generic` / `id_loaded` push contents, which removes message text from the proxy.
+3. Relay keeps no server-side account system of its own (true: accounts are the Mattermost server's).
+
+**Tracking:** No (no data is combined with third-party data, no IDFA, no data brokers).
+
+**Privacy policy URL** (required even for "Data Not Collected"): publish a short page, e.g. in the repository
+(`https://github.com/wowlocal/mattermost-tg-client/blob/main/docs/release/privacy-policy.md` once written) or the
+publisher's website. Points it must make: no data to the developer; data goes to the server the user signs in to,
+under that server operator's policy; push notification relay as above; on-device storage and how to delete it
+(log out / delete the app); contact address.
+
+## Privacy manifest (`PrivacyInfo.xcprivacy`)
+
+`Telegram/Relay/PrivacyInfo.xcprivacy` is bundled into the app and each shipped extension (Share, NotificationService,
+NotificationContent) through `Telegram/BUILD` (`RelayPrivacyManifest`). It declares:
+
+- `NSPrivacyTracking`: false; `NSPrivacyTrackingDomains`: none.
+- `NSPrivacyCollectedDataTypes`: none (see the conditions above; add entries here too if the answers change).
+- `NSPrivacyAccessedAPITypes` — required-reason APIs found in the shipped binaries (symbol and selector scan of
+  the release build, see "Checks"), with the reason that matches what the code does:
+
+| Category | Where (examples) | Reason |
+|---|---|---|
+| File timestamp (`stat`/`fstat`/`lstat`, `creationDate`, `modificationDate`, `contentModificationDateKey`) | Postbox media cache cleanup (`TimeBasedCleanup`, `MediaBox`), log rotation (`TelegramCore/Utils/Log.swift`), SQLCipher, the notification extension's avatar cache, the media editor's drafts | `C617.1` (files inside the app's container / app group container) |
+| System boot time (`systemUptime`, `mach_absolute_time`) | passcode lock timers, MtProtoKit's monotonic clock, WebRTC/FFmpeg timers, media editor | `35F9.1` (elapsed time between events in the app) |
+| Disk space (`systemFreeSize`, `statfs`/`statvfs`) | low-storage warning before downloads (`CheckDiskSpace`), the storage usage screen and chat-list storage hint, SQLCipher | `E174.1` (enough space before writing files) and `85F4.1` (shown to the user) |
+| Active keyboards (`activeInputModes`) | the composer restores the keyboard language last used in a chat (`ChatInputTextNode`, `ASEditableTextNode`) | `54BD.1` (customise the UI based on the active keyboards) |
+| User defaults (`UserDefaults`) | app settings and launch flags, app-only (no `suiteName` app-group defaults) | `CA92.1` (app-only defaults) |
+
+The bundled frameworks (`TelegramUIFramework` etc.) are our own code built from source, so the app's manifest
+covers them. If App Store Connect answers an upload with **ITMS-91053 "Missing API declaration"** naming a
+framework, add the same file to that framework bundle (or the missing category/reason to the manifest) and upload
+again.
+
+## Checks before each release
+
+Run on the release build's `Payload/Telegram.app` (see `docs/release/RELEASE.md` "Audit"):
+
+- No tracking/analytics SDKs: `find Telegram.app -name '*.framework'` lists only Relay's own frameworks
+  (MtProtoKit, SwiftSignalKit, Postbox, TelegramCore, TelegramUI); no `RecaptchaEnterprise`, `AppCenter`,
+  `Firebase*`, `GoogleUtilities`.
+- Required-reason APIs: `nm -u` on each binary for `_stat`, `_fstat`, `_lstat`, `_getattrlist`, `_statfs`,
+  `_statvfs`, `_mach_absolute_time`, and `strings` for the selectors `systemUptime`, `activeInputModes`,
+  `systemFreeSize`, `creationDate`, `modificationDate`, `NSUserDefaults`; each category found must be in the
+  manifest.
+- No network destinations other than the user's server(s) during a smoke test (`lsof -i -a -p <pid>` on the
+  simulator app; Phase 2–3 checks always showed only the server).
+
+## Usage descriptions (Info.plist)
+
+Relay asks for: camera, microphone, photo library (read/add), contacts (only when sharing a contact), location
+(only when sharing a location), Face ID (passcode unlock), motion (location sharing). All are requested at the
+moment of use, never at launch. Wording lives in `Telegram/BUILD` (`TelegramInfoPlist`).

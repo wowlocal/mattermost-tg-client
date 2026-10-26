@@ -4,6 +4,8 @@ import Postbox
 import TelegramCore
 import MattermostKit
 
+#if DEBUG // MATTERMOST: debug builds only; release builds compile none of this file (Phase 4A)
+
 /// Debug-only login for tests and scripted runs: server URL and credentials come from the launch
 /// environment, e.g.
 /// `SIMCTL_CHILD_RELAY_DEBUG_MM_URL=http://localhost:8065 SIMCTL_CHILD_RELAY_DEBUG_MM_LOGIN=alice
@@ -72,3 +74,4 @@ public enum MattermostDebugLogin {
         #endif
     }
 }
+#endif

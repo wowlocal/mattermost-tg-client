@@ -9,6 +9,8 @@ import PeerInfoScreen
 import MattermostSync
 import MattermostUI
 
+#if DEBUG // MATTERMOST: debug builds only; release builds compile none of this file (Phase 4A)
+
 // MATTERMOST: debug only (Phase 3F). Own status, custom status, profile, notification preferences and sharing commands
 // of the debug remote (`tools/relay-remote.py`), each through the code path a tap runs:
 // - `profile-state`: the account's own status, custom status, profile fields and notification preferences as the
@@ -247,3 +249,4 @@ extension TelegramRootController {
     }
     #endif
 }
+#endif

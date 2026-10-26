@@ -5,6 +5,8 @@ import TelegramCore
 import MattermostKit
 import MattermostSyncCore
 
+#if DEBUG // MATTERMOST: debug builds only; release builds compile none of this file (Phase 4A)
+
 /// Debug-only helpers for the collapsed-reply-threads checks (Phase 3B), used by TelegramUI's debug remote
 /// commands (`RelayDebugScreens`). Release builds return nothing.
 public extension MattermostSync {
@@ -282,4 +284,5 @@ extension MattermostAccountSync {
         return report
     }
 }
+#endif
 #endif

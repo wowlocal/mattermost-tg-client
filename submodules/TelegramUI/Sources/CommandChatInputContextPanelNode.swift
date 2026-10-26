@@ -362,14 +362,13 @@ final class CommandChatInputContextPanelNode: ChatInputContextPanelNode {
     private func prepareTransition(from: [CommandChatInputContextPanelEntry]? , to: [CommandChatInputContextPanelEntry]) {
         let firstTime = self.currentEntries == nil
         let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
-        // MATTERMOST: the debug remote can pick an entry (RelayDebugComposer.swift).
-        let debugCommands = to.compactMap { entry -> ChatInputTextCommand? in
+        // MATTERMOST: the debug remote can pick an entry (RelayDebugComposer.swift; the list is built in debug builds only).
+        let transition = preparedTransition(from: from ?? [], to: to, context: self.context, presentationData: presentationData, commandSelected: mattermostDebugCommandPick(to.compactMap { entry -> ChatInputTextCommand? in
             if case let .command(command) = entry.content {
                 return command.command
             }
             return nil
-        }
-        let transition = preparedTransition(from: from ?? [], to: to, context: self.context, presentationData: presentationData, commandSelected: mattermostDebugCommandPick(debugCommands, { [weak self] command, sendImmediately in
+        }, { [weak self] command, sendImmediately in
             guard let strongSelf = self, let interfaceInteraction = strongSelf.interfaceInteraction else {
                 return
             }

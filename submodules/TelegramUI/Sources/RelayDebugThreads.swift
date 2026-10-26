@@ -11,6 +11,8 @@ import ChatControllerInteraction
 import MattermostSync
 import MattermostUI
 
+#if DEBUG // MATTERMOST: debug builds only; release builds compile none of this file (Phase 4A)
+
 // MATTERMOST: debug only (Phase 3B). Chat-screen commands of the debug remote (`tools/relay-remote.py`), for
 // checks without UI automation; each goes through the code path a tap uses:
 // - `chat` (`query`): opens a chat as the chat list does;
@@ -259,3 +261,4 @@ extension TelegramRootController {
     }
     #endif
 }
+#endif

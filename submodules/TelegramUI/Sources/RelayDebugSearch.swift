@@ -12,6 +12,8 @@ import PeerInfoScreen
 import MattermostSync
 import MattermostUI
 
+#if DEBUG // MATTERMOST: debug builds only; release builds compile none of this file (Phase 4A)
+
 // MATTERMOST: debug only (Phase 3C). Search, saved posts, mentions and pinning commands of the debug remote
 // (`tools/relay-remote.py`), for checks without UI automation; each goes through the code path a tap uses:
 // - `search` (`query`; `filter`: chats, media, links, files, music): the chat list's search field (`activateSearch`),
@@ -452,3 +454,4 @@ extension TelegramRootController {
     }
     #endif
 }
+#endif
