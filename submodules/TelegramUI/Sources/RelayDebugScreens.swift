@@ -12,7 +12,7 @@ import SettingsUI
 //   SIMCTL_CHILD_RELAY_DEBUG_OPEN_SCREEN=<screen> xcrun simctl launch <udid> org.relaychat.Relay
 //
 // - `settings`: the Settings tab;
-// - `privacy`, `data`, `notifications`, `appearance`: Settings sub-screens;
+// - `privacy`, `data`, `notifications`, `appearance`, `about`: Settings sub-screens;
 // - `compose`: the New Message screen;
 // - `peerinfo`, `attach`: the profile of / the attach menu in the chat that the Spike A hook opened
 //   (combine with `SIMCTL_CHILD_RELAY_DEBUG_OPEN_CHAT=dm|ios-team|…`).
@@ -38,7 +38,7 @@ extension TelegramRootController {
             }
         case "compose":
             self.openRootCompose()
-        case "privacy", "data", "notifications", "appearance":
+        case "privacy", "data", "notifications", "appearance", "about":
             guard let context = self.chatListController?.context else {
                 return
             }
@@ -53,6 +53,8 @@ extension TelegramRootController {
                 controller = dataAndStorageController(context: context)
             case "notifications":
                 controller = notificationsAndSoundsController(context: context, exceptionsList: nil, focusOnItemTag: nil)
+            case "about":
+                controller = relayAboutController(context: context)
             default:
                 controller = themeSettingsController(context: context)
             }

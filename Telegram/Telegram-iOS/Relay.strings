@@ -74,3 +74,10 @@
 "AccessDenied.Contacts" = "Relay needs access to your contacts so that you can share them in chats.\n\nPlease go to Settings > Privacy > Contacts and set Relay to ON.";
 "Chat.Context.Username.NotOnTelegram" = "This user doesn't exist on this server.";
 "InfoPlist.NSContactsUsageDescription" = "Relay uses your contacts only when you choose one to share in a chat.";
+
+/* Relay's own screens. */
+"Relay.About.Title" = "About Relay";
+"Relay.About.Version" = "Version";
+"Relay.About.SourceCode" = "Source Code";
+"Relay.About.SourceCodeInfo" = "Relay is built from the open-source Telegram-iOS project. Its complete source code, including Relay's changes, is published at the address above.";
+"Relay.About.Disclaimer" = "Relay is an independent app. It is not affiliated with or endorsed by Telegram or Mattermost.";

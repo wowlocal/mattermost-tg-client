@@ -192,6 +192,7 @@ enum PeerInfoSettingsSection {
     case stars
     case ton
     case wallet
+    case about // MATTERMOST: About Relay
 }
 
 enum PeerInfoReportType {

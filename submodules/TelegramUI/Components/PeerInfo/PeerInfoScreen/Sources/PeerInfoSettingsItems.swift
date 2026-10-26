@@ -27,6 +27,7 @@ enum SettingsSection: Int, CaseIterable {
     case payment
     case extra
     case support
+    case about // MATTERMOST: About Relay
 }
 
 func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, isExpanded: Bool) -> [(AnyHashable, [PeerInfoScreenItem])] {
@@ -359,6 +360,13 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.support]!.append(PeerInfoScreenDisclosureItem(id: 2, text: presentationData.strings.Settings_Tips, icon: PresentationResourcesSettings.tips, action: {
         interaction.openSettings(.tips)
     }))
+
+    // MATTERMOST: About Relay (version, where the source code is published) in place of Telegram's help rows.
+    if MattermostFeatures.relayScreens {
+        items[.about]!.append(PeerInfoScreenDisclosureItem(id: 0, text: presentationData.strings.Relay_About_Title, icon: PresentationResourcesSettings.faq, action: {
+            interaction.openSettings(.about)
+        }))
+    }
     
     var result: [(AnyHashable, [PeerInfoScreenItem])] = []
     // MATTERMOST: Telegram-only sections (phone/password suggestions, wallet, proxy, bot apps, Premium and
