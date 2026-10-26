@@ -27,3 +27,7 @@ build:macos --strategy=SwiftCompile=worker
 
 common:macos --features=swift.use_global_module_cache
 common:macos --features=oso_prefix_is_pwd
+
+# MATTERMOST: cap the shared disk cache (--disk_cache from Make.py --cacheDir); without a cap it grew to 136 GB.
+common --experimental_disk_cache_gc_max_size=40G
+common --experimental_disk_cache_gc_max_age=14d
