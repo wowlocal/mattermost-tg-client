@@ -111,6 +111,10 @@ extension MattermostAccountSync {
         guard let reference = self.postReference(for: messageId) else {
             return .failed("This message isn't on the server yet.")
         }
+        if let channelState = self.channelState(reference.channelId) {
+            // A dialog the integration opens (`trigger_id`) belongs to this chat.
+            self.noteInteraction(channelId: reference.channelId, teamId: self.teamId(for: channelState))
+        }
         let answer = MMLocked<Post?>(nil)
         let waiter = PostActionWaiters.shared.add(accountId: self.account.id, channelId: reference.channelId, { post in
             answer.with { $0 = post }
@@ -146,18 +150,17 @@ extension MattermostAccountSync {
     }
 
     /// `ephemeral_message`: a message only this user sees (an integration's answer, a slash command's
-    /// output). It goes to a waiting action, or is shown as a notice.
-    func applyEphemeral(_ post: Post) {
+    /// output). It goes to a waiting action (shown as a toast with the action's result), or into the chat as a
+    /// local message (`EphemeralPosts.swift`, Phase 3D).
+    func applyEphemeral(_ post: Post) async {
         if PostActionWaiters.shared.deliver(accountId: self.account.id, post: post) {
             MMLog.log("live: ephemeral message in \(post.channelId) answers an action")
             return
         }
-        let text = MattermostMarkdown.parse(post.message).text
-        if text.isEmpty {
+        if MattermostMarkdown.parse(post.message).text.isEmpty && (post.props["attachments"] == nil) {
             return
         }
-        MMLog.log("live: ephemeral message in \(post.channelId)")
-        self.notice("\(self.ephemeralAuthorName(post)) (only visible to you): \(text)")
+        await self.writeEphemeralMessage(post)
     }
 
     private func ephemeralAuthorName(_ post: Post) -> String {

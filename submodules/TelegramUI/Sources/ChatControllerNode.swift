@@ -5249,6 +5249,10 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
             self.updateTypingActivity(false)
             
             let trimmedInputText = effectiveInputText.string.trimmingCharacters(in: .whitespacesAndNewlines)
+            // MATTERMOST: a slash command runs on the server instead of being posted (MattermostComposerQueries.swift).
+            if self.mattermostRunSlashCommand(text: effectiveInputText.string, controller: self.controller, completion: completion) {
+                return
+            }
             let peerId = effectivePresentationInterfaceState.chatLocation.peerId
             if peerId?.namespace != Namespaces.Peer.SecretChat, let interactiveEmojis = self.interactiveEmojis, interactiveEmojis.emojis.contains(trimmedInputText), effectiveInputText.attribute(ChatTextInputAttributes.customEmoji, at: 0, effectiveRange: nil) == nil {
                 messages.append(.message(text: "", attributes: [], inlineStickers: [:], mediaReference: AnyMediaReference.standalone(media: TelegramMediaDice(emoji: trimmedInputText)), threadId: self.chatLocation.threadId, replyToMessageId: self.chatPresentationInterfaceState.interfaceState.replyMessageSubject?.subjectModel, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: []))
