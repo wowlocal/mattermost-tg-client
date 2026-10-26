@@ -323,13 +323,13 @@ final class MarkdownTests: XCTestCase {
 
     func testTables() {
         check([
-            Case("| a | b |\n|---|:-:|\n| 1 | 22 |\n| 333 | 4 |", "a   | b\n----+---\n1   | 22\n333 | 4", [on(.pre(language: nil), "a   | b\n----+---\n1   | 22\n333 | 4")]),
-            Case("| **a** | `b` |\n|--|--|\n| c | d |", "a | b\n--+--\nc | d", [on(.pre(language: nil), "a | b\n--+--\nc | d")]),
-            Case("Name | Value\n--- | ---\nx | 1\n\nafter", "Name | Value\n-----+------\nx    | 1\n\nafter", [on(.pre(language: nil), "Name | Value\n-----+------\nx    | 1")]),
+            Case("| a | b |\n|---|:-:|\n| 1 | 22 |\n| 333 | 4 |", "a   | b\n----+---\n1   | 22\n333 | 4", [on(.pre(language: "table"), "a   | b\n----+---\n1   | 22\n333 | 4")]),
+            Case("| **a** | `b` |\n|--|--|\n| c | d |", "a | b\n--+--\nc | d", [on(.pre(language: "table"), "a | b\n--+--\nc | d")]),
+            Case("Name | Value\n--- | ---\nx | 1\n\nafter", "Name | Value\n-----+------\nx    | 1\n\nafter", [on(.pre(language: "table"), "Name | Value\n-----+------\nx    | 1")]),
             Case("a | b\nnot a table", "a | b\nnot a table"),
             // Alignment from the delimiter row.
-            Case("| Item | Qty |\n|:--|--:|\n| tea | 2 |\n| coffee | 10 |", "Item   | Qty\n-------+----\ntea    |   2\ncoffee |  10", [on(.pre(language: nil), "Item   | Qty\n-------+----\ntea    |   2\ncoffee |  10")]),
-            Case("| x | mid | y |\n|---|:---:|---|\n| 1 | a | 2 |", "x | mid | y\n--+-----+--\n1 |  a  | 2", [on(.pre(language: nil), "x | mid | y\n--+-----+--\n1 |  a  | 2")]),
+            Case("| Item | Qty |\n|:--|--:|\n| tea | 2 |\n| coffee | 10 |", "Item   | Qty\n-------+----\ntea    |   2\ncoffee |  10", [on(.pre(language: "table"), "Item   | Qty\n-------+----\ntea    |   2\ncoffee |  10")]),
+            Case("| x | mid | y |\n|---|:---:|---|\n| 1 | a | 2 |", "x | mid | y\n--+-----+--\n1 |  a  | 2", [on(.pre(language: "table"), "x | mid | y\n--+-----+--\n1 |  a  | 2")]),
         ])
     }
 

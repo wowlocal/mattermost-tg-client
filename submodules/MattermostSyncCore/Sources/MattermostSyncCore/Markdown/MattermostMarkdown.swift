@@ -641,6 +641,11 @@ private struct BlockRenderer {
     /// unreadable.
     static let tableGridMaxWidth = 30
 
+    /// The grid's code block language: Telegram labels a code block with its language (a header row that also
+    /// holds the copy button, which would otherwise sit on the first line of a narrow block); no highlighter
+    /// grammar has this name.
+    static let tableLanguage = "table"
+
     func inline(_ text: String) -> FormattedText {
         return InlineParser.parse(text, options: self.options)
     }
@@ -788,7 +793,7 @@ private struct BlockRenderer {
         if let grid = BlockRenderer.tableGrid(cells.map { $0.map { $0.text } }, alignments: alignments) {
             let start = builder.length
             builder.append(grid)
-            builder.addEntity(from: start, type: .pre(language: nil))
+            builder.addEntity(from: start, type: .pre(language: BlockRenderer.tableLanguage))
             return
         }
         let body = cells.dropFirst()
