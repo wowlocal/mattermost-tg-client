@@ -142,10 +142,8 @@ extension MattermostAccountSync {
             transaction.setPinnedItemIds(groupId: .root, itemIds: pinned)
         }
         await self.writeTeamFolders(teams: teams)
-        let chatIds = included.map { $0.channel.id }
-        self.addTask(Task { [weak self] in
-            await self?.refreshMemberCounts(chatIds)
-        })
+        // Member counts ("N members" in a chat's title) load when a chat or profile asks for its cached data
+        // (`ChatObserver`), not for every chat at every launch (Phase 4B: one request per chat).
         self.state.with { $0.isBootstrapped = true }
         self.bootstrapped.set(true)
         MMLog.log("bootstrap: structure written in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms: \(teams.count) teams, \(included.count) chats, \(users.count) users, \(favoriteChannelIds.count) favorites")
@@ -169,18 +167,10 @@ extension MattermostAccountSync {
             }
             return lhs.channel.lastPostAt > rhs.channel.lastPostAt
         }.map { $0.channel.id }
-        let failures = MMLocked<Int>(0)
-        try await self.forEachConcurrently(ordered, limit: 4) { channelId in
-            do {
-                _ = try await self.loadPage(channelId: channelId, cursor: .latest, requestedRange: nil, resetReadState: true)
-            } catch {
-                failures.with { $0 += 1 }
-                MMLog.log("bootstrap: newest page of \(channelId) failed: \(error)")
-            }
-        }
-        if failures.current > 0 {
+        let failures = await self.loadNewestPages(ordered)
+        if failures > 0 {
             // Their holes stay; opening the chat (or the next catch-up) loads them.
-            MMLog.log("bootstrap: \(failures.current) newest pages failed")
+            MMLog.log("bootstrap: \(failures) newest pages failed")
         }
 
         await self.finishCollapsedThreadsBootstrap(changed: collapsedThreadsChanged, isFirstSync: true)
@@ -214,6 +204,77 @@ extension MattermostAccountSync {
                 await self?.reloadAllThreads()
             })
         }
+    }
+
+    /// The newest page of every channel in `channelIds` (in that order), as the bootstrap needs them (Phase 4B):
+    /// pages are fetched `fetchLimit` at a time and written in batches of `batchSize` channels, each batch with one
+    /// users request, one Postbox transaction and one thread-roots request, while the next batch is fetched. One
+    /// transaction per page made the first sync of 600 chats take 87 s (every transaction also updates the chat
+    /// list on screen). Returns the number of channels whose page failed (their holes stay).
+    func loadNewestPages(_ channelIds: [String], batchSize: Int = 25, fetchLimit: Int = 6) async -> Int {
+        if channelIds.isEmpty {
+            return 0
+        }
+        let started = CFAbsoluteTimeGetCurrent()
+        let batches = stride(from: 0, to: channelIds.count, by: batchSize).map { Array(channelIds[$0 ..< min(channelIds.count, $0 + batchSize)]) }
+        let fetch: ([String]) -> Task<[(String, PostList?)], Never> = { [weak self] batch in
+            return Task {
+                guard let self = self else {
+                    return []
+                }
+                let results = MMLocked<[String: PostList]>([:])
+                try? await self.forEachConcurrently(batch, limit: fetchLimit) { channelId in
+                    do {
+                        let list = try await self.client.posts(channelId: channelId, page: 0, perPage: self.perPage)
+                        results.with { $0[channelId] = list }
+                    } catch {
+                        MMLog.log("bootstrap: newest page of \(channelId) failed: \(error)")
+                    }
+                }
+                let lists = results.current
+                return batch.map { ($0, lists[$0]) }
+            }
+        }
+        var failures = 0
+        var written = 0
+        var next: Task<[(String, PostList?)], Never>? = fetch(batches[0])
+        for index in 0 ..< batches.count {
+            guard let current = next else {
+                break
+            }
+            let fetched = await current.value
+            next = index + 1 < batches.count ? fetch(batches[index + 1]) : nil
+            if Task.isCancelled {
+                next?.cancel()
+                break
+            }
+            var pages: [PageWrite] = []
+            var userIds = Set<String>()
+            var runs: [String: [Post]] = [:]
+            for (channelId, list) in fetched {
+                guard let list = list else {
+                    failures += 1
+                    continue
+                }
+                let ordered = list.orderedPosts
+                let isFull = ordered.count >= self.perPage
+                let run = isFull ? trimCutGroup(ordered, oldest: true) : ordered
+                let extra = extraPosts(list, run: run)
+                userIds.formUnion(referencedUserIds(run + extra))
+                pages.append(PageWrite(channelId: channelId, kind: .latest(reachedStart: !isFull), run: run, extra: extra, requestedRange: nil, resetReadState: true))
+                runs[channelId] = run
+            }
+            await self.ensureUsers(userIds)
+            await self.postbox.mmTransaction { transaction in
+                for page in pages {
+                    self.write(page, transaction: transaction)
+                }
+            }
+            await self.refreshThreadRoots(postsByChannel: runs)
+            written += pages.count
+            MMLog.log("bootstrap: newest pages \(written)/\(channelIds.count) after \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
+        }
+        return failures
     }
 
     /// Runs `body` for every item with at most `limit` running at once.

@@ -74,6 +74,9 @@ public enum MattermostSync {
     private static let lifecycle = MMLocked<Lifecycle?>(nil)
     private static let lifecycleDisposable = MetaDisposable()
     private static let activationObserver = MMLocked<NSObjectProtocol?>(nil)
+    private static let backgroundObserver = MMLocked<NSObjectProtocol?>(nil)
+    /// Phase 4B: when the app last entered the background (nil while it is active).
+    private static let enteredBackgroundAt = MMLocked<Double?>(nil)
 
     static let userAgent = "Relay/0.1 (iOS; MattermostSync)"
     /// Sync-store cursors kept by the account lifecycle.
@@ -218,6 +221,52 @@ public enum MattermostSync {
         }
     }
 
+    /// Phase 4B: after more than 10 s in the background, every running account checks that its WebSocket
+    /// survived the suspension (a dead one would otherwise only be noticed by the next 30-second ping).
+    private static func checkConnectionsOnActivation() {
+        guard let since = self.enteredBackgroundAt.with({ value -> Double? in
+            let since = value
+            value = nil
+            return since
+        }) else {
+            return
+        }
+        let seconds = CFAbsoluteTimeGetCurrent() - since
+        if seconds < 10.0 {
+            return
+        }
+        for sync in self.accounts.with({ Array($0.values) }) {
+            sync.appBecameActive(afterBackground: seconds)
+        }
+    }
+
+    /// Phase 4B: a background refresh (`BGAppRefreshTask`, registered by the app): waits up to `timeout` seconds
+    /// for the accounts to start (the system may have launched the app for this task), then catches every running
+    /// account up. Returns false when it ran out of time or was cancelled.
+    public static func backgroundRefresh(timeout: Double) async -> Bool {
+        let started = CFAbsoluteTimeGetCurrent()
+        MMLog.log("background refresh: started")
+        var syncs: [MattermostAccountSync] = []
+        while CFAbsoluteTimeGetCurrent() - started < timeout && !Task.isCancelled {
+            syncs = self.accounts.with { Array($0.values) }
+            if !syncs.isEmpty && syncs.allSatisfy({ $0.state.with { $0.isBootstrapped } }) {
+                break
+            }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        syncs = syncs.filter { $0.state.with { $0.isBootstrapped } }
+        await withTaskGroup(of: Void.self) { group in
+            for sync in syncs {
+                group.addTask {
+                    await sync.catchUp()
+                }
+            }
+        }
+        let ok = !syncs.isEmpty && !Task.isCancelled
+        MMLog.log("background refresh: \(syncs.count) account(s) caught up in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms\(ok ? "" : " (incomplete)")")
+        return ok
+    }
+
     /// Stops the account's sync and marks its session expired (also called for a rejected WebSocket).
     static func sessionExpired(accountId: AccountRecordId, reason: String) {
         guard let sync = self.accounts.with({ $0.removeValue(forKey: accountId) }) else {
@@ -329,8 +378,14 @@ public enum MattermostSync {
         // `UIApplication.didBecomeActiveNotification` (MattermostSync doesn't import UIKit).
         let observer = NotificationCenter.default.addObserver(forName: Notification.Name("UIApplicationDidBecomeActiveNotification"), object: nil, queue: nil, using: { _ in
             MattermostSync.verifySessionsOnActivation()
+            MattermostSync.checkConnectionsOnActivation()
         })
         self.activationObserver.with { $0 = observer }
+        // `UIApplication.didEnterBackgroundNotification` (Phase 4B: how long the app was away).
+        let backgroundObserver = NotificationCenter.default.addObserver(forName: Notification.Name("UIApplicationDidEnterBackgroundNotification"), object: nil, queue: nil, using: { _ in
+            MattermostSync.enteredBackgroundAt.with { $0 = CFAbsoluteTimeGetCurrent() }
+        })
+        self.backgroundObserver.with { $0 = backgroundObserver }
         let handled = MMLocked<Set<AccountRecordId>>([])
         let isFirstView = MMLocked<Bool>(true)
         self.lifecycleDisposable.set(accountManager.accountRecords().start(next: { view in

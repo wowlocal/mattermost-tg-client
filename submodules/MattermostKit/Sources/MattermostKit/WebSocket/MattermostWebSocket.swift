@@ -266,6 +266,13 @@ public actor MattermostWebSocket {
         try await sendAction("ping")
     }
 
+    /// Sends a `ping` action that fails after `timeout`, e.g. a quick check that the connection survived while
+    /// the app was suspended.
+    @discardableResult
+    public func ping(timeout: TimeInterval) async throws -> WebSocketResponse {
+        try await sendAction("ping", data: [:], timeout: timeout)
+    }
+
     // MARK: - URL
 
     /// `ws(s)://<host>/<subpath>/api/v4/websocket` for a server site URL.

@@ -1633,6 +1633,10 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         }
         #endif
         
+        // MATTERMOST: background catch-up (Phase 4B, RelayBackgroundRefresh.swift).
+        if MattermostBackend.isEnabled {
+            RelayBackgroundRefresh.register(baseAppBundleId: baseAppBundleId)
+        }
         if #available(iOS 13.0, *) {
             let cleanupTaskId = "\(baseAppBundleId).cleanup"
             
