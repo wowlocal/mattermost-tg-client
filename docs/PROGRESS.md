@@ -30,7 +30,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | Upstream checkout | repo root | Done (shallow, submodules shallow) |
 | iOS 27 simulator runtime | `xcodebuild -downloadPlatform iOS` | Downloading (not blocking: iOS 26.5 works) |
 | First simulator build (stock code, our bundle ID) | [BUILD.md](BUILD.md) | Done: builds in ~9 min, launches |
-| MattermostKit (REST + WebSocket client) | `submodules/MattermostKit` | Agent working |
+| MattermostKit (REST + WebSocket client) | [submodules/MattermostKit](../submodules/MattermostKit/README.md) | Done: 139 tests pass (`xcrun swift test`); no Bazel BUILD file yet |
 | MattermostSyncCore (ID allocator, markdown, mapping helpers) | `submodules/MattermostSyncCore` | Agent working |
 | Local Mattermost server + seed + fixtures | [infra/dev-server](../infra/dev-server/README.md) | Done: Mattermost 11.7.14 ESR (Team Edition) at http://localhost:8065, reset+seed 56 s |
 | Telegram internals map (Spike A prep, assumptions) | [telegram-internals.md](research/telegram-internals.md) | Done |
@@ -42,7 +42,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 - [x] Simulator build with our bundle ID
 - [x] Local Mattermost server seeded
 - [ ] Spike A: boot without MTProto, fake data renders
-- [ ] Spike B: MattermostKit skeleton with tests
+- [x] Spike B: MattermostKit skeleton with tests
 - [ ] Spike C: message ID allocator with tests
 - [ ] Spike D: real channel history in the chat screen
 - [x] TelegramEngine inventory for kept screens (research doc §7)
@@ -68,3 +68,8 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 - iOS 27.0 simulator runtime installed (iOS 26.5 sim still used for the spike).
 - Wrote [MattermostSync design](design/mattermost-sync.md): module layout, SQLite ID map store, bootstrap order, hole-fill contract, managed-operation replacements, Spike D scope.
 - Dev server done: 5 users, bot, 2 teams / 34 channels, `firehose` 11,730 posts (2013 + 2024–2026), threads, reactions, custom emoji, files, interactive posts; 35 REST + 12 WebSocket fixtures in `infra/dev-server/fixtures/`. Note: 11.x sends `multiple_channels_viewed` instead of `channel_viewed`; Team Edition used because the unlicensed Enterprise image caps history at 10,000 posts.
+- MattermostKit done. Findings from the real 11.7 server that matter for MattermostSync:
+  - A resumed WebSocket gets **no** `hello`; missed events are replayed. The client probes with a ping right after connect to tell "resumed" from "new connection".
+  - An invalid token still gets a WebSocket upgrade, then silence; the client times out the handshake and checks `GET /users/me`.
+  - Use `channelsViewed` (handles `multiple_channels_viewed` and `channel_viewed`).
+  - Use `xcrun swift` (or `/usr/bin/swift`): the swiftly 6.3.3 `swift` first on PATH can't build against the Xcode 27 SDK.
