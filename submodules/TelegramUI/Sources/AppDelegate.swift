@@ -1096,7 +1096,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         }
 
         let pushRegistry = PKPushRegistry(queue: .main)
-        if #available(iOS 9.0, *) {
+        // MATTERMOST: no calls, so no VoIP pushes (and no `voip` background mode).
+        if #available(iOS 9.0, *), MattermostFeatures.calls {
             pushRegistry.desiredPushTypes = Set([.voIP])
         }
         self.pushRegistry = pushRegistry

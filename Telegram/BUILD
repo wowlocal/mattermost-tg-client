@@ -1735,7 +1735,7 @@ plist_fragment(
         <string>fetch</string>
         <string>location</string>
         <string>remote-notification</string>
-        <string>voip</string>
+        <!-- MATTERMOST: no voip (no calls) -->
         <string>processing</string>
     </array>
     <key>UIDeviceFamily</key>
@@ -1871,9 +1871,11 @@ ios_application(
             ":ShareExtension",
             ":NotificationContentExtension",
             ":NotificationServiceExtension" + notificationServiceExtensionVersion,
-            ":IntentsExtension",
-            ":WidgetExtension",
-            ":BroadcastUploadExtension",
+            # MATTERMOST: Siri intents, the widget and call screen sharing are Telegram-only or "Later"
+            # (docs/plan/06-feature-scope.md). Their targets stay buildable.
+            #":IntentsExtension",
+            #":WidgetExtension",
+            #":BroadcastUploadExtension",
         ],
     }),
     # Embed the in-repo tgwatch watch app (Telegram/WatchApp) under Watch/ only when
