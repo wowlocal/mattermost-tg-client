@@ -1471,6 +1471,8 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
     private var customAnimationInProgress: Bool = false
     
     private var onlineIsVoiceChat: Bool = false
+    // MATTERMOST: a Mattermost status dot instead of the online dot (4F).
+    private var mattermostStatus: MattermostPresenceStatus?
     private var currentOnline: Bool?
     
     override public var canBeSelected: Bool {
@@ -2195,7 +2197,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
             }
             
             if let item = self.item, case .chatList = item.index {
-                self.onlineNode.setImage(PresentationResourcesChatList.recentStatusOnlineIcon(item.presentationData.theme, state: .highlighted, voiceChat: self.onlineIsVoiceChat), color: nil, transition: transition)
+                self.onlineNode.setImage(PresentationResourcesChatList.mattermostRecentStatusIcon(item.presentationData.theme, state: .highlighted, voiceChat: self.onlineIsVoiceChat, status: self.mattermostStatus), color: nil, transition: transition) // MATTERMOST
                 let baseColor = item.isPinned ? item.presentationData.theme.chatList.pinnedItemBackgroundColor : item.presentationData.theme.chatList.itemBackgroundColor
                 let highlightColor = self.highlightedBackgroundNode.backgroundColor ?? item.presentationData.theme.chatList.itemHighlightedBackgroundColor
                 self.starView?.setOutlineColor(highlightColor.mixedWith(baseColor, alpha: 1.0 - self.highlightedBackgroundNode.alpha), transition: transition)
@@ -2209,10 +2211,10 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                 let onlineIcon: UIImage?
                 let effectiveBackgroundColor: UIColor
                 if item.isPinned {
-                    onlineIcon = PresentationResourcesChatList.recentStatusOnlineIcon(item.presentationData.theme, state: .pinned, voiceChat: self.onlineIsVoiceChat)
+                    onlineIcon = PresentationResourcesChatList.mattermostRecentStatusIcon(item.presentationData.theme, state: .pinned, voiceChat: self.onlineIsVoiceChat, status: self.mattermostStatus) // MATTERMOST
                     effectiveBackgroundColor = item.presentationData.theme.chatList.pinnedItemBackgroundColor
                 } else {
-                    onlineIcon = PresentationResourcesChatList.recentStatusOnlineIcon(item.presentationData.theme, state: .regular, voiceChat: self.onlineIsVoiceChat)
+                    onlineIcon = PresentationResourcesChatList.mattermostRecentStatusIcon(item.presentationData.theme, state: .regular, voiceChat: self.onlineIsVoiceChat, status: self.mattermostStatus) // MATTERMOST
                     effectiveBackgroundColor = item.presentationData.theme.chatList.itemBackgroundColor
                 }
                 self.onlineNode.setImage(onlineIcon, color: nil, transition: transition)
@@ -3890,6 +3892,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
             var online = false
             var animateOnline = false
             var onlineIsVoiceChat = false
+            var mattermostStatus: MattermostPresenceStatus? // MATTERMOST: away / do not disturb (4F)
             
             var isPinned = false
             if case let .chatList(index) = item.index {
@@ -3917,6 +3920,11 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                             let timestamp = Int32(CFAbsoluteTimeGetCurrent() + NSTimeIntervalSince1970)
                             let relativeStatus = relativeUserPresenceStatus(updatedPresence, relativeTo: timestamp)
                             if case .online = relativeStatus {
+                                online = true
+                            }
+                            // MATTERMOST: away and do-not-disturb users get Mattermost's status dot (4F).
+                            if let status = presence.mattermostStatus {
+                                mattermostStatus = status
                                 online = true
                             }
                             animateOnline = true
@@ -4086,6 +4094,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                     strongSelf.cachedChatListQuoteSearchResult = chatListQuoteSearchResult
                     strongSelf.cachedCustomTextEntities = customTextEntities
                     strongSelf.onlineIsVoiceChat = onlineIsVoiceChat
+                    strongSelf.mattermostStatus = mattermostStatus // MATTERMOST
                     
                     var animateOnline = animateOnline
                     if let currentOnline = strongSelf.currentOnline, currentOnline == online {
@@ -4462,13 +4471,13 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                     let onlineIcon: UIImage?
                     let effectiveBackgroundColor: UIColor
                     if strongSelf.reallyHighlighted {
-                        onlineIcon = PresentationResourcesChatList.recentStatusOnlineIcon(item.presentationData.theme, state: .highlighted, voiceChat: onlineIsVoiceChat)
+                        onlineIcon = PresentationResourcesChatList.mattermostRecentStatusIcon(item.presentationData.theme, state: .highlighted, voiceChat: onlineIsVoiceChat, status: mattermostStatus) // MATTERMOST
                         effectiveBackgroundColor = item.presentationData.theme.chatList.itemHighlightedBackgroundColor
                     } else if case let .chatList(index) = item.index, index.pinningIndex != nil {
-                        onlineIcon = PresentationResourcesChatList.recentStatusOnlineIcon(item.presentationData.theme, state: .pinned, voiceChat: onlineIsVoiceChat)
+                        onlineIcon = PresentationResourcesChatList.mattermostRecentStatusIcon(item.presentationData.theme, state: .pinned, voiceChat: onlineIsVoiceChat, status: mattermostStatus) // MATTERMOST
                         effectiveBackgroundColor = item.presentationData.theme.chatList.pinnedItemBackgroundColor
                     } else {
-                        onlineIcon = PresentationResourcesChatList.recentStatusOnlineIcon(item.presentationData.theme, state: .regular, voiceChat: onlineIsVoiceChat)
+                        onlineIcon = PresentationResourcesChatList.mattermostRecentStatusIcon(item.presentationData.theme, state: .regular, voiceChat: onlineIsVoiceChat, status: mattermostStatus) // MATTERMOST
                         effectiveBackgroundColor = item.presentationData.theme.chatList.itemBackgroundColor
                     }
                     strongSelf.onlineNode.setImage(onlineIcon, color: item.presentationData.theme.list.itemCheckColors.foregroundColor, transition: .immediate)

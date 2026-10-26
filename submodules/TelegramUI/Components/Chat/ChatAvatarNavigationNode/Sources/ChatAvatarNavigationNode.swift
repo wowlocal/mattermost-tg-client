@@ -92,6 +92,54 @@ public final class ChatAvatarNavigationNode: ASDisplayNode {
         self.view.isOpaque = false
     }
     
+    // MATTERMOST: a DM partner's Mattermost status as a dot on the avatar (4F), as the chat list shows it: online
+    // (green), away (yellow), do not disturb (red with a bar); nothing for offline users and other chats.
+    private var mattermostStatusView: UIView?
+
+    public func setMattermostPresence(theme: PresentationTheme, presence: TelegramUserPresence?) {
+        var color: UIColor?
+        var isDoNotDisturb = false
+        if let presence = presence {
+            switch presence.mattermostStatus {
+            case .doNotDisturb:
+                color = UIColor(rgb: 0xD24B4E)
+                isDoNotDisturb = true
+            case .away:
+                color = UIColor(rgb: 0xFFBC1F)
+            case nil:
+                if case let .present(until) = presence.status, until > Int32(Date().timeIntervalSince1970) {
+                    color = theme.chatList.onlineDotColor
+                }
+            }
+        }
+        guard let color = color else {
+            self.mattermostStatusView?.removeFromSuperview()
+            self.mattermostStatusView = nil
+            return
+        }
+        let statusView: UIView
+        if let current = self.mattermostStatusView {
+            statusView = current
+        } else {
+            statusView = UIView()
+            statusView.isUserInteractionEnabled = false
+            statusView.layer.cornerRadius = 6.5
+            statusView.layer.borderWidth = 1.5
+            let bar = UIView(frame: CGRect(x: 3.5, y: 5.75, width: 6.0, height: 1.5))
+            bar.backgroundColor = .white
+            bar.tag = 1
+            statusView.addSubview(bar)
+            self.mattermostStatusView = statusView
+            self.containerNode.view.addSubview(statusView)
+        }
+        statusView.backgroundColor = color
+        statusView.layer.borderColor = theme.rootController.navigationBar.opaqueBackgroundColor.cgColor
+        statusView.viewWithTag(1)?.isHidden = !isDoNotDisturb
+        let size = CGSize(width: 13.0, height: 13.0)
+        statusView.frame = CGRect(origin: CGPoint(x: self.avatarNode.frame.maxX - size.width + 1.0, y: self.avatarNode.frame.maxY - size.height + 1.0), size: size)
+        self.containerNode.view.bringSubviewToFront(statusView)
+    }
+
     public func setStatus(context: AccountContext, content: EmojiStatusComponent.Content) {
         let statusSize = self.statusView.update(
             transition: .immediate,
