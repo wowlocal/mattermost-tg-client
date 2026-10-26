@@ -210,11 +210,15 @@ final class MarkdownTests: XCTestCase {
             Case(":thumbsup::-1:", "👍👎"),
             Case("a:smile: and :smile:b", "a:smile: and :smile:b"),
             Case("`:smile:`", ":smile:", [on(.code, ":smile:")]),
-            Case(":100: :1234:", "💯 :1234:"),
+            Case(":100: :1234: :12345:", "💯 🔢 :12345:"),
+            Case(":floppy_disk: :thinking: :thinking_face:", "💾 🤔 🤔"),
+            Case(":+1_light_skin_tone: :wave_medium_dark_skin_tone:", "👍🏻 👋🏾"),
+            Case(":flag-de: :man-woman-boy:", "🇩🇪 \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F466}"),
             Case(":Smile:", "😄"),
             Case("**:fire: hot**", "🔥 hot", [on(.bold, "🔥 hot")]),
         ])
-        XCTAssertGreaterThanOrEqual(EmojiTable.allNames.count, 150)
+        XCTAssertGreaterThanOrEqual(EmojiTable.allNames.count, 3000)
+        XCTAssertGreaterThanOrEqual(EmojiTable.allEmoji.count, 1800)
         for name in EmojiTable.allNames {
             let emoji = EmojiTable.unicode(forName: name) ?? ""
             XCTAssertFalse(emoji.isEmpty)
@@ -226,7 +230,12 @@ final class MarkdownTests: XCTestCase {
         XCTAssertEqual(EmojiTable.name(forUnicode: "👍"), "+1")
         XCTAssertEqual(EmojiTable.name(forUnicode: "\u{2764}\u{FE0F}"), "heart")
         XCTAssertEqual(EmojiTable.name(forUnicode: "\u{2764}"), "heart")
-        XCTAssertEqual(EmojiTable.name(forUnicode: "🤔"), "thinking")
+        // The names Mattermost clients send (checked against the 11.7 web app): `thinking_face`, not the alias.
+        XCTAssertEqual(EmojiTable.name(forUnicode: "🤔"), "thinking_face")
+        XCTAssertEqual(EmojiTable.name(forUnicode: "💾"), "floppy_disk")
+        XCTAssertEqual(EmojiTable.name(forUnicode: "😆"), "laughing")
+        XCTAssertEqual(EmojiTable.name(forUnicode: "👍🏽"), "+1_medium_skin_tone")
+        XCTAssertFalse(EmojiTable.allEmoji.contains(where: { $0.emoji == "👍🏽" }), "skin tones resolve but are not listed")
         XCTAssertNil(EmojiTable.name(forUnicode: "x"))
         // Every emoji maps back to a name that maps to the same emoji.
         for (name, emoji) in EmojiTable.allEmoji {
