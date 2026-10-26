@@ -21,7 +21,7 @@
 
 Telegram‑iOS (at the pinned tag):
 
-- [ ] `LICENSE` is GPL‑2.0. Record whether it is "only" or "or later".
+- [x] `LICENSE` is GPL‑2.0 — **no LICENSE file exists in the repo**; needs legal confirmation (see 08).
 - [ ] `MessageIndex` ordering (timestamp → namespace → id) and holes tracked as Int32 ID ranges per peer and namespace.
 - [ ] `PeerReadState` supports ID‑based state with an explicit unread `count`.
 - [ ] Chat‑list inclusion can place a peer with no messages using a minimum timestamp.

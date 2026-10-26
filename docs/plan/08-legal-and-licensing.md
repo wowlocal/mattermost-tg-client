@@ -2,11 +2,12 @@
 
 > This is an engineering summary, not legal advice. Get counsel before any public release.
 
-## Telegram‑iOS is GPL‑2.0
+## Telegram‑iOS licensing (GPL, to be confirmed)
 
-- The fork as a whole must be distributed under the **GPL‑2.0**.
+- **Checked 2026‑10‑26:** the repository has **no `LICENSE` file**, neither at the pinned commit nor anywhere in its history (GitHub reports no license). The README only says: "Please remember to publish **your** code too in order to comply with the licences." Telegram's clients are generally described as GPL‑licensed, but the exact version ("2 only", "2 or later", or 3) is not stated in the repo. **Get the terms confirmed by counsel before any external distribution.**
+- Plan on the GPL in the meantime: the fork as a whole is distributed under the GPL.
 - Anyone who receives the app must be able to get the **complete corresponding source**. This includes App Store and TestFlight users. The simplest way is a public repository at the exact released commit.
-- Check the `LICENSE` file at the pinned tag, and whether it says "version 2 only" or "version 2 or later". This affects which other licenses we can combine with it.
+- The exact GPL version affects which other licenses we can combine with it (see Apache‑2.0 below).
 - Code we write is our copyright. `MattermostKit` contains no Telegram code, so it could also be published separately under a permissive license if we want to reuse it. Combined into the app, it is distributed under the GPL.
 - Telegram‑iOS bundles third‑party code under various licenses (e.g. FFmpeg, WebRTC, Opus). Keep their notices. Review them again after stripping features, because some may no longer be needed.
 

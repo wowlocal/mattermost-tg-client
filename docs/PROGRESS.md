@@ -86,3 +86,4 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   - Also fixed: the call reflector benchmark sent UDP to Telegram (internal builds); now off.
   - Debug hook: `SIMCTL_CHILD_RELAY_DEBUG_OPEN_CHAT=1|ios-team|town-square|dm|off-topic|saved`.
 - Spike D started (agent): debug login as alice, bootstrap, hole filler, WebSocket events, converters, media resources.
+- License check: Telegram-iOS has no LICENSE file (pinned commit or history); README only asks forks to publish their code. Updated plan 08: license terms need legal confirmation before external distribution.
