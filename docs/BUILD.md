@@ -183,6 +183,33 @@ tools/relay-remote.py "$UDID" pinned                                   # the vis
 tools/relay-remote.py "$UDID" pinned-list                              # the bar's list button: all pinned messages
 ```
 
+#### Phase 3E: link previews, links, Copy Link (debug builds only)
+
+TelegramUI `RelayDebugLinks.swift`; results in the result's `extra`. Link taps go through the chat's own `openUrl`
+(what a tap on a link calls), so the in-app link handling and the "Open this link?" prompt are exercised:
+
+```sh
+tools/relay-remote.py "$UDID" links                                    # visible messages: link previews, link/heading/code entities
+tools/relay-remote.py "$UDID" tap-link url=http://localhost:8065/engineering/pl/<post id>   # tap a link (concealed=1: a [text](url) link)
+tools/relay-remote.py "$UDID" tap-preview post=<post id>               # tap the message's link preview card
+tools/relay-remote.py "$UDID" copy-link post=<post id>                 # message menu: Copy Link → the pasteboard
+tools/relay-remote.py "$UDID" share-link post=<post id>                # message menu: Share Link (system share sheet)
+tools/relay-remote.py "$UDID" last-link                                # where the last link led, the chat on top
+tools/relay-remote.py "$UDID" open-url url=relay://localhost:8065/engineering/pl/<post id>  # the app delegate's open-URL entry (via=system: UIApplication.open)
+xcrun simctl openurl "$UDID" "relay://localhost:8065/engineering/pl/<post id>"   # from the system: SpringBoard asks "Open in Relay?"
+```
+
+`simctl openurl` puts up SpringBoard's "Open in "Relay"?" confirmation; Simulator taps don't reach it here, AXe does:
+`axe touch -x 275 -y 474 --down --up --delay 0.15 --udid "$UDID"` (iPhone 17 Pro; `axe describe-ui` gives the button's
+frame). To test a link of another account's server on one dev server, add the second account with
+`http://127.0.0.1:8065` as the server address: it is a different host, so `http://127.0.0.1:8065/…` links belong to it.
+
+Link previews need pages the server can fetch: the dev server only fetches `localhost` URLs, so run a small
+OpenGraph responder (Python stdlib, keep it outside `infra/`) in a container sharing the Mattermost container's
+network namespace (`docker run --network container:mmdev-mattermost-1 …`, listening on `127.0.0.1:<port>`) and post
+`http://localhost:<port>/…` links. Preview images load only from the server itself or through its image proxy
+(`ImageProxySettings.Enable`, `PUT /api/v4/config/patch` as sysadmin; it is off on the dev server by default).
+
 #### Phase 2D hooks (debug builds only)
 
 - `RELAY_DEBUG_OPEN_SCREEN=devices` (Settings → Devices), `openlinks` (Open Links In), `reaction-notifications`, `authorinfo` (profile of the newest message's author in the chat `RELAY_DEBUG_OPEN_CHAT` opened, e.g. a webhook's name override), `settings:add-account` (Settings → Add Account through the Settings handler, account limit included).
