@@ -33,7 +33,8 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | MattermostKit (REST + WebSocket client) | `submodules/MattermostKit` | Agent working |
 | MattermostSyncCore (ID allocator, markdown, mapping helpers) | `submodules/MattermostSyncCore` | Agent working |
 | Local Mattermost server + seed + fixtures | `infra/dev-server` | Agent working |
-| Telegram internals map (Spike A prep, assumptions) | `docs/research/telegram-internals.md` | Agent working |
+| Telegram internals map (Spike A prep, assumptions) | [telegram-internals.md](research/telegram-internals.md) | Done |
+| Spike A: null network engine + seeded account | TelegramCore, `submodules/MattermostSync` | Agent working (only workstream running Bazel) |
 
 ## Phase 0 checklist
 
@@ -45,7 +46,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 - [ ] Spike C: message ID allocator with tests
 - [ ] Spike D: real channel history in the chat screen
 - [ ] TelegramEngine inventory for kept screens
-- [ ] Assumptions in 09 verified
+- [x] Assumptions in 09 verified (code reading; see research doc table)
 
 ## Log
 
@@ -56,3 +57,11 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 - Started: simulator runtime download, first build, four agents (MattermostKit, MattermostSyncCore, dev server, Telegram internals research).
 - Build fixes (commit `d5181136`): `Make.py build --disableProvisioningProfiles`; stubbed the one iOS 27.1‑SDK call (`Display/WindowContent.swift`, marked `MATTERMOST:`). Installed the Metal toolchain.
 - First simulator build succeeded; stock app launches under `org.relaychat.Relay`.
+- Telegram internals research done. Corrections to the plan:
+  - Main history can't exclude thread replies; collapsed threads need new work (tag bit for root posts is the least invasive option).
+  - Emoji status only references custom-emoji files; custom status text needs a new field.
+  - Map GMs to `TelegramChannel` (group) instead of `TelegramGroup`: basic groups never get `threadId` on replies.
+  - Holes are per (peer, namespace, tag space); a fill must remove at least the requested range or it is retried every 20 s.
+  - Each server's own user needs a distinct local `PeerId`, or the shared context deletes one account.
+  - Every channel needs a chat-list inclusion, or its history stays "loading".
+- Spike A started (agent): null `NetworkEngine`, skip `resetStateManagement`, seeded authorized account.
