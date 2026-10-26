@@ -44,8 +44,10 @@ public enum MattermostRenewSessionError: Error, Equatable {
 /// stops the sync, ends the session on the server (`POST /users/logout`, best effort), removes the Keychain
 /// token, removes the record and deletes the account's directory (postbox, media, sync store).
 ///
-/// **Session expiry**: a 401 to any request made with the token (confirmed with `GET /users/me`) or a
-/// WebSocket the server rejects stops the account's sync and marks it expired (`expiredSessions`); the flag
+/// **Session expiry**: a 401 to any request made with the token (confirmed with `GET /users/me`), a
+/// WebSocket the server rejects, or a rejected token check when the app becomes active (a revoked session
+/// otherwise goes unnoticed while the WebSocket stays open) stops the account's sync and marks it expired
+/// (`expiredSessions`); the flag
 /// is kept in the sync store, so it survives relaunches. Logging in again as the same user keeps the local
 /// data (`renewSession`); as another user, the old account is logged out and a new one created
 /// (`replaceAccount`), because local ids, read states and caches belong to the old user.
@@ -71,6 +73,7 @@ public enum MattermostSync {
     private static let createdTokens = MMLocked<Set<AccountRecordId>>([])
     private static let lifecycle = MMLocked<Lifecycle?>(nil)
     private static let lifecycleDisposable = MetaDisposable()
+    private static let activationObserver = MMLocked<NSObjectProtocol?>(nil)
 
     static let userAgent = "Relay/0.1 (iOS; MattermostSync)"
     /// Sync-store cursors kept by the account lifecycle.
@@ -181,6 +184,11 @@ public enum MattermostSync {
 
     /// A request made with the account's token got a 401: confirm with `GET /users/me`, then expire.
     static func reportUnauthorized(accountId: AccountRecordId) {
+        self.verifySession(accountId: accountId, reason: "a request was rejected (401)")
+    }
+
+    /// Asks the server whether the account's token is still accepted (`GET /users/me`); expires it if not.
+    private static func verifySession(accountId: AccountRecordId, reason: String) {
         guard let sync = self.sync(accountId: accountId) else {
             return
         }
@@ -192,8 +200,17 @@ public enum MattermostSync {
             let accepted = await sync.client.isTokenAccepted()
             self.checkingTokens.with { $0.remove(accountId) }
             if !accepted {
-                self.sessionExpired(accountId: accountId, reason: "a request was rejected (401)")
+                self.sessionExpired(accountId: accountId, reason: reason)
             }
+        }
+    }
+
+    /// A revoked session gets no WebSocket close and no 401 until the app sends a request, so every running
+    /// account checks its token when the app becomes active.
+    private static func verifySessionsOnActivation() {
+        let ids = self.accounts.with { Array($0.keys) }
+        for id in ids {
+            self.verifySession(accountId: id, reason: "the token was rejected when the app became active")
         }
     }
 
@@ -270,6 +287,11 @@ public enum MattermostSync {
     public static func startLifecycle(accountManager: AccountManager<TelegramAccountManagerTypes>, rootPath: String, encryptionParameters: ValueBoxEncryptionParameters) {
         let lifecycle = Lifecycle(accountManager: accountManager, rootPath: rootPath, encryptionParameters: encryptionParameters)
         self.lifecycle.with { $0 = lifecycle }
+        // `UIApplication.didBecomeActiveNotification` (MattermostSync doesn't import UIKit).
+        let observer = NotificationCenter.default.addObserver(forName: Notification.Name("UIApplicationDidBecomeActiveNotification"), object: nil, queue: nil, using: { _ in
+            MattermostSync.verifySessionsOnActivation()
+        })
+        self.activationObserver.with { $0 = observer }
         let handled = MMLocked<Set<AccountRecordId>>([])
         let isFirstView = MMLocked<Bool>(true)
         self.lifecycleDisposable.set(accountManager.accountRecords().start(next: { view in

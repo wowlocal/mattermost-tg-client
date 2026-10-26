@@ -25,7 +25,8 @@ protocol MattermostDebugDrivable: AnyObject {
 /// (`"action"` plus arguments):
 /// - `state`: the visible login screen, accounts, expired sessions, Keychain tokens, account directories;
 /// - `fill` (`field`, `text`): a field of the visible login screen (`url`, `login`, `password`, `code`);
-/// - `press` (`button`): `primary` (Connect / Log In), `cancel`, `back`, or an SSO provider (`gitlab`, …);
+/// - `press` (`button`): `primary` (Connect / Log In), `cancel`, `back`, `confirm` ("Continue" on the
+///   re-login's "Log In as …?" alert), or an SSO provider (`gitlab`, …);
 /// - `add-account`: Settings → Add Account (`beginNewAuth`);
 /// - `switch` (`username` or `accountId`): the account switcher;
 /// - `logout` (`username` or `accountId`, default: the current account): Settings → Log Out → OK

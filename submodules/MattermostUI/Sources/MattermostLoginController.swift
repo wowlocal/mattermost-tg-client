@@ -283,6 +283,8 @@ public final class MattermostLoginController: NavigationController {
             } catch let error as MattermostError where error.isMFARequired {
                 await MainActor.run {
                     screen.inProgress = false
+                    // Leaving the form counts as a submitted login for iOS's Save Password sheet.
+                    screen.clearDebugFilledPasswords()
                     self.pushMFAScreen(loginId: loginId, password: password, server: server)
                 }
             } catch {
@@ -401,28 +403,33 @@ public final class MattermostLoginController: NavigationController {
                 }
             } else {
                 let username = login.user.username
+                let replace: () -> Void = { [weak self] in
+                    Task {
+                        do {
+                            try await MattermostSync.replaceAccount(accountId: session.accountId, server: server, serverURL: server.url, login: login, loginId: loginId)
+                            await MainActor.run {
+                                self?.dismiss()
+                            }
+                        } catch {
+                            let message = (error as? MattermostAccountSetupError)?.message ?? (error as? MattermostRenewSessionError)?.message ?? error.localizedDescription
+                            await MainActor.run {
+                                step.inProgress = false
+                                step.presentAlert(title: "Can't Log In", text: message)
+                            }
+                        }
+                    }
+                }
                 let alert = textAlertController(sharedContext: self.sharedContext, title: "Log In as \(username)?", text: "This account belonged to a different user. Relay will remove that user's messages and files from this device and add \(username)'s account instead.", actions: [
                     TextAlertAction(type: .genericAction, title: self.presentationData.strings.Common_Cancel, action: {
                         step.inProgress = false
                     }),
-                    TextAlertAction(type: .defaultAction, title: "Continue", action: { [weak self] in
-                        Task {
-                            do {
-                                try await MattermostSync.replaceAccount(accountId: session.accountId, server: server, serverURL: server.url, login: login, loginId: loginId)
-                                await MainActor.run {
-                                    self?.dismiss()
-                                }
-                            } catch {
-                                let message = (error as? MattermostAccountSetupError)?.message ?? (error as? MattermostRenewSessionError)?.message ?? error.localizedDescription
-                                await MainActor.run {
-                                    step.inProgress = false
-                                    step.presentAlert(title: "Can't Log In", text: message)
-                                }
-                            }
-                        }
-                    })
+                    TextAlertAction(type: .defaultAction, title: "Continue", action: replace)
                 ])
-                (step as? ViewController)?.present(alert, in: .window(.root))
+                if let screen = step as? MattermostAuthScreen {
+                    screen.presentConfirmation(alert, confirm: replace)
+                } else {
+                    (step as? ViewController)?.present(alert, in: .window(.root))
+                }
             }
         }
     }

@@ -167,6 +167,14 @@ final class MattermostAuthScreen: ViewController, MattermostDebugDrivable {
         return true
     }
 
+    private var debugConfirmation: (alert: ViewController, action: () -> Void)?
+
+    /// Presents a confirmation alert whose default action the debug remote can press (`press button=confirm`).
+    func presentConfirmation(_ alert: ViewController, confirm: @escaping () -> Void) {
+        self.debugConfirmation = (alert, confirm)
+        self.present(alert, in: .window(.root))
+    }
+
     // MARK: MattermostDebugDrivable
 
     private var debugFilledPasswordFields = Set<String>()
@@ -211,6 +219,14 @@ final class MattermostAuthScreen: ViewController, MattermostDebugDrivable {
                 return false
             }
             navigationController.popViewController(animated: true)
+            return true
+        case "confirm":
+            guard let confirmation = self.debugConfirmation else {
+                return false
+            }
+            self.debugConfirmation = nil
+            confirmation.alert.dismiss()
+            confirmation.action()
             return true
         default:
             guard self.content.alternatives.contains(where: { $0.id == button }) else {
