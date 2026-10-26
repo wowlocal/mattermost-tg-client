@@ -32,7 +32,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | First simulator build (stock code, our bundle ID) | [BUILD.md](BUILD.md) | Done: builds in ~9 min, launches |
 | MattermostKit (REST + WebSocket client) | `submodules/MattermostKit` | Agent working |
 | MattermostSyncCore (ID allocator, markdown, mapping helpers) | `submodules/MattermostSyncCore` | Agent working |
-| Local Mattermost server + seed + fixtures | `infra/dev-server` | Agent working |
+| Local Mattermost server + seed + fixtures | [infra/dev-server](../infra/dev-server/README.md) | Done: Mattermost 11.7.14 ESR (Team Edition) at http://localhost:8065, reset+seed 56 s |
 | Telegram internals map (Spike A prep, assumptions) | [telegram-internals.md](research/telegram-internals.md) | Done |
 | Spike A: null network engine + seeded account | TelegramCore, `submodules/MattermostSync` | Agent working (only workstream running Bazel) |
 
@@ -40,7 +40,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 
 - [x] Choose and record the pinned upstream commit; clone with submodules
 - [x] Simulator build with our bundle ID
-- [ ] Local Mattermost server seeded
+- [x] Local Mattermost server seeded
 - [ ] Spike A: boot without MTProto, fake data renders
 - [ ] Spike B: MattermostKit skeleton with tests
 - [ ] Spike C: message ID allocator with tests
@@ -67,3 +67,4 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 - Spike A started (agent): null `NetworkEngine`, skip `resetStateManagement`, seeded authorized account.
 - iOS 27.0 simulator runtime installed (iOS 26.5 sim still used for the spike).
 - Wrote [MattermostSync design](design/mattermost-sync.md): module layout, SQLite ID map store, bootstrap order, hole-fill contract, managed-operation replacements, Spike D scope.
+- Dev server done: 5 users, bot, 2 teams / 34 channels, `firehose` 11,730 posts (2013 + 2024–2026), threads, reactions, custom emoji, files, interactive posts; 35 REST + 12 WebSocket fixtures in `infra/dev-server/fixtures/`. Note: 11.x sends `multiple_channels_viewed` instead of `channel_viewed`; Team Edition used because the unlicensed Enterprise image caps history at 10,000 posts.
