@@ -665,7 +665,7 @@ public final class ShareController: ViewController {
             forceTheme: self.forceTheme,
             fromPublicChannel: fromPublicChannel,
             segmentedValues: self.segmentedValues,
-            shareStory: self.shareStory,
+            shareStory: MattermostFeatures.stories ? self.shareStory : nil, // MATTERMOST: no stories
             collectibleItemInfo: self.collectibleItemInfo,
             messageCount: messageCount
         )
