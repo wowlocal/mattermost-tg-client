@@ -23,4 +23,5 @@ config_setting(
 exports_files([
     "GenerateStrings/GenerateStrings.py",
     "GenerateStrings/MergeStrings.py", # MATTERMOST: Relay's string overlay
+    "GenerateStrings/PseudoLocalizeStrings.py", # MATTERMOST: the en-XA pseudo-language (debug builds)
 ])
