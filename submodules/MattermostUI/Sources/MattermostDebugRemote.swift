@@ -12,6 +12,8 @@ protocol MattermostDebugDrivable: AnyObject {
     var debugScreenName: String { get }
     func debugFill(field: String, text: String) -> Bool
     func debugPress(button: String) -> Bool
+    /// "OK" on the error alert the screen shows, if any.
+    func debugDismissAlerts() -> Bool
 }
 
 /// **Debug builds only.** Drives the login screens and the account lifecycle through the same code paths as
@@ -23,7 +25,7 @@ protocol MattermostDebugDrivable: AnyObject {
 /// (`"action"` plus arguments):
 /// - `state`: the visible login screen, accounts, expired sessions, Keychain tokens, account directories;
 /// - `fill` (`field`, `text`): a field of the visible login screen (`url`, `login`, `password`, `code`);
-/// - `press` (`button`): `primary` (Connect / Log In), `cancel`, or an SSO provider (`gitlab`, …);
+/// - `press` (`button`): `primary` (Connect / Log In), `cancel`, `back`, or an SSO provider (`gitlab`, …);
 /// - `add-account`: Settings → Add Account (`beginNewAuth`);
 /// - `switch` (`username` or `accountId`): the account switcher;
 /// - `logout` (`username` or `accountId`, default: the current account): Settings → Log Out → OK
@@ -113,18 +115,17 @@ final class MattermostDebugRemote {
             let ok = MattermostSessionExpiryPresenter.shared.debugOpenLogin()
             self.writeResult(id: id, ok: ok, error: ok ? nil : "no expired session")
         case "dismiss-alerts":
-            // "OK" on in-app alerts (error alerts of the login screens).
-            var alerts: [ViewController] = []
-            self.sharedContext?.mainWindow?.forEachViewController({ controller in
-                if let controller = controller as? ViewController, String(describing: type(of: controller)).contains("Alert") {
-                    alerts.append(controller)
+            // "OK" on the login screens' error alerts (each screen in the flow, top first).
+            var dismissed = false
+            if let screen = self.screen {
+                dismissed = screen.debugDismissAlerts()
+                if let navigationController = (screen as? ViewController)?.navigationController {
+                    for case let other as MattermostDebugDrivable in navigationController.viewControllers.reversed() where other !== screen {
+                        dismissed = other.debugDismissAlerts() || dismissed
+                    }
                 }
-                return true
-            })
-            for alert in alerts {
-                alert.dismiss()
             }
-            self.writeResult(id: id, ok: true, error: alerts.isEmpty ? "no alert" : nil)
+            self.writeResult(id: id, ok: dismissed, error: dismissed ? nil : "no alert")
         default:
             self.writeResult(id: id, ok: false, error: "unknown action \(action)")
         }

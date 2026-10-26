@@ -77,8 +77,11 @@ final class MattermostMFAScreen: ViewController, MattermostDebugDrivable {
         self.screenNode.reportError(text)
     }
 
+    private weak var presentedAlert: ViewController?
+
     func presentAlert(title: String?, text: String) {
         let alert = textAlertController(sharedContext: self.sharedContext, title: title, text: text, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})])
+        self.presentedAlert = alert
         self.present(alert, in: .window(.root))
     }
 
@@ -93,7 +96,20 @@ final class MattermostMFAScreen: ViewController, MattermostDebugDrivable {
     }
 
     func debugPress(button: String) -> Bool {
-        return false
+        guard button == "back", !self.inProgress, let navigationController = self.navigationController else {
+            return false
+        }
+        navigationController.popViewController(animated: true)
+        return true
+    }
+
+    func debugDismissAlerts() -> Bool {
+        guard let alert = self.presentedAlert else {
+            return false
+        }
+        alert.dismiss()
+        self.presentedAlert = nil
+        return true
     }
 }
 

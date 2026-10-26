@@ -150,9 +150,21 @@ final class MattermostAuthScreen: ViewController, MattermostDebugDrivable {
         HapticFeedback().error()
     }
 
+    private weak var presentedAlert: ViewController?
+
     func presentAlert(title: String?, text: String) {
         let alert = textAlertController(sharedContext: self.sharedContext, title: title, text: text, actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})])
+        self.presentedAlert = alert
         self.present(alert, in: .window(.root))
+    }
+
+    func debugDismissAlerts() -> Bool {
+        guard let alert = self.presentedAlert else {
+            return false
+        }
+        alert.dismiss()
+        self.presentedAlert = nil
+        return true
     }
 
     // MARK: MattermostDebugDrivable
@@ -193,6 +205,12 @@ final class MattermostAuthScreen: ViewController, MattermostDebugDrivable {
                 return false
             }
             self.cancelPressed()
+            return true
+        case "back":
+            guard !self.inProgress, let navigationController = self.navigationController, navigationController.viewControllers.count > 1 else {
+                return false
+            }
+            navigationController.popViewController(animated: true)
             return true
         default:
             guard self.content.alternatives.contains(where: { $0.id == button }) else {

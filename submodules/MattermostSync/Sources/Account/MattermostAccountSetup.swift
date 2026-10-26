@@ -248,6 +248,9 @@ public enum MattermostAccountSetup {
         let serverURLString = serverURL.absoluteString
         if let existing = MattermostSync.registeredAccount(userId: login.user.id, serverURL: serverURLString) {
             MMLog.log("login: \(login.user.username) on \(serverURLString) already has account \(existing.int64)")
+            // The login made a session the app won't use: end it (best effort).
+            let client = MattermostClient(serverURL: serverURL, token: login.token, userAgent: self.userAgent)
+            try? await client.logout()
             throw MattermostAccountSetupError.alreadyLoggedIn(username: login.user.username)
         }
 
