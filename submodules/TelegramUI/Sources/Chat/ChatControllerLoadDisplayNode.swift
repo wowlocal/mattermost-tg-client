@@ -3270,7 +3270,16 @@ extension ChatControllerImpl {
                             }
                         }
                         
-                        if let peer = peer as? TelegramChannel, case .broadcast = peer.info, let contextController = contextController {
+                        if MattermostBackend.isEnabled {
+                            // MATTERMOST: a pin is the channel's (no "notify" or "for me only" choice).
+                            if let contextController = contextController {
+                                contextController.dismiss(completion: {
+                                    pinAction(false, false)
+                                })
+                            } else {
+                                pinAction(false, false)
+                            }
+                        } else if let peer = peer as? TelegramChannel, case .broadcast = peer.info, let contextController = contextController {
                             contextController.dismiss(completion: {
                                 pinAction(true, false)
                             })

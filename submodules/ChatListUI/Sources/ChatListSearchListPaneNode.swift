@@ -40,6 +40,7 @@ import ButtonComponent
 import BundleIconComponent
 import AnimatedTextComponent
 import TextFormat
+import MattermostSync
 
 private func isIncludedCommunityContainer(_ peer: EnginePeer?, filter: ChatListNodePeersFilter) -> Bool {
     if filter.contains(.includeCommunities), case .community = peer {
@@ -3788,8 +3789,10 @@ final class ChatListSearchListPaneNode: ASDisplayNode, ChatListSearchPaneNode {
             }
             self.searchQueryValue = query
 
-            listInteraction?.searchTextHighightState = query
-            chatListInteraction?.searchTextHighightState = query
+            // MATTERMOST: highlight the words of a Mattermost query, not its modifiers (`from:`, `in:`, quotes).
+            let highlight = MattermostBackend.isEnabled ? query.map(MattermostSync.searchHighlightText) : query
+            listInteraction?.searchTextHighightState = highlight
+            chatListInteraction?.searchTextHighightState = highlight
         })
         self.globalPostSearchState.set(context.engine.data.subscribe(
             TelegramEngine.EngineData.Item.Messages.GlobalPostSearchState()
