@@ -58,11 +58,13 @@ The session token is **not** stored here. It goes in the Keychain (shared access
 
 - Users → `CloudUser`, channels and GMs → `CloudChannel` (GMs as group channels, not `TelegramGroup`: basic groups never get `threadId` on replies; R Assumptions "02").
 - DMs → the other user's `CloudUser` peer. The self‑DM → own user peer (Saved Messages).
-- **Allocation:** sequential per namespace, starting at 1, per account. **Exception:** the own user's ID is a stable hash of `(server URL, user ID)` placed above the sequential range. Two servers must never give their own users the same `PeerId`, or `SharedAccountContextImpl` deletes one account (R§1.3). Verify the usable `PeerId.Id` payload width (R§3.1) before fixing the hash width.
+- **Allocation:** sequential per namespace, starting at 1, per account, skipping the user ids Telegram's code special-cases (`ReservedPeerIds`: 777000 service notifications, 333000, 489000 verification codes, 708513 and 1271266957 Replies, 225079 import, 2666000 anonymous saved messages, 0). **Exception:** the own user's ID is a stable hash of `(server URL, user ID)` placed above the sequential range. Two servers must never give their own users the same `PeerId`, or `SharedAccountContextImpl` deletes one account (R§1.3). Verify the usable `PeerId.Id` payload width (R§3.1) before fixing the hash width.
 
 ### Message IDs
 
 MattermostSyncCore's allocator (plan 02, option 2) behind `MessageIdStore`, backed by the `posts` table. Namespace `Cloud` for server posts, `Local` for messages being sent. Contract with Postbox (R§3.3): within a peer, local ID order equals `(create_at, post_id)` order.
+
+**Unread counting (2D).** Mattermost counts a post once; Postbox counts incoming messages. The non-primary messages of a multi-file post carry Postbox's `NotCountedAsUnread` flag (an upstream addition), so adding, reading and deleting them leaves the unread count alone and an album is one unread. **Badges:** the "@" mention badge (tag summary `.unseenPersonalMessage`) is shown for channels only; DMs and GMs show the unread count alone, since Mattermost counts every DM/GM message as a mention.
 
 **Post parts (2C).** A post shown as several messages (one per file, `PostLayout`) owns several ids: its own entry (part 0, the primary message) and parts `<post id>#01`, `#02`, … (`PostParts`). Part keys share the post's `create_at` and sort right after it and before any other post (`#` sorts before `[a-z0-9]`), so the allocator places them like any key. Only cursors (`HistoryHole.cursor`, `fillCursor`, `aroundCursor` return the server post of a part) and deletes (`markDeleted` takes the parts along) know about parts; `insertPost(_:partCount:)` adds missing parts (an edit added files), `removeParts` tombstones extra ones (an edit removed files; a removed part never comes back). Callers turn any entry into its server post with `entry.serverPostId`.
 
@@ -116,7 +118,9 @@ Replaces `managedMessageHistoryHoles` (R§3.3). Observes `postbox.messageHistory
 | `.range` going newer from `b` | `GET /channels/{c}/posts?after=<post(b)>&per_page=60` |
 | `.aroundId(x)` (permalink) | `GET /posts/{x}`, plus `before=x` and `after=x` in parallel |
 | `threadId != nil` | `GET /posts/{root}/thread` |
-| `space: .tag(...)` | Fill via the same channel paging (`.everywhere` removal also clears tag spaces) |
+| `space: .tag(.pinned)` | `GET /channels/{c}/pinned` |
+| `space: .tag(...)` file tags (photos/videos, files, music, voice, GIFs; 2D) | `POST /files/search` with `in:<channel id>` (100 files per page, up to 20 pages), then `POST /posts/ids` for the posts not loaded (plus their thread roots), written one by one; one search per channel serves every file tab; all file tag holes removed |
+| other `space: .tag(...)` (links, …) | local only: the tag hole is removed, the tab shows the loaded history (Mattermost can't search for posts with links) |
 
 **Fill contract (load‑bearing, R§3.3):** always remove at least the requested range, even for an empty response, or the request repeats every 20 s forever. When a page reaches the channel's first post (`prev_post_id == ""`), remove the hole down to 1.
 
@@ -150,7 +154,7 @@ Each consumer observes the same Postbox source the Telegram one does (`KeyedOper
 - The delivered event is emitted inside the rewriting transaction (as Telegram's `pendingMessageEvent`), before PendingMessageManager sees the unsent id disappear.
 - Media data of the upload is moved to the `MattermostFileResource` ids (file and preview; thumbnail when the local image has one).
 
-**Synthetic configuration** (`SyntheticConfiguration.swift`): at every start the app configuration (ui‑inventory §0.2 keys; `MaxPostSize` from the client config after bootstrap) and an `AvailableReactions` list: about 65 picker emoji (enabled), the server's custom emoji (enabled, `:name:`), every other built‑in emoji (disabled, so existing reactions render), plus the `CloudTopReactions` list the context menu reads. Reaction files are static WebP "custom emoji" files whose `LocalFileMediaResource` ids are hashes in a reserved range; `MattermostReactionImages` renders them on demand (Apple Color Emoji glyph, or the custom emoji image from `GET /emoji/{id}/image`).
+**Synthetic configuration** (`SyntheticConfiguration.swift`): at every start the app configuration (ui‑inventory §0.2 keys; `MaxPostSize` from the client config after bootstrap) and an `AvailableReactions` list: about 65 picker emoji (enabled), the server's custom emoji (enabled, `:name:`), the built‑in emoji that reactions use (disabled, so those reactions render; added as posts and `reaction_added` events with new emoji arrive, kept in the `reaction_emoji` cursor; listing all 1,900 emoji made the list 4.4 MB), plus the `CloudTopReactions` list the context menu reads. Reaction files are static WebP "custom emoji" files whose `LocalFileMediaResource` ids are hashes in a reserved range; `MattermostReactionImages` renders them on demand (Apple Color Emoji glyph, or the custom emoji image from `GET /emoji/{id}/image`).
 
 ## Rendering (2C)
 
@@ -200,7 +204,7 @@ Option (a) from R§1.4 / ui-inventory §4.3: Telegram's auth record stays; `Unau
 
 **Logout:** Telegram marks the record `.loggedOut`; its `managedCleanupAccounts` is skipped while `MattermostBackend.isEnabled` (it waits for an MTProto answer that never comes). `MattermostSync.startLifecycle` watches the records instead: stop the sync, `POST /users/logout` (best effort), remove the Keychain token, remove the record, delete `<root>/account-<id>`. Keychain tokens of records that no longer exist (they survive reinstalls) are removed at launch.
 
-**Session expiry:** a 401 to a request sent with the token (MattermostKit `Configuration.onUnauthorized`, confirmed with `GET /users/me`) or a rejected WebSocket stops the sync and marks the session expired (flag in the sync store, kept across launches). MattermostUI asks "Session Expired → Log In" (again whenever the app becomes active). Re-login as the same user stores the new token and restarts the sync on the existing data; as a different user, the old account is logged out (data deleted) and a new account created, because ids, read state and caches belong to the old user.
+**Session expiry:** a 401 to a request sent with the token (MattermostKit `Configuration.onUnauthorized`, confirmed with `GET /users/me`) or a rejected WebSocket stops the sync and marks the session expired (flag in the sync store, kept across launches). MattermostUI asks "Session Expired → Log In" (again whenever the app becomes active); while expired, `Account.mattermostSessionExpired` makes the network state read online and the chat list title "Session Expired" (a tap opens the re-login, `MattermostBackend.requestRelogin`). **Sends while expired** stay pending: `PostSender` writes with the account's running sync and otherwise waits for the next one (a re-login); a 401 during a send is confirmed with `GET /users/me`, expires the session and waits too. A logout ends the wait (the message fails). Re-login as the same user stores the new token and restarts the sync on the existing data; as a different user, the old account is logged out (data deleted) and a new account created, because ids, read state and caches belong to the old user.
 
 ## Spike D scope (read‑only)
 

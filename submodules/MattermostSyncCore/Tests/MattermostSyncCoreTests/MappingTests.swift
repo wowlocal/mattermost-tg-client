@@ -231,3 +231,22 @@ final class ServiceActionTests: XCTestCase {
         XCTAssertEqual(generic.mentions, [])
     }
 }
+
+final class SlashCommandTests: XCTestCase {
+    func testCommands() {
+        XCTAssertEqual(SlashCommand.parse("/away"), SlashCommand.Parsed(trigger: "away", arguments: ""))
+        XCTAssertEqual(SlashCommand.parse("/Echo  hello world "), SlashCommand.Parsed(trigger: "echo", arguments: "hello world "))
+        XCTAssertEqual(SlashCommand.parse("/header **new**\nsecond line"), SlashCommand.Parsed(trigger: "header", arguments: "**new**\nsecond line"))
+        XCTAssertEqual(SlashCommand.parse("/me waves"), SlashCommand.Parsed(trigger: "me", arguments: "waves"))
+    }
+
+    func testFalsePositivesArePosted() {
+        XCTAssertNil(SlashCommand.parse("/usr/bin/env python"))
+        XCTAssertNil(SlashCommand.parse("/path/to/file"))
+        XCTAssertNil(SlashCommand.parse("//not a command"))
+        XCTAssertNil(SlashCommand.parse("/"))
+        XCTAssertNil(SlashCommand.parse("/ hello"))
+        XCTAssertNil(SlashCommand.parse(" /away"))
+        XCTAssertNil(SlashCommand.parse("hello /away"))
+    }
+}

@@ -13,6 +13,13 @@ extension MattermostClient {
         return try await send(APIRequest(.get, "/emoji", query: query.items))
     }
 
+    /// `GET /emoji/autocomplete`: custom emoji whose name starts with `name`.
+    public func autocompleteCustomEmoji(name: String) async throws -> [CustomEmoji] {
+        var query = QueryBuilder()
+        query.add("name", name)
+        return try await send(APIRequest(.get, "/emoji/autocomplete", query: query.items))
+    }
+
     /// `GET /emoji/name/{emoji_name}`.
     public func customEmoji(name: String) async throws -> CustomEmoji {
         try await send(APIRequest(.get, apiPath("emoji", "name", name)))

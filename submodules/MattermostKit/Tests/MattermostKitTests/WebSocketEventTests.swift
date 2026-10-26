@@ -39,6 +39,29 @@ final class WebSocketEventTests: XCTestCase {
         XCTAssertEqual(posted.setOnline, true)
     }
 
+    func testOpenDialog() throws {
+        // As 11.7 sends it: `data.dialog` is the JSON-encoded `OpenDialogRequest`.
+        let dialog = #"{"trigger_id":"tr1","url":"http://localhost:8099/dialog","dialog":{"callback_id":"cb","title":"Deploy","introduction_text":"**Pick** a target","icon_url":"","elements":[{"display_name":"Name","name":"name","type":"text","subtype":"","default":"web","placeholder":"","help_text":"The service","optional":false,"min_length":2,"max_length":20,"data_source":"","options":null},{"display_name":"Env","name":"env","type":"select","default":"","optional":true,"options":[{"text":"Production","value":"prod"}]},{"display_name":"Notify","name":"notify","type":"bool","default":"true"}],"submit_label":"Go","notify_on_cancel":true,"state":"s1"}}"#
+        let data = try JSONEncoder().encode(["dialog": dialog])
+        let text = #"{"event":"open_dialog","data":"# + String(decoding: data, as: UTF8.self) + #","broadcast":{"user_id":"u1"},"seq":7}"#
+        let event = try event(text)
+        XCTAssertEqual(event.type, .openDialog)
+        let request = try XCTUnwrap(event.openDialog)
+        XCTAssertEqual(request.triggerId, "tr1")
+        XCTAssertEqual(request.url, "http://localhost:8099/dialog")
+        XCTAssertEqual(request.dialog.title, "Deploy")
+        XCTAssertEqual(request.dialog.submitLabel, "Go")
+        XCTAssertTrue(request.dialog.notifyOnCancel)
+        XCTAssertEqual(request.dialog.elements.map(\.kind), [.text, .select, .bool])
+        XCTAssertEqual(request.dialog.elements[0].defaultValue, "web")
+        XCTAssertEqual(request.dialog.elements[0].minLength, 2)
+        XCTAssertEqual(request.dialog.elements[0].helpText, "The service")
+        XCTAssertEqual(request.dialog.elements[1].options, [DialogOption(text: "Production", value: "prod")])
+        XCTAssertTrue(request.dialog.elements[1].optional)
+        XCTAssertEqual(request.dialog.elements[2].defaultValue, "true")
+        XCTAssertNil(event.posted)
+    }
+
     func testPostedWithoutOptionalFields() throws {
         let text = #"{"event":"posted","data":{"post":"{\"id\":\"p1\",\"message\":\"m\"}"},"broadcast":{},"seq":3}"#
         let posted = try XCTUnwrap(try event(text).posted)

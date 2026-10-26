@@ -38,6 +38,49 @@ public enum EmojiTable {
         return result
     }
 
+    /// Autocomplete for `:query`: built-in emoji with a short name containing `query` (case-insensitive), one
+    /// entry per emoji with its first matching name. Exact names first, then names starting with the query,
+    /// then the rest, alphabetically within each group (as Mattermost's own clients rank them). Skin tone
+    /// variants are left out.
+    public static func search(_ query: String, limit: Int = 50) -> [(name: String, emoji: String)] {
+        let query = query.lowercased()
+        if query.isEmpty || limit <= 0 {
+            return []
+        }
+        var matches: [(rank: Int, name: String, emoji: String)] = []
+        var seen = Set<String>()
+        for (aliases, emoji) in rows where !seen.contains(emoji) {
+            var best: (rank: Int, name: String)?
+            for alias in aliases.split(separator: " ") {
+                let name = String(alias)
+                let rank: Int
+                if name == query {
+                    rank = 0
+                } else if name.hasPrefix(query) {
+                    rank = 1
+                } else if name.contains(query) {
+                    rank = 2
+                } else {
+                    continue
+                }
+                if best == nil || rank < best!.rank {
+                    best = (rank, name)
+                }
+            }
+            if let best {
+                seen.insert(emoji)
+                matches.append((best.rank, best.name, emoji))
+            }
+        }
+        matches.sort(by: { lhs, rhs in
+            if lhs.rank != rhs.rank {
+                return lhs.rank < rhs.rank
+            }
+            return lhs.name < rhs.name
+        })
+        return matches.prefix(limit).map { ($0.name, $0.emoji) }
+    }
+
     private static let names: [String: String] = {
         var result: [String: String] = [:]
         for (aliases, emoji) in rows + skinToneRows {

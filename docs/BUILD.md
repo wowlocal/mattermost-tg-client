@@ -72,6 +72,10 @@ tools/relay-remote.py "$UDID" logout username=alice                        # Set
 tools/relay-remote.py "$UDID" relogin                                      # "Log In" on "Session Expired"
 tools/relay-remote.py "$UDID" press button=confirm                         # "Continue" on "Log In as …?"
 tools/relay-remote.py "$UDID" dismiss-alerts                               # "OK" on a login error alert
+tools/relay-remote.py "$UDID" not-now                                      # "Not Now" on "Session Expired"
+tools/relay-remote.py "$UDID" title-relogin                                # tap on the chat list title "Session Expired"
+tools/relay-remote.py "$UDID" open-saved                                   # the current account's Saved Messages
+tools/relay-remote.py "$UDID" send-saved text="hello"                      # send to Saved Messages (also while expired)
 ```
 
 Launch with `SIMCTL_CHILD_RELAY_DEBUG_NO_PERMISSION_PROMPTS=1` from the first launch on: an unanswered notifications prompt is SpringBoard's and survives app restarts and reinstalls until the simulator reboots. Passwords filled by the remote are cleared once they are submitted, so iOS doesn't cover the screen with "Save Password?".
@@ -136,7 +140,13 @@ Failed writes the UI can't show (a refused delete, an unsendable message) appear
 
 `RELAY_DEBUG_OPEN_SCREEN=button:<title>` taps the inline button with that title on the newest message of the chat that `RELAY_DEBUG_OPEN_CHAT` opened, through the chat's `requestMessageActionCallback` exactly as a tap does. For a menu button (title ends in ` ▾`) the option sheet opens; `RELAY_DEBUG_SELECT_OPTION=<option text or value>` picks that option four seconds later (time for a screenshot). Ephemeral answers show as a toast, refused actions as an alert.
 
-If `simctl install` doesn't pick up a rebuilt binary (same build number), replace the installed bundle in place as described in the root `CLAUDE.md` ("Updating the running simulator after a rebuild").
+#### Phase 2D hooks (debug builds only)
+
+- `RELAY_DEBUG_OPEN_SCREEN=devices` (Settings → Devices), `openlinks` (Open Links In), `reaction-notifications`, `authorinfo` (profile of the newest message's author in the chat `RELAY_DEBUG_OPEN_CHAT` opened, e.g. a webhook's name override), `settings:add-account` (Settings → Add Account through the Settings handler, account limit included).
+- `RELAY_DEBUG_DEVICES_ACTION=terminate-first|terminate-others` (with `RELAY_DEBUG_OPEN_SCREEN=devices`): runs the confirmed "Terminate Session" of the first other session, or "Terminate All Other Sessions", three seconds after the list loaded. Use dave (or sessions you created): it ends real sessions.
+- Media tabs: `RELAY_DEBUG_OPEN_CHAT=<channel>` + `RELAY_DEBUG_OPEN_SCREEN=peerinfo`; the file search logs `holes: files of <channel>`. The chat itself pages the history behind the profile, so test with files more than a few pages back.
+
+If `simctl install` doesn't pick up a rebuilt binary (same build number), replace the installed bundle in place as described in the root `CLAUDE.md` ("Updating the running simulator after a rebuild"). This happened in 2D after a 30-second incremental build: compare the md5 of `Frameworks/TelegramUIFramework.framework/TelegramUIFramework` in the `.ipa` and in the installed app when a change seems missing.
 
 ### Push notifications on the simulator (Phase 3A)
 

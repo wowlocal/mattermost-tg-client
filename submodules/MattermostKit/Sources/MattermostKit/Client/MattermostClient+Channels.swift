@@ -62,6 +62,27 @@ extension MattermostClient {
         try await send(APIRequest(.get, apiPath("channels", channelId, "members", userId)))
     }
 
+    /// `GET /channels/{channel_id}/members`: a page of the channel's members (ordered by the server).
+    public func channelMembers(channelId: String, page: Int, perPage: Int) async throws -> [ChannelMember] {
+        var query = QueryBuilder()
+        query.add("page", page)
+        query.add("per_page", perPage)
+        return try await send(APIRequest(.get, apiPath("channels", channelId, "members"), query: query.items))
+    }
+
+    /// `POST /channels/{channel_id}/members/ids`: the memberships of the given users (non-members are left out).
+    public func channelMembers(channelId: String, userIds: [String]) async throws -> [ChannelMember] {
+        try await send(APIRequest.json(.post, apiPath("channels", channelId, "members", "ids"), body: userIds))
+    }
+
+    /// `GET /teams/{team_id}/channels/autocomplete`: channels of a team matching `name` (public channels and
+    /// the user's private channels; the server matches words of the name and display name).
+    public func autocompleteChannels(teamId: String, name: String) async throws -> [Channel] {
+        var query = QueryBuilder()
+        query.add("name", name)
+        return try await send(APIRequest(.get, apiPath("teams", teamId, "channels", "autocomplete"), query: query.items))
+    }
+
     /// `GET /channels/{channel_id}/stats`: member count and other counters.
     public func channelStats(channelId: String) async throws -> ChannelStats {
         try await send(APIRequest(.get, apiPath("channels", channelId, "stats")))

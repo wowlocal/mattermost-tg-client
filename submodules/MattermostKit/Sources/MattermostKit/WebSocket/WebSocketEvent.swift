@@ -40,6 +40,7 @@ public enum WebSocketEventType: Sendable, Hashable, RawRepresentable {
     case threadFollowChanged
     case emojiAdded
     case ephemeralMessage
+    case openDialog
     case configChanged
     case licenseChanged
     case unknown(String)
@@ -84,6 +85,7 @@ public enum WebSocketEventType: Sendable, Hashable, RawRepresentable {
         case "thread_follow_changed": self = .threadFollowChanged
         case "emoji_added": self = .emojiAdded
         case "ephemeral_message": self = .ephemeralMessage
+        case "open_dialog": self = .openDialog
         case "config_changed": self = .configChanged
         case "license_changed": self = .licenseChanged
         default: self = .unknown(rawValue)
@@ -130,6 +132,7 @@ public enum WebSocketEventType: Sendable, Hashable, RawRepresentable {
         case .threadFollowChanged: return "thread_follow_changed"
         case .emojiAdded: return "emoji_added"
         case .ephemeralMessage: return "ephemeral_message"
+        case .openDialog: return "open_dialog"
         case .configChanged: return "config_changed"
         case .licenseChanged: return "license_changed"
         case .unknown(let name): return name
@@ -383,6 +386,12 @@ extension WebSocketEvent {
             return ChannelsViewedEvent(channelIds: times.keys.sorted(), lastViewedAt: times)
         }
         return nil
+    }
+
+    /// The dialog an integration asks to open (`open_dialog`; `data.dialog` is a JSON string).
+    public var openDialog: OpenDialogRequest? {
+        guard type == .openDialog else { return nil }
+        return decodeEmbedded(OpenDialogRequest.self, key: "dialog")
     }
 
     public var typing: TypingEvent? {

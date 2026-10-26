@@ -48,6 +48,11 @@ extension MattermostClient {
         try await send(APIRequest.json(.post, "/users/search", body: options))
     }
 
+    /// `POST /roles/names`: the roles with these names (unknown names are left out).
+    public func roles(names: [String]) async throws -> [Role] {
+        try await send(APIRequest.json(.post, "/roles/names", body: names))
+    }
+
     // MARK: Preferences
 
     /// `GET /users/{user_id}/preferences`.

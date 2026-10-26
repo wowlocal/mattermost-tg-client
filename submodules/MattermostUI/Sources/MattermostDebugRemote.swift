@@ -146,6 +146,30 @@ final class MattermostDebugRemote {
             Queue.mainQueue().after(1.5) {
                 self.writeResult(id: id, ok: true, error: nil)
             }
+        case "open-saved":
+            // Opens the current account's Saved Messages (works while the session is expired, when the
+            // `RELAY_DEBUG_OPEN_CHAT` hook, which runs after the bootstrap, does not).
+            guard let sharedContext = self.sharedContext else {
+                self.writeResult(id: id, ok: false, error: "no context")
+                return
+            }
+            let _ = (sharedContext.activeAccountContexts
+            |> take(1)
+            |> mapToSignal { primary, _, _ -> Signal<(AccountContext, EnginePeer)?, NoError> in
+                guard let context = primary else {
+                    return .single(nil)
+                }
+                return context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: context.account.peerId))
+                |> map { peer in peer.flatMap { (context, $0) } }
+            }
+            |> deliverOnMainQueue).start(next: { [weak self] value in
+                guard let (context, peer) = value, let navigationController = sharedContext.mainWindow?.viewController as? NavigationController else {
+                    self?.writeResult(id: id, ok: false, error: "no account")
+                    return
+                }
+                sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer)))
+                self?.writeResult(id: id, ok: true, error: nil)
+            })
         case "send-saved":
             // A message to the current account's Saved Messages, as the composer sends it (works while the
             // session is expired: the message waits, pending, for a new login).

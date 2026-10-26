@@ -492,3 +492,31 @@ final class MarkdownTests: XCTestCase {
         }
     }
 }
+
+final class EmojiSearchTests: XCTestCase {
+    func testRanksExactThenPrefixThenSubstring() {
+        let results = EmojiTable.search("smile")
+        XCTAssertEqual(results.first?.name, "smile")
+        XCTAssertEqual(results.first?.emoji, "😄")
+        let names = results.map(\.name)
+        // `smiley` starts with the query; `sweat_smile` only contains it.
+        let prefix = try! XCTUnwrap(names.firstIndex(of: "smiley"))
+        let substring = try! XCTUnwrap(names.firstIndex(of: "sweat_smile"))
+        XCTAssertLessThan(prefix, substring)
+    }
+
+    func testOneEntryPerEmojiAndNoSkinTones() {
+        let results = EmojiTable.search("thumbs")
+        XCTAssertEqual(Set(results.map(\.emoji)).count, results.count)
+        XCTAssertFalse(results.contains(where: { $0.name.contains("skin_tone") }))
+        // 👍's first name is `+1`; the matching alias is the one shown.
+        XCTAssertTrue(results.contains(where: { $0.name == "thumbsup" && $0.emoji == "👍" }))
+    }
+
+    func testLimitCaseAndEmptyQuery() {
+        XCTAssertEqual(EmojiTable.search("a", limit: 5).count, 5)
+        XCTAssertEqual(EmojiTable.search("SMILE").first?.name, "smile")
+        XCTAssertTrue(EmojiTable.search("").isEmpty)
+        XCTAssertTrue(EmojiTable.search("zzzzqqq").isEmpty)
+    }
+}

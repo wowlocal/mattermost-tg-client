@@ -138,7 +138,7 @@
 
 /* Settings → Devices (MattermostUI). */
 "Relay.Devices.ThisDevice" = "This Device";
-"Relay.Devices.CurrentSession" = "Relay on this device";
+"Relay.Devices.CurrentSession" = "This device, active now";
 "Relay.Devices.ActiveSessions" = "Active Sessions";
 "Relay.Devices.LastActive" = "last active %@";
 "Relay.Devices.TerminateSession" = "Terminate Session";
