@@ -75,6 +75,15 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | 3E | Link previews, markdown block bubble (headings/lists/tables/code), permalinks & deep links | Done on branch `worktree-agent-af73011e339a31270` (3C merged in at `9c7162fe`); merged into main by the 3F agent; design: mattermost-sync.md "Rich content and links (3E)"; screenshots `docs/research/phase3e-*.png` |
 | 3F | Own status (online/away/DND/offline, custom status), profile editing + avatar, share extension | Agent working (main checkout) |
 
+## Phase 4
+
+| # | Workstream | Status |
+|---|---|---|
+| 4A | Release & security hygiene: release build, debug code compiled out (strings audit), ATS, About source URL + licenses, privacy manifest, release/signing guide, Relay versioning | Agent working (own worktree) |
+| 4B | Runtime hygiene: gate Telegram managers that still park requests (memory), performance on a large server, offline/background refresh, cache eviction | Next |
+| 4C | Accessibility (VoiceOver, Dynamic Type) on new screens, localization readiness | Next |
+| 4D | Release: TestFlight build — **needs the user's Apple Developer account** (see docs/release/RELEASE.md once written) | Blocked on user |
+
 ## Log
 
 ### 2026‑10‑26
@@ -227,3 +236,4 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   - **Gaps:** older history keeps its rendering after a settings change until reloaded; a permalink into a channel the user hasn't joined opens the channel after joining, not at the post; no hanging indent for wrapped list lines (Telegram's text layout has none); headings have no extra spacing; a pre-3E message with a heading shows bold until re-rendered (only the newest page per chat is upgraded); YouTube/`link` embeds get no card; no avatar thumbnail on permalink cards; `relay://` / `mattermost://` text isn't autolinked in messages (Mattermost doesn't by default either); copying the text of a list copies the special spaces.
   - Upstream files touched (all `// MATTERMOST:`): `TelegramUI/Sources/OpenUrl.swift` (link hook in `openCheckedExternalUrl`), `TelegramUI/Sources/SharedAccountContext.swift` (`openUserGeneratedUrl` skips the prompt for in-app links), `TelegramUI/Sources/ChatInterfaceStateContextMenus.swift` (Copy Link / Share Link after Save Post), `TextFormat/Sources/StringWithAppliedEntities.swift` (one call: heading sizes), `TextFormat/BUILD` (MattermostSyncCore dep); `Telegram-iOS/Relay.strings` (5 `Relay.Link.*` strings, appended).
   - Dev server state left by 3E: channel `relay-3e-links` ("3E Links", bob, alice) with link/markdown/permalink test posts and bob's edited post; public channel `relay-3e-public` (bob; alice joined through a link); the image proxy was switched on for the test and back off; alice's display preferences back to defaults. The 3E simulator has alice (localhost) and bob (`127.0.0.1:8065`).
+- **3E done** (branch `worktree-agent-af73011e339a31270`): link previews from `metadata.embeds` (images via server/image proxy only), markdown blocks (headings, list indents, highlighted code, tables), emoticons, permalinks/channel/user links open in-app (cross-account), `relay://<host>/<team>/pl/<post>` scheme, Copy/Share Link. Finding: `POST /posts/ids` returns no embeds on 11.7. 3E worktree removed. Phase 4 split into 4A–4D; 4A started in a worktree.
