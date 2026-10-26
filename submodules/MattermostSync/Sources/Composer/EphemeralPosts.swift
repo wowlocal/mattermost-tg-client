@@ -63,7 +63,8 @@ extension MattermostAccountSync {
                 threadId: message.threadId,
                 timestamp: max(message.timestamp, Int32(Date().timeIntervalSince1970) - 1),
                 flags: [.Incoming, .NotCountedAsUnread],
-                tags: [],
+                // A root-level answer shows in the channel's root-post history (collapsed reply threads, 3B).
+                tags: message.tags.intersection(.mattermostRootPost),
                 globalTags: [],
                 localTags: [],
                 forwardInfo: nil,
