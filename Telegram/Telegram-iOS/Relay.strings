@@ -288,3 +288,24 @@
 "PeerInfo.LeaveGroupText" = "Are you sure you want to leave **%@**?";
 "Relay.ChannelPreview.Recent" = "RECENT MESSAGES";
 "Relay.ChannelPreview.NoMessages" = "No messages yet.";
+
+/* Finding things (Phase 3C): saved posts (Mattermost's flagged posts, not Telegram's Saved Messages) and recent
+   mentions in Settings, Save / Remove from Saved in the message menu, joining a public channel found by search. */
+"Relay.Saved.Title" = "Saved Posts";
+"Relay.Saved.Save" = "Save Post";
+"Relay.Saved.Unsave" = "Remove from Saved";
+"Relay.Saved.Saved" = "Saved. Find it in Settings → Saved Posts.";
+"Relay.Saved.Removed" = "Removed from Saved Posts.";
+"Relay.Saved.EmptyTitle" = "No Saved Posts";
+"Relay.Saved.EmptyText" = "Save messages from their menu to find them here. Saved posts are the same on all your devices.";
+"Relay.Mentions.Title" = "Recent Mentions";
+"Relay.Mentions.EmptyTitle" = "No Mentions";
+"Relay.Mentions.EmptyText" = "Messages that mention you or your mention keywords show up here.";
+"Relay.PostList.Loading" = "Loading…";
+"Relay.PostList.FailedTitle" = "Couldn't Load";
+"Relay.PostList.FailedText" = "Check your connection and open this screen again.";
+"Relay.PostList.ShowInChat" = "Show in Chat";
+"Relay.Search.JoinTitle" = "Join %@?";
+"Relay.Search.JoinText" = "You aren't a member of this channel. Join it to read and post.";
+"Relay.Search.Join" = "Join";
+"Relay.Search.JoinFailed" = "You couldn't join this channel.";

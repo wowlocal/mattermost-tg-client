@@ -84,6 +84,8 @@ extension MattermostAccountSync {
         case .sidebarCategoryCreated, .sidebarCategoryUpdated, .sidebarCategoryDeleted, .sidebarCategoryOrderUpdated:
             await self.refreshFavorites()
         case .preferencesChanged, .preferenceChanged, .preferencesDeleted:
+            // Saved posts (3C): `flagged_post` preferences.
+            self.applySavedPostsEvent(event)
             if event.data["preferences"]?.stringValue?.contains(PreferenceCategory.favoriteChannel) == true || event.data["preference"]?.stringValue?.contains(PreferenceCategory.favoriteChannel) == true {
                 await self.refreshFavorites()
             }
@@ -220,7 +222,11 @@ extension MattermostAccountSync {
             return self.isMapped(post.id, channelId: post.channelId)
         }
         if !mapped {
-            // Not loaded: paging will bring the edited version.
+            // Not loaded: paging will bring the edited version. A post pinned elsewhere is stored now (3C): the
+            // pinned bar reads the `.pinned` tag space, which is complete once loaded.
+            if post.isPinned && post.deleteAt == 0 {
+                await self.storeFoundPosts([post])
+            }
             return
         }
         var post = post

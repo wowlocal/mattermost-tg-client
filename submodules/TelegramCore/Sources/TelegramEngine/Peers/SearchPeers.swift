@@ -28,6 +28,10 @@ public enum TelegramSearchPeersScope: Equatable, Hashable {
 }
 
 public func _internal_searchPeers(accountPeerId: PeerId, postbox: Postbox, network: Network, query: String, scope: TelegramSearchPeersScope) -> Signal<([FoundPeer], [FoundPeer]), NoError> {
+    // MATTERMOST: people and channel search through MattermostSync (`MattermostSearchProvider`).
+    if MattermostBackend.isEnabled {
+        return mattermostSearchPeers(accountPeerId: accountPeerId, query: query, scope: scope)
+    }
     var flags: Int32 = 0
     switch scope {
     case .channels:

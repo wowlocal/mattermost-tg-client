@@ -39,6 +39,10 @@ public class AdPeer: Equatable {
 }
 
 func _internal_searchAdPeers(account: Account, query: String) -> Signal<[AdPeer], NoError> {
+    // MATTERMOST: no sponsored peers (the request would never answer and keep the chat list search "searching").
+    if MattermostBackend.isEnabled {
+        return .single([])
+    }
     return account.network.request(Api.functions.contacts.getSponsoredPeers(q: query))
     |> map(Optional.init)
     |> `catch` { _ in

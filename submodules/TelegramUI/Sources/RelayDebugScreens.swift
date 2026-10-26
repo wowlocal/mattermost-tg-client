@@ -32,6 +32,8 @@ extension TelegramRootController {
         // Phase 3D: the composer driver of the debug remote (RelayDebugComposer.swift).
         RelayDebugComposer.install(rootController: self)
         self.relayDebugInstallChatCommands()
+        // Phase 3C: search, saved posts, mentions, pinning (RelayDebugSearch.swift).
+        self.relayDebugInstallSearchCommands()
         guard let screen = ProcessInfo.processInfo.environment["RELAY_DEBUG_OPEN_SCREEN"], !screen.isEmpty else {
             return
         }

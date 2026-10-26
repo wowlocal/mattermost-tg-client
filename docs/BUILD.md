@@ -186,6 +186,30 @@ tools/relay-remote.py "$UDID" info-leave confirm=1                       # Leave
 
 `tools/relay-remote.py "$UDID" alert do=confirm` (or `do=cancel`) presses a button of the confirmation alert these screens show (archive, unarchive, convert: `directory-do do=confirm-archive` etc. show it; Remove from Channel: `info-member … do=remove`). Telegram's own Leave alert can't be pressed: `info-leave confirm=1` runs what its Leave button runs.
 
+#### Phase 3C: search, saved posts, mentions, pinning (debug builds only)
+
+TelegramUI `RelayDebugSearch.swift`; results in the result's `extra`. Search rows are read from the visible search pane (only rows on screen), and `search-tap` calls the row's own `selected(listView:)`, as a tap does:
+
+```sh
+tools/relay-remote.py "$UDID" search "query=from:bob deploy"          # chat list search (filter=media|links|files|music); visible rows
+tools/relay-remote.py "$UDID" search-tap index=0 kind=message         # open a result (kind=peer for people/channels)
+tools/relay-remote.py "$UDID" join-confirm                            # "Join" on the alert a not-joined channel shows
+tools/relay-remote.py "$UDID" search-cancel
+tools/relay-remote.py "$UDID" peerinfo-search chat=media pane=files query=crash   # profile → Files pane → its search
+tools/relay-remote.py "$UDID" engine-search "query=in:firehose before:2014-01-01 nightly" pages=5   # the engine call, all pages, post ids
+tools/relay-remote.py "$UDID" engine-search query=deploy chat=firehose from=bob                      # search in one chat
+tools/relay-remote.py "$UDID" people query=rel                         # people/channel search (mine / other)
+tools/relay-remote.py "$UDID" chat-search query=deploy                 # Search in the visible chat (from=<username>)
+tools/relay-remote.py "$UDID" chat-search-step dir=earlier
+tools/relay-remote.py "$UDID" post-list kind=saved                     # Settings → Saved Posts (kind=mentions: Recent Mentions)
+tools/relay-remote.py "$UDID" post-list-items                          # what the list shows
+tools/relay-remote.py "$UDID" post-list-tap index=0
+tools/relay-remote.py "$UDID" save post=<id>                           # message menu: Save Post (unsave: Remove from Saved)
+tools/relay-remote.py "$UDID" pin post=<id>                            # message menu: Pin / Unpin in the visible chat
+tools/relay-remote.py "$UDID" pinned                                   # the visible chat's pinned bar
+tools/relay-remote.py "$UDID" pinned-list                              # the bar's list button: all pinned messages
+```
+
 #### Phase 2D hooks (debug builds only)
 
 - `RELAY_DEBUG_OPEN_SCREEN=devices` (Settings → Devices), `openlinks` (Open Links In), `reaction-notifications`, `authorinfo` (profile of the newest message's author in the chat `RELAY_DEBUG_OPEN_CHAT` opened, e.g. a webhook's name override), `settings:add-account` (Settings → Add Account through the Settings handler, account limit included).

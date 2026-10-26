@@ -1,5 +1,8 @@
 import Foundation
+import UIKit
+import Display
 import TelegramCore
+import TelegramPresentationData
 
 // MATTERMOST: Settings root sections that only hold Telegram-only rows (docs/research/ui-inventory.md §2.1).
 // Applied once in the section loop of `settingsItems`.
@@ -31,4 +34,11 @@ extension MattermostFeatures {
         }
         return result
     }
+}
+
+// MATTERMOST: icons of the Settings rows Recent Mentions and Saved Posts (Phase 3C). Mattermost saves posts with a
+// flag ("flagged posts"), hence the flag.
+enum MattermostSettingsIcons {
+    static let mentions = renderSettingsIcon(name: "Item List/Icons/Messages", backgroundColors: [UIColor(rgb: 0xaf52de)])
+    static let savedPosts = renderSettingsIcon(name: "Item List/Icons/Flag", backgroundColors: [UIColor(rgb: 0xff9500)])
 }
