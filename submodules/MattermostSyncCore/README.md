@@ -159,3 +159,13 @@ Markdown tests are table-driven per feature, with UTF-16 offset checks for emoji
 - A renumber plan changes ids that other stored data may reference; the caller must remap them. `fillCursor(.newer)` can't fill from the channel start (it returns nil; fill that hole with `.older`).
 - Markdown not supported: reference-style links, HTML and HTML entities (`&amp;` stays literal), LaTeX, emoticons such as `:)`, and skin-tone emoji suffixes. Lists are always rendered tight, ordered lists are renumbered from their first number, and table cells lose inline formatting. Column widths count grapheme clusters, so wide characters misalign. Quotes and lists nested deeper than 32 levels stay plain text.
 - Reverse direction: CommonMark can't express every range. For example, bold over `(x)` glued to letters on both sides fails the flanking rules. `parse` also trims trailing whitespace, so a round trip isn't byte-identical for such text.
+
+## Diagnostics (Phase 4G)
+
+`Diagnostics/` holds the testable half of Relay's local diagnostics (the app side is MattermostUI `RelayDiagnostics`):
+
+- `DiagnosticsRedactor`: scrubs exported logs line by line: credentials (`Bearer …`, `token=…`, passwords, cookies),
+  email addresses and APNs tokens removed, Mattermost ids replaced by salted pseudonyms (`<id:3f9a1c>`, stable within
+  one export, random salt per export).
+- `DiagnosticReportStore`: MetricKit's JSON reports on disk, bounded by age (30 days), count (40) and total size
+  (4 MB); a single report over 1 MB is not kept.
