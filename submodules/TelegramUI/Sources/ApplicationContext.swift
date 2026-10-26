@@ -607,7 +607,8 @@ final class AuthorizedApplicationContext {
                 let contactsTimestamp = contactsPermissionWarningNotice.value.flatMap({ ApplicationSpecificNotice.getTimestampValue($0) })
                 let notificationsTimestamp = notificationsPermissionWarningNotice.value.flatMap({ ApplicationSpecificNotice.getTimestampValue($0) })
                 let cellularDataTimestamp = cellularDataPermissionWarningNotice.value.flatMap({ ApplicationSpecificNotice.getTimestampValue($0) })
-                if contactsTimestamp == nil, case .requestable = required.0.status {
+                // MATTERMOST: no contacts permission warning (it badges the hidden Contacts tab).
+                if MattermostFeatures.contacts, contactsTimestamp == nil, case .requestable = required.0.status {
                     ApplicationSpecificNotice.setPermissionWarning(accountManager: context.sharedContext.accountManager, permission: .contacts, value: 1)
                 }
                 if notificationsTimestamp == nil, case .requestable = required.1.status {
@@ -621,6 +622,10 @@ final class AuthorizedApplicationContext {
                 }
                 if !order.contains(.siri) {
                     order.append(.siri)
+                }
+                // MATTERMOST: no first-launch Contacts or Siri prompt; notifications and cellular data stay.
+                if !MattermostFeatures.contacts {
+                    order.removeAll(where: { $0 == .contacts || $0 == .siri })
                 }
                 var requestedPermissions: [(PermissionState, Bool)] = []
                 var i: Int = 0
