@@ -22,6 +22,8 @@ import ConvertOpusToAAC
 import CoreServices
 import ImageIO
 import UniformTypeIdentifiers
+import MattermostPush
+import MattermostSync
 
 private let queue = Queue()
 
@@ -808,6 +810,9 @@ private final class NotificationServiceHandler {
         Logger.shared.log("NotificationService \(episode)", "Started handling notification")
 
         initializeAccountManagement()
+        // MATTERMOST: MattermostSync's PostboxCoding types (media resources), for Telegram's path that opens
+        // the account postbox.
+        mattermostDeclareEncodables()
 
         let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
 
@@ -2696,12 +2701,21 @@ final class NotificationService: UNNotificationServiceExtension {
     private let content = Atomic<NotificationContent?>(value: nil)
     private var contentHandler: ((UNNotificationContent) -> Void)?
     private var episode: String?
+    // MATTERMOST: the handler of a Mattermost push (MattermostNotificationService.swift).
+    private var mattermostHandler: MattermostNotificationServiceHandler?
     
     override init() {
         super.init()
     }
     
     override func didReceive(_ request: UNNotificationRequest, withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
+        // MATTERMOST: Mattermost pushes; Telegram's handler below stays for Telegram payloads.
+        if MattermostBackend.isEnabled && MattermostPushPayload.isMattermostPush(request.content.userInfo) {
+            let handler = MattermostNotificationServiceHandler(request: request, contentHandler: contentHandler)
+            self.mattermostHandler = handler
+            handler.start()
+            return
+        }
         let episode = String(UInt32.random(in: 0 ..< UInt32.max), radix: 16)
         self.episode = episode
         
@@ -2746,6 +2760,11 @@ final class NotificationService: UNNotificationServiceExtension {
     }
     
     override func serviceExtensionTimeWillExpire() {
+        if let mattermostHandler = self.mattermostHandler {
+            self.mattermostHandler = nil
+            mattermostHandler.timeWillExpire()
+            return
+        }
         // Releasing impl deallocates the handler on its queue, which disposes the in-flight
         // poll (getDifference/state replay) and drops the keep-alive network connection.
         // Without this, that work keeps running after the system takes back control and

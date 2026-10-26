@@ -27,6 +27,11 @@ swift_library(
         "//submodules/Utils/RangeSet",
         "//submodules/Media/ConvertOpusToAAC",
         "//submodules/PasscodeCore",
+        # MATTERMOST: Mattermost pushes (MattermostNotificationService.swift) and MattermostSync's PostboxCoding
+        # types for Telegram's path.
+        "//submodules/MattermostPush:MattermostPush",
+        "//submodules/MattermostPushService:MattermostPushService",
+        "//submodules/MattermostSync:MattermostSync",
     ],
     visibility = [
         "//visibility:public",

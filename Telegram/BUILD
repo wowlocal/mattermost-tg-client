@@ -611,6 +611,52 @@ plist_fragment(
     ])
 )
 
+# MATTERMOST: simulator builds (`--disableProvisioningProfiles`) have no provisioning profile to take
+# entitlements from, so they get these, embedded as the simulator's `__entitlements` section: the app adds
+# `aps-environment` (the simulator gets real APNs sandbox tokens only with it) and communication
+# notifications; the notification service extension gets the app group (its container and the shared
+# Keychain group with the session tokens) and communication notifications. Device builds are unchanged: their
+# entitlements come from the provisioning profiles (see infra/push-proxy/README.md for the capabilities).
+simulator_aps_fragment = aps_fragment if telegram_aps_environment != "" else """
+<key>aps-environment</key>
+<string>development</string>
+"""
+
+plist_fragment(
+    name = "TelegramSimulatorEntitlements",
+    extension = "entitlements",
+    template = "".join([
+        simulator_aps_fragment,
+        app_groups_fragment,
+        siri_fragment,
+        associated_domains_fragment,
+        icloud_fragment,
+        apple_pay_merchants_fragment,
+        unrestricted_voip_fragment,
+        carplay_fragment,
+        official_communication_notifications_fragment,
+        notification_filtering_fragment,
+        signin_fragment,
+        background_gpu_fragment,
+    ])
+)
+
+plist_fragment(
+    name = "NotificationServiceSimulatorEntitlements",
+    extension = "entitlements",
+    template = """
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.{telegram_bundle_id}</string>
+    </array>
+    <key>application-identifier</key>
+    <string>{telegram_team_id}.{telegram_bundle_id}.NotificationService</string>
+    """.format(
+        telegram_team_id = telegram_team_id,
+        telegram_bundle_id = telegram_bundle_id,
+    ) + official_communication_notifications_fragment,
+)
+
 genrule(
     name = "VersionInfoPlist",
     srcs = ["//:versions.json"],
@@ -1607,6 +1653,11 @@ ios_extension(
         ":disableProvisioningProfilesSetting": None,
         "//conditions:default": "@build_configuration//provisioning:NotificationService.mobileprovision",
     }),
+    # MATTERMOST: simulator only (see NotificationServiceSimulatorEntitlements).
+    entitlements = select({
+        ":disableProvisioningProfilesSetting": ":NotificationServiceSimulatorEntitlements.entitlements",
+        "//conditions:default": None,
+    }),
     deps = ["//Telegram/NotificationService:NotificationServiceExtensionLib"],
     frameworks = [
         ":MtProtoKitFramework",
@@ -1845,7 +1896,11 @@ ios_application(
         ":disableProvisioningProfilesSetting": None,
         "//conditions:default": ":Telegram_xcode_profile" if telegram_use_xcode_managed_codesigning else "@build_configuration//provisioning:Telegram.mobileprovision",
     }),
-    entitlements = ":TelegramEntitlements.entitlements",
+    # MATTERMOST: simulator builds get push and communication notifications (TelegramSimulatorEntitlements).
+    entitlements = select({
+        ":disableProvisioningProfilesSetting": ":TelegramSimulatorEntitlements.entitlements",
+        "//conditions:default": ":TelegramEntitlements.entitlements",
+    }),
     infoplists = [
         ":TelegramInfoPlist",
         ":BuildNumberInfoPlist",
