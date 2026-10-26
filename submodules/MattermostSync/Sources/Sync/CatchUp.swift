@@ -76,7 +76,8 @@ extension MattermostAccountSync {
             return 0
         }
         await self.ensureUsers(referencedUserIds(posts))
-        return await self.postbox.mmTransaction { transaction -> Int in
+        let needsLatestPage = MMLocked<Bool>(false)
+        let count = await self.postbox.mmTransaction { transaction -> Int in
             guard let channelState = self.channelState(channelId) else {
                 return 0
             }
@@ -97,7 +98,12 @@ extension MattermostAccountSync {
             if !edited.isEmpty {
                 self.writeMessages(channelId: channelId, posts: edited, transaction: transaction)
             }
-            if fresh.count > self.perPage {
+            if fresh.count > self.perPage && self.storeRef().islands(channelId: channelId).isEmpty {
+                // A channel with nothing loaded yet (joined while the app was not running): load its newest
+                // page like the bootstrap does. Opening a hole here would leave it looking empty, since the
+                // ID map has no island to keep a hole next to.
+                needsLatestPage.with { $0 = true }
+            } else if fresh.count > self.perPage {
                 let _ = self.store.idMapTransaction {
                     self.allocator.invalidateLatest(channelId: channelId, store: &store)
                 }
@@ -109,5 +115,13 @@ extension MattermostAccountSync {
             self.applyServerReadState(channelId: channelId, transaction: transaction)
             return deleted.count + edited.count + fresh.count
         }
+        if needsLatestPage.current {
+            do {
+                try await self.loadPage(channelId: channelId, cursor: .latest, requestedRange: nil, resetReadState: true)
+            } catch {
+                MMLog.log("catch-up: newest page of \(channelId) failed: \(error)")
+            }
+        }
+        return count
     }
 }

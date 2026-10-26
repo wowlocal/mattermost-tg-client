@@ -140,10 +140,13 @@ extension MattermostAccountSync {
                     if tag == .pinned {
                         // The pinned-message bar: Mattermost lists a channel's pinned posts in one call.
                         try await self.loadPinned(channelId: channelId, channelState: channelState)
+                    } else if MattermostAccountSync.fileTags.contains(tag) {
+                        // Media tabs (photos and videos, files, music, voice, GIFs): every file of the channel
+                        // from Mattermost's file search, instead of paging the whole history.
+                        try await self.loadChannelFiles(channelId: channelId, channelState: channelState)
                     } else {
-                        // Media tabs (photos, files, links, …). Paging the whole history for them would load
-                        // every post of the channel as soon as a chat opens; Spike D shows the media of the
-                        // loaded history instead (Phase 2: Mattermost's file search per channel).
+                        // Links and other tags: Mattermost can't search for posts with links, so these show
+                        // what the loaded history has (local only).
                         self.state.with { $0.completeTagSpaces[channelId, default: []].insert(tag) }
                         await self.postbox.mmTransaction { transaction in
                             transaction.removeHole(peerId: peerId, threadId: nil, namespace: Namespaces.Message.Cloud, space: .tag(tag), range: 1 ... self.maxLocalId)
@@ -309,6 +312,98 @@ extension MattermostAccountSync {
             transaction.removeHole(peerId: channelState.peerId, threadId: nil, namespace: Namespaces.Message.Cloud, space: .tag(.pinned), range: 1 ... self.maxLocalId)
         }
         MMLog.log("holes: \(posts.count) pinned posts of \(channelId)")
+    }
+
+    /// The tag spaces that file search fills (`MediaConverter` tags of file messages).
+    static let fileTags: MessageTags = [.photoOrVideo, .photo, .video, .file, .music, .voiceOrInstantVideo, .gif]
+
+    /// Every file of a channel for the media tabs: `POST /files/search` with `in:<channel id>` (100 files per
+    /// page, newest first), then the posts of the files not loaded yet (`POST /posts/ids`, with the thread roots
+    /// of replies), written one by one. Clears the holes of every file tag space at once.
+    func loadChannelFiles(channelId: String, channelState: ChannelState) async throws {
+        // Every file tab asks at once (photos, files, music, voice, GIFs): one search serves them all.
+        let task: Task<Void, Error> = self.fileSearches.with { searches in
+            if let running = searches[channelId] {
+                return running
+            }
+            let task = Task {
+                try await self.searchChannelFiles(channelId: channelId, channelState: channelState)
+            }
+            searches[channelId] = task
+            return task
+        }
+        do {
+            try await task.value
+        } catch {
+            self.fileSearches.with { $0[channelId] = nil }
+            throw error
+        }
+        // Done earlier: holes that came back (e.g. re-added next to a renumbered range) are cleared again.
+        let peerId = channelState.peerId
+        await self.postbox.mmTransaction { transaction in
+            for bit in 0 ..< 32 {
+                let tag = MessageTags(rawValue: UInt32(1) << UInt32(bit))
+                if MattermostAccountSync.fileTags.contains(tag) {
+                    transaction.removeHole(peerId: peerId, threadId: nil, namespace: Namespaces.Message.Cloud, space: .tag(tag), range: 1 ... self.maxLocalId)
+                }
+            }
+        }
+    }
+
+    private func searchChannelFiles(channelId: String, channelState: ChannelState) async throws {
+        var postIds: [String] = []
+        var seenFiles = Set<String>()
+        var page = 0
+        // At most 2,000 files; older ones stay out of the tabs (their posts load with the history).
+        while page < 20 {
+            let list = try await self.client.searchFiles(.channel(channelId, page: page))
+            let files = list.orderedFiles.filter { seenFiles.insert($0.id).inserted }
+            if files.isEmpty {
+                break
+            }
+            for file in files where file.channelId == channelId && !file.postId.isEmpty && file.deleteAt == 0 {
+                if !postIds.contains(file.postId) {
+                    postIds.append(file.postId)
+                }
+            }
+            page += 1
+        }
+        let missing: [String] = await self.postbox.mmTransaction { _ in
+            let known = self.store.entries(channelId: channelId, postIds: postIds)
+            return postIds.filter { known[$0] == nil }
+        }
+        var posts: [Post] = []
+        for start in stride(from: 0, to: missing.count, by: 100) {
+            let chunk = Array(missing[start ..< min(missing.count, start + 100)])
+            posts.append(contentsOf: try await self.client.posts(ids: chunk))
+        }
+        posts = posts.filter { $0.channelId == channelId && $0.deleteAt == 0 }
+        var extra: [Post] = []
+        let rootIds = Set(posts.compactMap { $0.rootId.isEmpty ? nil : $0.rootId }).subtracting(posts.map { $0.id })
+        if !rootIds.isEmpty {
+            let unmappedRoots: [String] = await self.postbox.mmTransaction { _ in
+                let known = self.store.entries(channelId: channelId, postIds: Array(rootIds))
+                return rootIds.filter { known[$0] == nil }
+            }
+            if !unmappedRoots.isEmpty {
+                extra = try await self.client.posts(ids: unmappedRoots).filter { $0.channelId == channelId && $0.deleteAt == 0 }
+            }
+        }
+        await self.ensureUsers(referencedUserIds(posts + extra))
+        self.state.with { $0.completeTagSpaces[channelId, default: []].formUnion(MattermostAccountSync.fileTags) }
+        let peerId = channelState.peerId
+        await self.postbox.mmTransaction { transaction in
+            if !posts.isEmpty {
+                self.write(PageWrite(channelId: channelId, kind: .singles, run: posts.sorted(by: { $0.createAt < $1.createAt }), extra: extra), transaction: transaction)
+            }
+            for bit in 0 ..< 32 {
+                let tag = MessageTags(rawValue: UInt32(1) << UInt32(bit))
+                if MattermostAccountSync.fileTags.contains(tag) {
+                    transaction.removeHole(peerId: peerId, threadId: nil, namespace: Namespaces.Message.Cloud, space: .tag(tag), range: 1 ... self.maxLocalId)
+                }
+            }
+        }
+        MMLog.log("holes: files of \(channelId): \(seenFiles.count) file(s) in \(postIds.count) post(s) from \(page) search page(s), \(posts.count) post(s) and \(extra.count) root(s) loaded")
     }
 
     /// Thread views (`threadId` = local id of the root): `GET /posts/{root}/thread`.

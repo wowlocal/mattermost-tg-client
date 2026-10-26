@@ -90,9 +90,18 @@ public final class MattermostAccountSync: @unchecked Sendable {
     /// Counts WebSocket connections; retries of offline requests wake up when it changes.
     let connectionGeneration = MMLocked<Int>(0)
     let isConnected = MMLocked<Bool>(false)
+    /// Set by `stop()` (logout, session expiry); a stopped sync is never restarted.
+    private let stoppedFlag = MMLocked<Bool>(false)
+    var isStopped: Bool {
+        return self.stoppedFlag.current
+    }
     /// `user_typing` throttle per chat (the server's `TimeBetweenUserTypingUpdatesMilliseconds`).
     let typingInterval = MMLocked<Double>(5.0)
     let typingSent = MMLocked<[PeerActivitySpace: (time: Double, updateId: Int32)]>([:])
+    /// File searches for the media tabs, per channel (`loadChannelFiles`); kept once done.
+    let fileSearches = MMLocked<[String: Task<Void, Error>]>([:])
+    /// What the `AvailableReactions` list holds (`SyntheticConfiguration`).
+    let reactionList = MMLocked<(customNames: [String], usedEmoji: [String], listed: Set<String>)>(([], [], []))
 
     init(account: Account, client: MattermostClient, store: MattermostSyncStore, server: MattermostServerInfo) {
         self.account = account
