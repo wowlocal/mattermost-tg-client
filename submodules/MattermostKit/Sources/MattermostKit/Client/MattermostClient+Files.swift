@@ -123,7 +123,7 @@ extension MattermostClient {
                 (data, response) = try await session.upload(for: request, from: body, delegate: delegate)
             }
         } catch {
-            throw MattermostError.wrap(error)
+            throw MattermostError.wrap(error, url: request.url)
         }
         _ = try validate(response: response, body: data)
         let result = try decode(FileUploadResponse.self, from: data)
@@ -179,7 +179,7 @@ extension MattermostClient {
         do {
             (temporaryURL, response) = try await session.download(for: request)
         } catch {
-            throw MattermostError.wrap(error)
+            throw MattermostError.wrap(error, url: request.url)
         }
         defer { try? FileManager.default.removeItem(at: temporaryURL) }
         guard let http = response as? HTTPURLResponse else {

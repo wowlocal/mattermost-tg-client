@@ -27,25 +27,19 @@ public enum WebSocketTransportError: Error, Sendable, Equatable {
 
 /// `URLSessionWebSocketTask`-based transport.
 public final class URLSessionWebSocketTransport: WebSocketTransport {
-    private let session: URLSession
-    private let ownsSession: Bool
+    private let injectedSession: URLSession?
     private let maximumMessageSize: Int
 
-    /// - Parameter session: Defaults to a private session that is invalidated
-    ///   when the transport is released.
+    /// - Parameter session: Defaults to `MattermostURLSession.current` at each
+    ///   connection, which applies the certificate pins of
+    ///   `MattermostServerTrust.shared` (Phase 4G).
     public init(session: URLSession? = nil, maximumMessageSize: Int = 16 * 1024 * 1024) {
-        self.session = session ?? URLSession(configuration: .default)
-        self.ownsSession = session == nil
+        self.injectedSession = session
         self.maximumMessageSize = maximumMessageSize
     }
 
-    deinit {
-        if ownsSession {
-            session.invalidateAndCancel()
-        }
-    }
-
     public func connect(request: URLRequest) async throws -> any WebSocketConnection {
+        let session = self.injectedSession ?? MattermostURLSession.current
         let task = session.webSocketTask(with: request)
         task.maximumMessageSize = maximumMessageSize
         task.resume()

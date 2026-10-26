@@ -31,19 +31,27 @@ public final class MattermostClient: Sendable {
     }
 
     public let configuration: Configuration
-    public let session: URLSession
+    private let injectedSession: URLSession?
     private let tokenStorage: Locked<String?>
 
     /// - Parameters:
     ///   - token: A session token or personal access token.
-    ///   - session: Inject a custom session (tests use a `URLProtocol` stub).
-    public init(configuration: Configuration, token: String? = nil, session: URLSession = .shared) {
+    ///   - session: Inject a custom session (tests use a `URLProtocol` stub). Without one, every request goes
+    ///     through `MattermostURLSession.current`, which applies the certificate pins of `MattermostServerTrust.shared`
+    ///     and is renewed when they change (Phase 4G).
+    public init(configuration: Configuration, token: String? = nil, session: URLSession? = nil) {
         self.configuration = configuration
-        self.session = session
+        self.injectedSession = session
         self.tokenStorage = Locked(token)
     }
 
-    public convenience init(serverURL: URL, token: String? = nil, userAgent: String? = nil, session: URLSession = .shared) {
+    /// The session requests go through (looked up per request: `MattermostURLSession` renews its session when the
+    /// certificate pins change).
+    public var session: URLSession {
+        return self.injectedSession ?? MattermostURLSession.current
+    }
+
+    public convenience init(serverURL: URL, token: String? = nil, userAgent: String? = nil, session: URLSession? = nil) {
         self.init(configuration: Configuration(serverURL: serverURL, userAgent: userAgent), token: token, session: session)
     }
 
@@ -119,7 +127,7 @@ public final class MattermostClient: Sendable {
         do {
             (data, response) = try await session.data(for: urlRequest)
         } catch {
-            throw MattermostError.wrap(error)
+            throw MattermostError.wrap(error, url: urlRequest.url)
         }
         configuration.onServerReached?()
         let http: HTTPURLResponse

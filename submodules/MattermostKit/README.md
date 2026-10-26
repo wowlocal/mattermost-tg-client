@@ -16,6 +16,8 @@ Mattermost REST API v4 and WebSocket client for the native iOS Mattermost app (T
 | `Client/` | `MattermostClient`: one typed `async` method per endpoint in the v1 API table, `MattermostError`, multipart upload, downloads. |
 | `Auth/MobileSSO.swift` | Builds the SSO start URL and parses the callback (**unverified**, see below). |
 | `WebSocket/` | `MattermostWebSocket` (actor), the `WebSocketTransport` protocol + `URLSessionWebSocketTransport`, `WebSocketEvent` with typed helpers, `BackoffPolicy`, `WebSocketClock`. |
+| `Security/` | Certificate pinning (Phase 4G): `MattermostCertificatePins` (SPKI SHA-256 pins per host, parsed from managed configuration; SPKI read from the certificate's DER), `MattermostServerTrust` (the trust decision; `.shared` is the process-wide policy), `MattermostURLSession.current` (the default session of every client and WebSocket; `renew()` after the pins change). |
+| `Managed/` | `MattermostManagedConfiguration` (Phase 4G): the managed app configuration with the Mattermost mobile app's EMM keys, server restriction matching, the extensions' app-group copy. |
 
 ### HTTP client
 
@@ -59,6 +61,18 @@ try await socket.userTyping(channelId: id, parentId: rootId)   // caller throttl
 - **How a resume is detected (verified on 11.7.14):** on a successful resume the server sends **no `hello`**; it only replays missed events. A new connection always gets `hello` (with a new ID) first. So the socket sends a `ping` (the "handshake probe") right after connecting. If the reply arrives before any `hello`, the connection was resumed: `.connected(info)` with `info.resumed == true`. If `hello` arrives with a new ID, `resumed == false` and the sync layer must catch up.
 - **Invalid tokens (verified on 11.7.14):** the server still accepts the upgrade (101), then sends nothing and ignores actions. A connection that never completes its handshake is dropped after `handshakeTimeout`. The optional `tokenVerifier` is then asked; `makeWebSocket()` wires it to `GET /users/me`. Only a 401 stops reconnecting, with `.unauthorized`. A 401 on the upgrade itself (e.g. from a proxy) is detected directly.
 
+### Certificate pinning and managed configuration (Phase 4G)
+
+- Every `MattermostClient` without an injected session and every default `URLSessionWebSocketTransport` go through
+  `MattermostURLSession.current`, whose delegate applies `MattermostServerTrust.shared`: a host with pins is accepted
+  only when the system trusts the chain **and** a certificate in it has a pinned SPKI digest; hosts without pins are
+  left to the system. A refused request fails with `.transport(URLError(.serverCertificateUntrusted))` whose
+  `mattermostPinMismatchHost` names the host (URLSession itself reports a refused challenge as a cancellation).
+- URLSession checks a certificate when it opens a connection, so after `setPins` call `MattermostURLSession.renew()`
+  (and reconnect WebSockets): kept-alive connections and resumable TLS sessions of the old session are not reused.
+- `MattermostManagedConfiguration(dictionary:)` reads `UserDefaults.standard`'s `com.apple.configuration.managed`
+  (keys and behaviour: [docs/release/managed-configuration.md](../../docs/release/managed-configuration.md)).
+
 ## Running the tests
 
 ```sh
@@ -77,6 +91,9 @@ The suites:
   - error mapping, login token extraction, SSO URL handling, the multipart body shape, upload progress and cancellation, downloads
   - WebSocket event parsing
   - reconnect, backoff, resume and handshake logic with a fake transport and a manual clock
+- **Certificate pinning** (`CertificatePinningTests`): a test CA and leaf certificates are generated for each run
+  with `/usr/bin/openssl` (skipped without it; nothing is committed); SPKI digests are compared with openssl's, and
+  trust decisions are evaluated on real `SecTrust`s anchored at the test CA. `ManagedConfigurationTests`: the EMM keys.
 - **Captured fixtures** (`CapturedFixtureTests`): decodes the real Mattermost 11.7.14 responses in `Tests/MattermostKitTests/Fixtures/Captured`, recorded by `infra/dev-server/capture-fixtures.py`. It also asserts that lenient decoding dropped nothing (element counts match the raw JSON).
   - To refresh, re‑run the capture and copy `infra/dev-server/fixtures/{rest,ws}` there. Set `MM_FIXTURES_DIR=<dir>` to test a capture in place (e.g. from another server version).
 - **Integration** (`IntegrationTests`), skipped unless `MM_INTEGRATION=1`:
