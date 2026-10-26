@@ -91,13 +91,16 @@ extension MattermostAccountSync {
             state.teams = teams
         }
         var favoriteChannelIds: [String] = []
+        var favoritesByTeam: [String: [String]] = [:]
         for team in teams {
             for category in snapshot.categories[team.id]?.orderedCategories ?? [] where category.type == .favorites {
+                favoritesByTeam[team.id, default: []].append(contentsOf: category.channelIds)
                 for channelId in category.channelIds where !favoriteChannelIds.contains(channelId) {
                     favoriteChannelIds.append(channelId)
                 }
             }
         }
+        self.state.with { $0.favoritesByTeam = favoritesByTeam }
         await self.postbox.mmTransaction { transaction in
             self.writeUsers(users, transaction: transaction)
             self.writePresences(statuses, transaction: transaction)
@@ -194,8 +197,16 @@ extension MattermostAccountSync {
     }
 
     /// One local-only folder per team (D3): the team's channels, every group message, and every DM through
-    /// the user categories. Telegram's folder sync is never started, so nothing reaches a server.
+    /// the user categories; the team's Favorites are the folder's pinned chats. Telegram's folder sync is never
+    /// started; pin changes in a folder go to the team's Favorites (`startFolderPinObserver`).
     func writeTeamFolders(teams: [Team]) async {
+        let favoritePeersByTeam: [String: [PeerId]] = self.state.with { state in
+            var result: [String: [PeerId]] = [:]
+            for (teamId, channelIds) in state.favoritesByTeam {
+                result[teamId] = channelIds.compactMap { state.channels[$0]?.peerId }
+            }
+            return result
+        }
         let (channelPeersByTeam, groupPeers): ([String: [PeerId]], [PeerId]) = self.state.with { state in
             var byTeam: [String: [PeerId]] = [:]
             var groups: [PeerId] = []
@@ -228,6 +239,11 @@ extension MattermostAccountSync {
                 for team in teams {
                     var include = ChatListFilterIncludePeers()
                     include.setPeers((channelPeersByTeam[team.id] ?? []) + groupPeers)
+                    for peerId in (favoritePeersByTeam[team.id] ?? []).reversed() {
+                        let _ = include.addPinnedPeer(peerId)
+                    }
+                    let pinnedPeers = include.pinnedPeers
+                    self.state.with { $0.folderPins[team.id] = pinnedPeers }
                     let data = ChatListFilterData(
                         isShared: false,
                         hasSharedLinks: false,

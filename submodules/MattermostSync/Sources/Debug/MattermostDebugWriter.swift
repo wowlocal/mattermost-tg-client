@@ -27,6 +27,7 @@ import MattermostSyncCore
 /// | `resend\|<chat>` (every failed message) | `resendMessages` (as "Resend") |
 /// | `mute\|<chat>` / `unmute\|<chat>` | `engine.peers.updatePeerMuteSetting` |
 /// | `pin\|<chat>` / `unpin\|<chat>` | `engine.peers.toggleItemPinned(.group(.root))` |
+/// | `folderpin\|<chat>\|<team>` / `folderunpin\|…` | `engine.peers.toggleItemPinned(.filter(team folder))` |
 /// | `wait\|<seconds>`, `waitfor\|offline`, `waitfor\|online` | — |
 enum MattermostDebugWriter {
     static func run(script: String, sync: MattermostAccountSync) async {
@@ -167,6 +168,22 @@ enum MattermostDebugWriter {
         case "mute", "unmute":
             let _ = await signalValue(engine.peers.updatePeerMuteSetting(peerId: peerId, threadId: nil, muteInterval: action == "mute" ? Int32.max : 0))
             return "ok"
+        case "folderpin", "folderunpin":
+            // As pinning inside a team folder tab: `toggleItemPinned(.filter(folder id))`.
+            let teamName = field(2).lowercased()
+            guard let team = sync.state.with({ $0.teams.first(where: { $0.name.lowercased() == teamName || $0.displayName.lowercased() == teamName }) }), let value = sync.store.cursor(MattermostCursorKey.folderId(teamId: team.id)), let folderId = Int32(value) else {
+                return "no folder for team \(field(2))"
+            }
+            let filters = await signalValue(engine.peers.updatedChatListFilters()) ?? []
+            var isPinned = false
+            if let filter = filters.first(where: { $0.id == folderId }), case let .filter(_, _, _, data) = filter {
+                isPinned = data.includePeers.pinnedPeers.contains(peerId)
+            }
+            if isPinned == (action == "folderpin") {
+                return "already \(action == "folderpin" ? "pinned" : "unpinned") in \(team.name)"
+            }
+            let result = await signalValue(engine.peers.toggleItemPinned(location: .filter(folderId), itemId: .peer(peerId)))
+            return "\(result.map { "\($0)" } ?? "nil") in folder \(folderId)"
         case "pin", "unpin":
             let isPinned: Bool = await sync.postbox.mmTransaction { transaction in
                 return transaction.getPinnedItemIds(groupId: .root).contains(.peer(peerId))

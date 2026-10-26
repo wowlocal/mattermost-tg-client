@@ -66,7 +66,8 @@ The credentials are only used when no account exists yet; later launches reuse t
 | `resend\|<chat>` | `resendMessages` on the chat's failed messages |
 | `typing\|<chat>[\|<msg in thread>]` | `account.updateLocalInputActivity(.typingText)` |
 | `mute\|<chat>`, `unmute\|<chat>` | `engine.peers.updatePeerMuteSetting` |
-| `pin\|<chat>`, `unpin\|<chat>` | `engine.peers.toggleItemPinned` |
+| `pin\|<chat>`, `unpin\|<chat>` | `engine.peers.toggleItemPinned(.group(.root))` (all chats) |
+| `folderpin\|<chat>\|<team>`, `folderunpin\|…` | `engine.peers.toggleItemPinned(.filter(…))` (a team folder tab) |
 | `wait\|<s>`, `waitfor\|offline`, `waitfor\|online` | pauses (e.g. stop the server while `waitfor\|offline` waits) |
 
 ```sh

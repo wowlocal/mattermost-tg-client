@@ -62,6 +62,11 @@ public final class MattermostAccountSync: @unchecked Sendable {
         /// Local ids reserved for a jump (permalink) before their post is written: they stay holes, so the
         /// chat's `.aroundId` request loads them with their neighbours.
         var reservedJumpIds: [String: Set<Int32>] = [:]
+        /// Each team's Favorites category (channel ids, in order): the pinned chats of the team's folder.
+        var favoritesByTeam: [String: [String]] = [:]
+        /// The pinned peers last written to (or pushed from) each team folder, to tell the user's pin changes
+        /// in a folder from our own writes.
+        var folderPins: [String: [PeerId]] = [:]
     }
 
     let state = MMLocked(SyncState())

@@ -40,7 +40,17 @@ extension MattermostAccountSync {
             if let change = event.statusChange {
                 await self.applyStatus(change)
             }
-        case .directAdded, .groupAdded, .channelUpdated, .channelDeleted, .channelRestored, .channelConverted, .channelMemberUpdated:
+        case .channelMemberUpdated:
+            // Mute and other member changes: the member arrives as a JSON string, without a channel in the
+            // broadcast.
+            var channelId = event.data["channel_id"]?.stringValue ?? event.broadcast.channelId
+            if channelId.isEmpty, let raw = event.data["channelMember"]?.stringValue, let data = raw.data(using: .utf8), let member = try? JSONDecoder().decode(ChannelMember.self, from: data) {
+                channelId = member.channelId
+            }
+            if !channelId.isEmpty {
+                await self.refreshChannel(channelId)
+            }
+        case .directAdded, .groupAdded, .channelUpdated, .channelDeleted, .channelRestored, .channelConverted:
             let channelId = event.data["channel_id"]?.stringValue ?? event.broadcast.channelId
             if !channelId.isEmpty {
                 await self.refreshChannel(channelId)

@@ -126,6 +126,8 @@ extension MattermostAccountSync {
         notifications.start()
         pins.start()
 
+        self.startFolderPinObserver()
+
         self.addDisposable((self.account.mattermostLocalInputActivities()
         |> deliverOn(Queue.concurrentDefaultQueue())).start(next: { [weak self] activities in
             self?.pushTyping(activities)
@@ -272,7 +274,7 @@ extension MattermostAccountSync {
                         let count: Int = await self.postbox.mmTransaction { transaction in
                             return self.removePostsLocally([reference.postId], channelId: reference.channelId, transaction: transaction)
                         }
-                        MMLog.log("delete: post \(reference.postId) deleted (\(count) more message(s) removed with it)")
+                        MMLog.log("delete: post \(reference.postId) deleted (\(count) local message(s) removed, with thread replies)")
                     } catch let error as MattermostError {
                         if case .notFound = error {
                             await self.postbox.mmTransaction { transaction in
@@ -441,9 +443,9 @@ extension MattermostAccountSync {
     /// Moves channels into or out of each team's Favorites category (one `PUT` per team with every changed
     /// category: the server does not move a channel out of its previous category by itself). A DM or group
     /// message is in every team's sidebar, so it is (un)favorited in all of them.
-    func updateFavorites(added: [String], removed: [String]) async throws {
+    func updateFavorites(added: [String], removed: [String], onlyTeamId: String? = nil) async throws {
         let teams = self.state.with { $0.teams }
-        for team in teams {
+        for team in teams where onlyTeamId == nil || team.id == onlyTeamId {
             func belongs(_ channelId: String) -> Bool {
                 guard let channelState = self.channelState(channelId) else {
                     return false
@@ -523,15 +525,26 @@ extension MattermostAccountSync {
             return
         }
         var favoriteChannelIds: [String] = []
-        for team in self.state.with({ $0.teams }) {
+        var favoritesByTeam: [String: [String]] = [:]
+        let teams = self.state.with({ $0.teams })
+        for team in teams {
             guard let categories = try? await self.client.sidebarCategories(teamId: team.id) else {
                 return
             }
             for category in categories.orderedCategories where category.type == .favorites {
+                favoritesByTeam[team.id, default: []].append(contentsOf: category.channelIds)
                 for channelId in category.channelIds where !favoriteChannelIds.contains(channelId) {
                     favoriteChannelIds.append(channelId)
                 }
             }
+        }
+        let foldersChanged: Bool = self.state.with { state in
+            let changed = state.favoritesByTeam != favoritesByTeam
+            state.favoritesByTeam = favoritesByTeam
+            return changed
+        }
+        if foldersChanged {
+            await self.writeTeamFolders(teams: teams)
         }
         await self.postbox.mmTransaction { transaction in
             let pinned = favoriteChannelIds.compactMap { channelId -> PinnedItemId? in
@@ -542,6 +555,66 @@ extension MattermostAccountSync {
                 MMLog.log("favorites: \(pinned.count) pinned chats from the server")
             }
         }
+    }
+
+    /// Pin changes inside a team folder (`toggleItemPinned(.filter(...))`, which only edits the local folder)
+    /// go to that team's Favorites category.
+    func startFolderPinObserver() {
+        let queue = Queue()
+        // Consecutive emissions are compared; a state that `writeTeamFolders` wrote (`folderPins`) is ours.
+        var lastSeen: [String: [PeerId]] = [:]
+        self.addDisposable((TelegramEngine(account: self.account).peers.updatedChatListFilters()
+        |> deliverOn(queue)).start(next: { [weak self] filters in
+            guard let self = self else {
+                return
+            }
+            var changes: [(teamId: String, previous: [PeerId], current: [PeerId])] = []
+            for team in self.state.with({ $0.teams }) {
+                guard let value = self.store.cursor(MattermostCursorKey.folderId(teamId: team.id)), let folderId = Int32(value) else {
+                    continue
+                }
+                guard let filter = filters.first(where: { $0.id == folderId }), case let .filter(_, _, _, data) = filter else {
+                    continue
+                }
+                let current = data.includePeers.pinnedPeers
+                let previous = lastSeen[team.id]
+                lastSeen[team.id] = current
+                guard let previousPins = previous, Set(previousPins) != Set(current) else {
+                    continue
+                }
+                let isOurWrite: Bool = self.state.with { state in
+                    if let written = state.folderPins[team.id], Set(written) == Set(current) {
+                        return true
+                    }
+                    state.folderPins[team.id] = current
+                    return false
+                }
+                if !isOurWrite {
+                    changes.append((team.id, previousPins, current))
+                }
+            }
+            for change in changes {
+                let added = change.current.filter { !change.previous.contains($0) }.compactMap { self.channelId(forPeerId: $0) }
+                let removed = change.previous.filter { !change.current.contains($0) }.compactMap { self.channelId(forPeerId: $0) }
+                if added.isEmpty && removed.isEmpty {
+                    continue
+                }
+                Task {
+                    do {
+                        try await self.updateFavorites(added: added, removed: removed, onlyTeamId: change.teamId)
+                        self.state.with { state in
+                            var favorites = state.favoritesByTeam[change.teamId] ?? []
+                            favorites.removeAll(where: { removed.contains($0) })
+                            favorites.insert(contentsOf: added.filter { !favorites.contains($0) }, at: 0)
+                            state.favoritesByTeam[change.teamId] = favorites
+                        }
+                        MMLog.log("favorites: team \(change.teamId) folder +\(added) -\(removed)")
+                    } catch {
+                        self.notice("Couldn't update favorites: \(describeError(error))")
+                    }
+                }
+            }
+        }))
     }
 
     // MARK: Typing
