@@ -240,7 +240,7 @@ public final class MattermostLoginController: NavigationController {
             fields: fields,
             primaryTitle: server.allowsPasswordLogin ? self.strings.Relay_Login_LogIn : nil,
             alternatives: server.ssoProviders.map { (id: $0.rawValue, title: self.strings.relaySSOTitle($0, config: server.config)) },
-            footer: "\(host) · Mattermost \(server.version)"
+            footer: self.strings.Relay_Login_ServerFooter(host, "\(server.version)").string
         )
         let screen = MattermostAuthScreen(debugScreenName: "credentials", sharedContext: self.sharedContext, presentationData: self.presentationData, content: content)
         screen.primaryAction = { [weak self, weak screen] in

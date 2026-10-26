@@ -105,8 +105,23 @@ private enum DevicesState: Equatable {
     case failed(String)
 }
 
-private func sessionTitle(_ session: MattermostDeviceSession) -> String {
-    return session.system.isEmpty ? session.client : "\(session.client) · \(session.system)"
+private func sessionTitle(_ session: MattermostDeviceSession, strings: PresentationStrings) -> String {
+    // MattermostSync's generic names (MattermostSessions.clientName) in the app's language; product names (Chrome,
+    // Desktop App, Mattermost Mobile, Relay) stay as they are.
+    let client: String
+    switch session.client {
+    case "Personal access token":
+        client = strings.Relay_Devices_Client_AccessToken
+    case "OAuth app":
+        client = strings.Relay_Devices_Client_OAuth
+    case "Mobile app":
+        client = strings.Relay_Devices_Client_Mobile
+    case "Unknown client":
+        client = strings.Relay_Devices_Client_Unknown
+    default:
+        client = session.client
+    }
+    return session.system.isEmpty ? client : "\(client) · \(session.system)"
 }
 
 private func activityText(_ session: MattermostDeviceSession, strings: PresentationStrings) -> String {
@@ -129,7 +144,7 @@ private func devicesEntries(state: DevicesState, knowsCurrent: Bool, strings: Pr
         let others = sessions.filter { !$0.isCurrent }
         entries.append(.currentHeader(strings.Relay_Devices_ThisDevice.uppercased()))
         if let current {
-            entries.append(.session(index: 0, section: .current, session: current, title: sessionTitle(current), detail: strings.Relay_Devices_CurrentSession))
+            entries.append(.session(index: 0, section: .current, session: current, title: sessionTitle(current, strings: strings), detail: strings.Relay_Devices_CurrentSession))
         }
         if !others.isEmpty {
             if knowsCurrent {
@@ -140,7 +155,7 @@ private func devicesEntries(state: DevicesState, knowsCurrent: Bool, strings: Pr
             }
             entries.append(.othersHeader(strings.Relay_Devices_ActiveSessions.uppercased()))
             for (index, session) in others.enumerated() {
-                entries.append(.session(index: Int32(index), section: .others, session: session, title: sessionTitle(session), detail: activityText(session, strings: strings)))
+                entries.append(.session(index: Int32(index), section: .others, session: session, title: sessionTitle(session, strings: strings), detail: activityText(session, strings: strings)))
             }
         } else {
             entries.append(.terminateOthersInfo(strings.Relay_Devices_NoOtherSessions))
@@ -199,7 +214,7 @@ public func mattermostDevicesController(context: AccountContext) -> ViewControll
         let actionSheet = ActionSheetController(presentationData: presentationData)
         actionSheet.setItemGroups([
             ActionSheetItemGroup(items: [
-                ActionSheetTextItem(title: "\(sessionTitle(session))\n\(activityText(session, strings: presentationData.strings))"),
+                ActionSheetTextItem(title: "\(sessionTitle(session, strings: presentationData.strings))\n\(activityText(session, strings: presentationData.strings))"),
                 ActionSheetButtonItem(title: presentationData.strings.Relay_Devices_TerminateSession, color: .destructive, action: { [weak actionSheet] in
                     actionSheet?.dismissAnimated()
                     terminate(session)

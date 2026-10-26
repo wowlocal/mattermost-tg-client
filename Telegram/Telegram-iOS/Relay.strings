@@ -474,3 +474,8 @@
 "Relay.CustomStatus.Suggestion.Home" = "Working from home";
 "Relay.CustomStatus.Suggestion.Vacation" = "On a vacation";
 "Relay.Markdown.Table" = "Table";
+"Relay.Login.ServerFooter" = "%1$@ · Mattermost %2$@";
+"Relay.Devices.Client.AccessToken" = "Personal access token";
+"Relay.Devices.Client.OAuth" = "OAuth app";
+"Relay.Devices.Client.Mobile" = "Mobile app";
+"Relay.Devices.Client.Unknown" = "Unknown client";

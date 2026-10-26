@@ -483,6 +483,10 @@ final class MattermostAuthScreenNode: ASDisplayNode, UITextFieldDelegate {
             textField.attributedPlaceholder = NSAttributedString(string: field.placeholder, font: fieldFont, textColor: theme.list.itemInputField.placeholderColor)
             // The server field's placeholder is an example address ("chat.example.com"), not a name for the field.
             textField.accessibilityLabel = field.kind == .serverAddress ? self.presentationData.strings.Relay_Login_ServerAddress : field.placeholder
+            // Addresses, login ids and passwords are left-to-right text: in a right-to-left locale the focused field
+            // aligned left (its keyboard) and the others right; all of them read left to right now.
+            textField.semanticContentAttribute = .forceLeftToRight
+            textField.textAlignment = .left
             textField.autocorrectionType = .no
             textField.autocapitalizationType = .none
             textField.spellCheckingType = .no
