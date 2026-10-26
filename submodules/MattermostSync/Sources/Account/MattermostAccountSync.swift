@@ -84,6 +84,10 @@ public final class MattermostAccountSync: @unchecked Sendable {
         var collapsedThreads = false
         /// Followed threads per team (`Threads.swift`).
         var threads: [String: MattermostTeamThreads] = [:]
+        /// Phase 3C: public channels found by search that the user hasn't joined (`PeerSearch.swift`).
+        var previewChannels: [PeerId: Channel] = [:]
+        /// Phase 3C: the saved ("flagged") posts (`SavedPosts.swift`); nil until loaded.
+        var savedPostIds: Set<String>?
     }
 
     let state = MMLocked(SyncState())
@@ -116,6 +120,11 @@ public final class MattermostAccountSync: @unchecked Sendable {
     /// Changes of the followed threads (`Threads.swift`), for the threads list and its badge.
     let threadsVersion = MMLocked<Int>(0)
     let threadsVersionPromise = ValuePromise<Int>(0, ignoreRepeated: true)
+    /// Changes of the saved posts (`SavedPosts.swift`), for the saved posts list and the message menu.
+    let savedPostsVersion = MMLocked<Int>(0)
+    let savedPostsVersionPromise = ValuePromise<Int>(0, ignoreRepeated: true)
+    /// Message search, people search and pinning for Telegram's search UI (Phase 3C); TelegramCore keeps it weakly.
+    private var searchProvider: SearchProvider?
     /// Threads whose read state is being pushed.
     let threadReadsInFlight = MMLocked<Set<String>>([])
     /// What the `AvailableReactions` list holds (`SyntheticConfiguration`).
@@ -161,6 +170,10 @@ public final class MattermostAccountSync: @unchecked Sendable {
         let memberProvider = MemberListProvider(sync: self)
         self.memberProvider = memberProvider
         self.account.mattermostSetMemberProvider(memberProvider)
+
+        let searchProvider = SearchProvider(sync: self)
+        self.searchProvider = searchProvider
+        self.account.mattermostSetSearchProvider(searchProvider)
 
         let holeFiller = HoleFiller(sync: self)
         self.holeFiller = holeFiller
@@ -283,6 +296,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
             if !info.resumed {
                 self.addTask(Task { [weak self] in
                     await self?.catchUp()
+                    // Phase 3C: saved posts may have changed while the socket was away.
+                    await self?.loadSavedPostIds()
                 })
             }
         case .connecting, .waitingToReconnect:
@@ -413,6 +428,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
                 .withUpdatedAbout(about)
                 .withUpdatedBusinessIntro(nil)
                 .withUpdatedPeerStatusSettings(PeerStatusSettings())
+                // Phase 3C: Mattermost pins posts in DMs and the self-DM too (the message menu's Pin).
+                .withUpdatedCanPinMessages(true)
         })
         self.state.with { state in
             for user in users {

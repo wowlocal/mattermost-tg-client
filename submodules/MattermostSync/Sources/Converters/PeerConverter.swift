@@ -52,7 +52,8 @@ enum PeerConverter {
     /// info): basic groups never get a `threadId` on replies.
     /// `username` is only set on the composer's `~` suggestions (the channel name to insert); stored channel
     /// peers have none.
-    static func channel(_ channel: Channel, title: String, peerId: PeerId, username: String? = nil) -> TelegramChannel {
+    /// `participationStatus` is `.left` for a public channel the user hasn't joined (a search result, Phase 3C).
+    static func channel(_ channel: Channel, title: String, peerId: PeerId, username: String? = nil, participationStatus: TelegramChannelParticipationStatus = .member) -> TelegramChannel {
         return TelegramChannel(
             id: peerId,
             accessHash: .personal(0),
@@ -61,7 +62,7 @@ enum PeerConverter {
             photo: [],
             creationDate: mmSeconds(channel.createAt),
             version: 0,
-            participationStatus: .member,
+            participationStatus: participationStatus,
             info: .group(TelegramChannelGroupInfo(flags: [])),
             flags: [],
             restrictionInfo: nil,
