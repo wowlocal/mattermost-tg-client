@@ -6,8 +6,16 @@ import SwiftSignalKit
 import Postbox
 import TelegramCore
 import AccountContext
+import MattermostKit
 import MattermostSync
 import MattermostPushService
+
+/// **Debug builds only.** Hooks other modules install into the debug remote.
+public enum MattermostDebugHooks {
+    /// Handles a chat-level command (TelegramUI's composer driver, Phase 3D): returns false for actions it
+    /// doesn't know; otherwise calls `completion(ok, error, info)` once (`info` lands in the result's `state.chat`).
+    public static var chatCommand: ((_ action: String, _ command: [String: Any], _ completion: @escaping (Bool, String?, [String: Any]) -> Void) -> Bool)?
+}
 
 /// A login screen the debug remote can fill and press.
 protocol MattermostDebugDrivable: AnyObject {
@@ -179,6 +187,8 @@ final class MattermostDebugRemote {
             self.runNotificationCommand(action: action, command: command, id: id)
         case "simulate-push":
             self.simulatePush(command: command, id: id)
+        case "dialog", "dialog-set", "dialog-submit", "dialog-cancel", "dialog-picker":
+            self.runDialogCommand(action: action, command: command, id: id)
         case "dismiss-alerts":
             // "OK" on the login screens' error alerts (each screen in the flow, top first).
             var dismissed = false
@@ -192,9 +202,80 @@ final class MattermostDebugRemote {
             }
             self.writeResult(id: id, ok: dismissed, error: dismissed ? nil : "no alert")
         default:
+            // Chat-level commands of TelegramUI's debug driver (`compose`, `suggestions`, `pick`, `send`, …).
+            if let handler = MattermostDebugHooks.chatCommand, handler(action, command, { [weak self] ok, error, info in
+                self?.lastChatInfo = info
+                self?.writeResult(id: id, ok: ok, error: error)
+            }) {
+                return
+            }
             self.writeResult(id: id, ok: false, error: "unknown action \(action)")
         }
     }
+
+    private var lastChatInfo: [String: Any]?
+
+    // MARK: Interactive dialogs (Phase 3D)
+
+    private weak var dialog: MattermostDialogController?
+    private var dialogSubmit: (() -> Void)?
+    private var dialogOpenPicker: ((String) -> Void)?
+    private var dialogUpdate: ((String, JSONValue) -> Void)?
+    private var dialogState: (() -> [String: Any])?
+
+    /// The visible interactive dialog registers its actions (debug builds).
+    static func dialogAppeared(_ controller: MattermostDialogController, submit: @escaping () -> Void, openPicker: @escaping (String) -> Void, update: @escaping (String, JSONValue) -> Void, state: @escaping () -> [String: Any]) {
+        #if DEBUG
+        self.shared.dialog = controller
+        self.shared.dialogSubmit = submit
+        self.shared.dialogOpenPicker = openPicker
+        self.shared.dialogUpdate = update
+        self.shared.dialogState = state
+        #endif
+    }
+
+    /// `dialog` (its title and values in the result's `dialog`), `dialog-set` (`name`, `value`, `type`: `bool` or
+    /// `number`, default text), `dialog-submit` (the submit button), `dialog-cancel` (Cancel), `dialog-picker`
+    /// (`name`: a select's option screen, as a tap on it).
+    private func runDialogCommand(action: String, command: [String: Any], id: String?) {
+        guard let dialog = self.dialog else {
+            self.writeResult(id: id, ok: false, error: "no dialog")
+            return
+        }
+        switch action {
+        case "dialog-set":
+            guard let name = command["name"] as? String, let value = command["value"] as? String else {
+                self.writeResult(id: id, ok: false, error: "missing name or value")
+                return
+            }
+            switch command["type"] as? String {
+            case "bool":
+                self.dialogUpdate?(name, .bool(value == "true"))
+            case "number":
+                self.dialogUpdate?(name, Int64(value).map(JSONValue.int) ?? .string(value))
+            default:
+                self.dialogUpdate?(name, .string(value))
+            }
+        case "dialog-submit":
+            self.dialogSubmit?()
+        case "dialog-cancel":
+            MattermostComposer.cancelDialog(dialog.dialog)
+            dialog.dismiss()
+        case "dialog-picker":
+            self.dialogOpenPicker?(command["name"] as? String ?? "")
+        default:
+            break
+        }
+        Queue.mainQueue().after(action == "dialog-submit" ? 1.5 : 0.3) {
+            var info = self.dialogState?() ?? [:]
+            info["title"] = dialog.dialog.request.dialog.title
+            info["visible"] = self.dialog != nil && self.dialog?.view.window != nil
+            self.lastDialogInfo = info
+            self.writeResult(id: id, ok: true, error: nil)
+        }
+    }
+
+    private var lastDialogInfo: [String: Any]?
 
     /// Phase 3A: delivered notifications, and a tap / Reply / Mark as Read on one of them through the app's
     /// own response handler (`MattermostSync.debugNotificationResponder`). `which` is a request identifier, an
@@ -402,6 +483,14 @@ final class MattermostDebugRemote {
             state["push"] = MattermostSync.debugPushState()
             state["deliveredNotifications"] = self.notificationList
             state["visibleChat"] = self.visibleChatDescription()
+            if let chat = self.lastChatInfo {
+                state["chat"] = chat
+                self.lastChatInfo = nil
+            }
+            if let dialog = self.lastDialogInfo {
+                state["dialog"] = dialog
+                self.lastDialogInfo = nil
+            }
             result["state"] = state
             do {
                 try FileManager.default.createDirectory(at: self.directory, withIntermediateDirectories: true)

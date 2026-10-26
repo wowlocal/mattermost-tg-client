@@ -29,6 +29,8 @@ import ChatMessageItemView
 extension TelegramRootController {
     func relayDebugOpenScreenIfRequested() {
         #if DEBUG
+        // Phase 3D: the composer driver of the debug remote (RelayDebugComposer.swift).
+        RelayDebugComposer.install(rootController: self)
         guard let screen = ProcessInfo.processInfo.environment["RELAY_DEBUG_OPEN_SCREEN"], !screen.isEmpty else {
             return
         }

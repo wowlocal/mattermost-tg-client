@@ -92,6 +92,18 @@ public enum MattermostDebug {
         #endif
     }
 
+    /// Debug: the message of a loaded post in a chat (the thread root for the debug remote's `open-thread`).
+    public static func messageId(accountId: AccountRecordId, peerId: PeerId, postId: String) -> MessageId? {
+        #if DEBUG
+        guard let sync = MattermostSync.sync(accountId: accountId), let channelId = sync.channelId(forPeerId: peerId), let entry = sync.store.entries(channelId: channelId, postIds: [postId])[postId], !entry.isDeleted else {
+            return nil
+        }
+        return MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: entry.localId)
+        #else
+        return nil
+        #endif
+    }
+
     private static func waitForSync(accountId: AccountRecordId) async -> MattermostAccountSync? {
         for _ in 0 ..< 600 {
             if let sync = MattermostSync.sync(accountId: accountId), sync.state.with({ $0.newestPagesLoaded }) {
