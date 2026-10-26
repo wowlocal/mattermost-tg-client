@@ -34,6 +34,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | MattermostSyncCore (ID allocator, markdown, mapping helpers) | [submodules/MattermostSyncCore](../submodules/MattermostSyncCore/README.md) | Done: 57 tests incl. property tests; BUILD file present, not yet built by Bazel |
 | Local Mattermost server + seed + fixtures | [infra/dev-server](../infra/dev-server/README.md) | Done: Mattermost 11.7.14 ESR (Team Edition) at http://localhost:8065, reset+seed 56 s |
 | Telegram internals map (Spike A prep, assumptions) | [telegram-internals.md](research/telegram-internals.md) | Done |
+| SQLite sync store (ID map, peers, cursors) | `submodules/MattermostSyncCore` | Agent working |
 | Spike A: null network engine + seeded account | TelegramCore, `submodules/MattermostSync` | Agent working (only workstream running Bazel) |
 
 ## Phase 0 checklist
