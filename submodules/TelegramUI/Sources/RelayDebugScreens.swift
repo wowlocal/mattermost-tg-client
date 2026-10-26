@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import Display
 import SwiftSignalKit
+import Postbox
 import TelegramCore
 import AccountContext
 import PeerInfoScreen
@@ -17,7 +18,9 @@ import ChatMessageItemView
 // - `compose`: the New Message screen;
 // - `peerinfo`, `attach`: the profile of / the attach menu in the chat that the Spike A hook opened
 //   (combine with `SIMCTL_CHILD_RELAY_DEBUG_OPEN_CHAT=dm|ios-team|…`);
-// - `reactions`: the context menu with the reaction picker of the newest message in that chat.
+// - `reactions`: the context menu with the reaction picker of the newest message in that chat;
+// - `button:<title>`: taps the inline button with that title on the newest message that has it, through the
+//   chat's `requestMessageActionCallback` as a tap does (a menu's option: `RELAY_DEBUG_SELECT_OPTION`).
 // Further screens can be added below; Release builds compile none of this.
 extension TelegramRootController {
     func relayDebugOpenScreenIfRequested() {
@@ -88,8 +91,46 @@ extension TelegramRootController {
             // `RELAY_DEBUG_OPEN_CHAT` opened, as a long press would open it.
             self.relayDebugOpenNewestMessageMenu(attempt: 0)
         default:
-            break
+            if screen.hasPrefix("button:") {
+                self.relayDebugTapButton(title: String(screen.dropFirst("button:".count)), attempt: 0)
+            }
         }
+    }
+
+    private func relayDebugTapButton(title: String, attempt: Int) {
+        Queue.mainQueue().after(1.0, { [weak self] in
+            guard let self else {
+                return
+            }
+            var target: (ChatMessageItemView, MemoryBuffer)?
+            if let chatController = self.viewControllers.last as? ChatControllerImpl {
+                chatController.chatDisplayNode.historyNode.forEachItemNode { node in
+                    guard let itemNode = node as? ChatMessageItemView, let item = itemNode.item else {
+                        return
+                    }
+                    if let current = target?.0.item, current.message.index > item.message.index {
+                        return
+                    }
+                    for attribute in item.message.attributes {
+                        guard let markup = attribute as? ReplyMarkupMessageAttribute else {
+                            continue
+                        }
+                        for row in markup.rows {
+                            for button in row.buttons where button.title == title {
+                                if case let .callback(_, data) = button.action {
+                                    target = (itemNode, data)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if let (itemNode, data) = target, let item = itemNode.item {
+                item.controllerInteraction.requestMessageActionCallback(item.message, data, false, false, nil)
+            } else if attempt < 20 {
+                self.relayDebugTapButton(title: title, attempt: attempt + 1)
+            }
+        })
     }
 
     private func relayDebugOpenNewestMessageMenu(attempt: Int) {

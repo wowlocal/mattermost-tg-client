@@ -2746,6 +2746,12 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             
             let messageId = message.callbackTargetMessageId
             
+            // MATTERMOST: buttons and menus of interactive message attachments (MattermostPostActions.swift).
+            if MattermostBackend.isEnabled {
+                strongSelf.mattermostRequestPostAction(message: message, data: data, progress: progress)
+                return
+            }
+            
             guard strongSelf.presentationInterfaceState.subject != .scheduledMessages else {
                 strongSelf.present(textAlertController(context: strongSelf.context, updatedPresentationData: strongSelf.updatedPresentationData, title: nil, text: strongSelf.presentationData.strings.ScheduledMessages_BotActionUnavailable, actions: [TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
                 return

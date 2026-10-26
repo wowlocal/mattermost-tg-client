@@ -2082,6 +2082,11 @@ func peerInfoScreenData(
                 }
                 |> distinctUntilChanged
                 |> mapToSignal { isLarge -> Signal<(total: Int32?, recent: Int32?), NoError> in
+                    // MATTERMOST: member lists come from Telegram's server (an empty list would show "0 members"); the
+                    // member count is MattermostSync's `participantsSummary`.
+                    if MattermostBackend.isEnabled {
+                        return .single((nil, nil))
+                    }
                     if let isLarge = isLarge {
                         if isLarge {
                             return context.peerChannelMemberCategoriesContextsManager.recentOnline(account: context.account, accountPeerId: context.account.peerId, peerId: peerId)
