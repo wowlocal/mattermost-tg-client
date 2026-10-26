@@ -615,8 +615,7 @@ public final class MattermostAccountSync: @unchecked Sendable {
         // Every chat needs an inclusion: rows sort by `last_post_at` until messages load, and a channel without
         // one would also wait for Telegram's channel polling.
         let groupId: PeerGroupId = channel.isArchived ? Namespaces.PeerGroup.archive : .root
-        let minTimestamp = mmSeconds(max(channel.lastPostAt, channel.createAt))
-        transaction.updatePeerChatListInclusion(peerId, inclusion: .ifHasMessagesOrOneOf(groupId: groupId, pinningIndex: nil, minTimestamp: minTimestamp))
+        transaction.updatePeerChatListInclusion(peerId, inclusion: .ifHasMessagesOrOneOf(groupId: groupId, pinningIndex: nil, minTimestamp: self.chatListMinTimestamp(channel)))
 
         let muted = member.notifyProps["mark_unread"] == "mention"
         let notificationSettings = TelegramPeerNotificationSettings.defaultSettings.withUpdatedMuteState(muted ? .muted(until: Int32.max) : .unmuted)

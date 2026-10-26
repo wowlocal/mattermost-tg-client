@@ -210,10 +210,37 @@ extension MattermostAccountSync {
                 return updates.count
             }
         }
-        await self.postbox.mmTransaction { _ in
+        await self.postbox.mmTransaction { transaction in
             self.store.setCursor(MattermostAccountSync.threadLayoutCursor, MattermostAccountSync.threadLayoutVersion)
+            self.applyChatListOrder(transaction: transaction)
+            self.refreshChatListTimestamps(transaction: transaction)
         }
         MMLog.log("crt: re-rendered \(updatedCount) message(s) in \(chats.count) chat(s) for collapsed threads \(isOn ? "on" : "off")")
+    }
+
+    /// Chat list rows (4F): with collapsed reply threads a row previews and sorts by its newest root post, as
+    /// Mattermost sorts by `last_root_post_at` (Postbox's chat list follows the root-post tag; Saved Messages, which
+    /// has no collapsed view, keeps its newest message). Without CRT, the newest message.
+    func applyChatListOrder(transaction: Transaction) {
+        transaction.setChatListTopMessageTag(self.isCollapsedThreads ? .mattermostRootPost : nil, exceptPeerId: self.ownPeerId)
+    }
+
+    /// The time a chat sorts by until its messages are loaded: the last (root) post. Takes the state lock.
+    func chatListMinTimestamp(_ channel: Channel) -> Int32 {
+        let lastPostAt = self.isCollapsedThreads && channel.lastRootPostAt > 0 ? channel.lastRootPostAt : channel.lastPostAt
+        return mmSeconds(max(lastPostAt, channel.createAt))
+    }
+
+    /// After a switch: every included chat sorts by the matching last post time (pinning and folder kept).
+    func refreshChatListTimestamps(transaction: Transaction) {
+        let channels = self.state.with { state in
+            return state.channels.values.map { ($0.peerId, $0.channel) }
+        }
+        for (peerId, channel) in channels {
+            if case let .ifHasMessagesOrOneOf(groupId, pinningIndex, _) = transaction.getPeerChatListInclusion(peerId) {
+                transaction.updatePeerChatListInclusion(peerId, inclusion: .ifHasMessagesOrOneOf(groupId: groupId, pinningIndex: pinningIndex, minTimestamp: self.chatListMinTimestamp(channel)))
+            }
+        }
     }
 
     /// Data written before 3B (no root tags, DM replies outside threads) is brought up to date once.

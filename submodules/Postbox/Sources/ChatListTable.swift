@@ -401,7 +401,8 @@ final class ChatListTable: Table {
                 self.ensureInitialized(groupId: groupId)
             }
             
-            let topMessage = messageHistoryTable.topIndex(peerId: peerId)
+            // MATTERMOST: the top message may follow one tag (collapsed reply threads), see `PostboxImpl.chatListTopIndex`.
+            let topMessage = postbox.chatListTopIndex(peerId: peerId)
             let embeddedChatStateOverrideTimestamp = peerChatInterfaceStateTable.get(peerId)?.overrideChatTimestamp
             
             var rawTopMessageIndex: MessageIndex?

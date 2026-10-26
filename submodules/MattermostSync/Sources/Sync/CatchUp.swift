@@ -48,7 +48,12 @@ extension MattermostAccountSync {
         let started = CFAbsoluteTimeGetCurrent()
         let startedAt = Int64(Date().timeIntervalSince1970 * 1000)
         do {
-            let teams = self.state.with { $0.teams }
+            // Teams joined or left meanwhile (removal from a team sends no `user_removed` per channel).
+            let teams = try await self.client.teams().filter { $0.deleteAt == 0 }
+            let teamsChanged = Set(teams.map { $0.id }) != Set(self.state.with { $0.teams }.map { $0.id })
+            if teamsChanged {
+                self.state.with { $0.teams = teams }
+            }
             let snapshot = try await self.loadChannels(teams: teams, categories: false)
             var added: [(channel: Channel, member: ChannelMember, teamId: String)] = []
             var active: [String] = []
@@ -79,7 +84,36 @@ extension MattermostAccountSync {
                 }
             }
             if !added.isEmpty {
+                // DMs and GMs closed on another client stay closed (as the bootstrap leaves them out).
+                if added.contains(where: { $0.channel.type == .directMessage || $0.channel.type == .groupMessage }), let preferences = try? await self.client.preferences() {
+                    let hiddenUsers = Set(preferences.filter { $0.category == PreferenceCategory.directChannelShow && $0.value == "false" }.map { $0.name })
+                    let hiddenGroups = Set(preferences.filter { $0.category == PreferenceCategory.groupChannelShow && $0.value == "false" }.map { $0.name })
+                    let ownUserId = self.ownUserId
+                    added = added.filter { item in
+                        switch item.channel.type {
+                        case .directMessage:
+                            guard let partnerId = item.channel.directMessagePartnerId(myUserId: ownUserId) else {
+                                return false
+                            }
+                            return partnerId == ownUserId || !hiddenUsers.contains(partnerId)
+                        case .groupMessage:
+                            return !hiddenGroups.contains(item.channel.id)
+                        default:
+                            return true
+                        }
+                    }
+                }
+            }
+            // What the chat list holds: channels and GMs known or added now (closed GMs stay out, as at the bootstrap).
+            let addedIds = Set(added.map { $0.channel.id })
+            let memberChannelIds = Set(snapshot.channels.filter { $0.value.channel.type != .directMessage }.map { $0.key }).filter { self.channelState($0) != nil || addedIds.contains($0) }
+            await self.reconcileMembership(teams: teams, channelIds: memberChannelIds)
+            self.pruneStale(keeping: Set(snapshot.channels.keys))
+            if !added.isEmpty {
                 await self.addChannels(added)
+            }
+            if teamsChanged && !added.contains(where: { $0.channel.type != .directMessage }) {
+                await self.writeTeamFolders(teams: teams)
             }
             active = active.filter { self.channelState($0) != nil }
             quiet = quiet.filter { self.channelState($0) != nil }

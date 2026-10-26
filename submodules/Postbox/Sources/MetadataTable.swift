@@ -6,6 +6,8 @@ private enum MetadataKey: Int32 {
     case TransactionStateVersion = 3
     case MasterClientId = 4
     case RemoteContactCount = 6
+    // MATTERMOST: see `chatListTopMessageTag()`.
+    case ChatListTopMessageTag = 7
 }
 
 final class MetadataTable: Table {
@@ -125,6 +127,34 @@ final class MetadataTable: Table {
                 self.cachedRemoteContactCount = 0
                 return 0
             }
+        }
+    }
+    
+    // MATTERMOST: the tag whose newest message is a chat list row's top message (collapsed reply threads: root
+    // posts only), for every peer except `exceptPeerId`; nil: the newest message (Telegram's behaviour).
+    func chatListTopMessageTag() -> (tag: MessageTags, exceptPeerId: PeerId?)? {
+        guard let value = self.valueBox.get(self.table, key: self.key(.ChatListTopMessageTag)), value.length >= 12 else {
+            return nil
+        }
+        var rawTag: UInt32 = 0
+        var exceptPeerId: Int64 = 0
+        value.read(&rawTag, offset: 0, length: 4)
+        value.read(&exceptPeerId, offset: 4, length: 8)
+        return (MessageTags(rawValue: rawTag), exceptPeerId == 0 ? nil : PeerId(exceptPeerId))
+    }
+    
+    // MATTERMOST: see `chatListTopMessageTag()`.
+    func setChatListTopMessageTag(_ value: (tag: MessageTags, exceptPeerId: PeerId?)?) {
+        if let value = value {
+            sharedBuffer.reset()
+            let buffer = sharedBuffer
+            var rawTag: UInt32 = value.tag.rawValue
+            var exceptPeerId: Int64 = value.exceptPeerId?.toInt64() ?? 0
+            buffer.write(&rawTag, offset: 0, length: 4)
+            buffer.write(&exceptPeerId, offset: 4, length: 8)
+            self.valueBox.set(self.table, key: self.key(.ChatListTopMessageTag), value: buffer)
+        } else {
+            self.valueBox.remove(self.table, key: self.key(.ChatListTopMessageTag), secure: false)
         }
     }
     

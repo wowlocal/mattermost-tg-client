@@ -389,6 +389,14 @@ public final class Transaction {
         return self.postbox?.chatListTable.getPeerChatListIndex(peerId: peerId)
     }
     
+    // MATTERMOST: chat list rows show and sort by the newest message carrying `tag` (collapsed reply threads: root
+    // posts), for every peer except `exceptPeerId`; nil restores the newest message. Persisted; a change recomputes
+    // every chat list row.
+    public func setChatListTopMessageTag(_ tag: MessageTags?, exceptPeerId: PeerId?) {
+        assert(!self.disposed)
+        self.postbox?.setChatListTopMessageTag(tag, exceptPeerId: exceptPeerId)
+    }
+    
     public func getChatListPeers(groupId: PeerGroupId, filterPredicate: ChatListFilterPredicate?, additionalFilter: ((Peer) -> Bool)?) -> [Peer] {
         assert(!self.disposed)
         if let postbox = self.postbox {
@@ -1632,6 +1640,9 @@ final class PostboxImpl {
     private var currentUpdatedCachedPeerData: [PeerId: (previous: CachedPeerData?, updated: CachedPeerData)] = [:]
     private var currentUpdatedPeerPresences: [PeerId: PeerPresence] = [:]
     private var currentUpdatedPeerChatListEmbeddedStates = Set<PeerId>()
+    // MATTERMOST: chat list rows to recompute after `setChatListTopMessageTag`.
+    private var currentRecomputedChatListPeerIds = Set<PeerId>()
+    private var chatListTopMessageTag: (tag: MessageTags, exceptPeerId: PeerId?)?
     private var currentUpdatedTotalUnreadStates: [PeerGroupId: ChatListTotalUnreadState] = [:]
     private var currentUpdatedGroupTotalUnreadSummaries: [PeerGroupId: PeerGroupUnreadCountersCombinedSummary] = [:]
     private var currentPeerMergedOperationLogOperations: [PeerMergedOperationLogOperation] = []
@@ -1901,6 +1912,8 @@ final class PostboxImpl {
         self.isInTransaction = isInTransaction
         
         self.metadataTable = MetadataTable(valueBox: self.valueBox, table: MetadataTable.tableSpec(0), useCaches: useCaches)
+        // MATTERMOST: see `setChatListTopMessageTag`.
+        self.chatListTopMessageTag = self.metadataTable.chatListTopMessageTag()
         
         self.keychainTable = KeychainTable(valueBox: self.valueBox, table: KeychainTable.tableSpec(1), useCaches: useCaches)
         self.reverseAssociatedPeerTable = ReverseAssociatedPeerTable(valueBox: self.valueBox, table:ReverseAssociatedPeerTable.tableSpec(40), useCaches: useCaches)
@@ -2646,7 +2659,8 @@ final class PostboxImpl {
     }
     
     private func beforeCommit(currentTransaction: Transaction) -> (updatedTransactionStateVersion: Int64?, updatedMasterClientId: Int64?) {
-        self.chatListTable.replay(postbox: self, historyOperationsByPeerId: self.currentOperationsByPeerId, updatedPeerChatListEmbeddedStates: self.currentUpdatedPeerChatListEmbeddedStates, updatedPeerCachedData: self.currentUpdatedCachedPeerData, updatedChatListInclusions: self.currentUpdatedChatListInclusions, messageHistoryTable: self.messageHistoryTable, peerChatInterfaceStateTable: self.peerChatInterfaceStateTable, operations: &self.currentChatListOperations)
+        // MATTERMOST: `currentRecomputedChatListPeerIds` (rows whose top message rule changed) are replayed too.
+        self.chatListTable.replay(postbox: self, historyOperationsByPeerId: self.currentOperationsByPeerId, updatedPeerChatListEmbeddedStates: self.currentRecomputedChatListPeerIds.isEmpty ? self.currentUpdatedPeerChatListEmbeddedStates : self.currentUpdatedPeerChatListEmbeddedStates.union(self.currentRecomputedChatListPeerIds), updatedPeerCachedData: self.currentUpdatedCachedPeerData, updatedChatListInclusions: self.currentUpdatedChatListInclusions, messageHistoryTable: self.messageHistoryTable, peerChatInterfaceStateTable: self.peerChatInterfaceStateTable, operations: &self.currentChatListOperations)
         
         self.peerChatTopTaggedMessageIdsTable.replay(historyOperationsByPeerId: self.currentOperationsByPeerId)
         
@@ -2809,6 +2823,7 @@ final class PostboxImpl {
         self.currentUpdatedCachedPeerData.removeAll()
         self.currentUpdatedPeerPresences.removeAll()
         self.currentUpdatedPeerChatListEmbeddedStates.removeAll()
+        self.currentRecomputedChatListPeerIds.removeAll()
         self.currentUpdatedTotalUnreadStates.removeAll()
         self.currentUpdatedGroupTotalUnreadSummaries.removeAll()
         self.currentPeerMergedOperationLogOperations.removeAll()
@@ -2900,6 +2915,27 @@ final class PostboxImpl {
         }
     }
 
+    // MATTERMOST: see `Transaction.setChatListTopMessageTag`.
+    fileprivate func setChatListTopMessageTag(_ tag: MessageTags?, exceptPeerId: PeerId?) {
+        let current = self.chatListTopMessageTag
+        if current?.tag == tag && current?.exceptPeerId == exceptPeerId {
+            return
+        }
+        let updated: (tag: MessageTags, exceptPeerId: PeerId?)? = tag.flatMap { (tag: $0, exceptPeerId: exceptPeerId) }
+        self.chatListTopMessageTag = updated
+        self.metadataTable.setChatListTopMessageTag(updated)
+        self.currentRecomputedChatListPeerIds.formUnion(self.chatListTable.getAllPeerIds())
+    }
+    
+    // MATTERMOST: a chat list row's top message: the newest message, or the newest one carrying the chat list tag
+    // (falling back to the newest message when no message carries it).
+    func chatListTopIndex(peerId: PeerId) -> MessageIndex? {
+        if let (tag, exceptPeerId) = self.chatListTopMessageTag, peerId != exceptPeerId, let index = self.messageHistoryTable.topIndex(peerId: peerId, tag: tag) {
+            return index
+        }
+        return self.messageHistoryTable.topIndex(peerId: peerId)
+    }
+    
     fileprivate func getTopPeerMessageIndex(peerId: PeerId) -> MessageIndex? {
         var indices: [MessageIndex] = []
         for namespace in self.messageHistoryIndexTable.existingNamespaces(peerId: peerId) where self.seedConfiguration.chatMessagesNamespaces.contains(namespace) {

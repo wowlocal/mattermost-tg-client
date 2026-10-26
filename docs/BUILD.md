@@ -293,6 +293,37 @@ org.relaychat.Relay groups`; the peer id from `peerinfo` + `info-state`). After 
 through what its Send button runs and writes `share-result.json` next to it; the extension logs
 `[Relay] share: shared …`. It uses the current account (switch first with `switch username=…`).
 
+#### Phase 4B: runtime hygiene and performance (debug builds only)
+
+TelegramUI `RelayDebugPerf.swift`, MattermostUI `MattermostDebugRemote.swift`; results in the result's `extra`:
+
+```sh
+tools/relay-remote.py "$UDID" runtime                     # requests that reached the null network engine per Telegram function (total, live), memory (phys_footprint, resident)
+tools/relay-remote.py "$UDID" runtime stacks=1            # … with the call stack of each function's first request (demangle with `xcrun swift-demangle`)
+tools/relay-remote.py "$UDID" screen name=data            # a Settings sub-screen as RELAY_DEBUG_OPEN_SCREEN names it (privacy, data, notifications, appearance, …)
+RELAY_REMOTE_TIMEOUT=40 tools/relay-remote.py "$UDID" chatlist-scroll "folder=4B Large" seconds=8 speed=7000   # scroll a folder's list down and back, frame intervals and hitches
+tools/relay-remote.py "$UDID" storage                     # Telegram's storage usage per chat and category + Mattermost files on disk (mm-file-*, mm-avatar-*, mm-url-*)
+tools/relay-remote.py "$UDID" storage do=evict peer=<PeerId.toInt64()> seconds=60   # a per-chat "keep media" exception: automatic eviction of that chat's files unused for 60 s
+tools/relay-remote.py "$UDID" storage do=reset            # remove the exceptions; do=clear [peer=…]: what Storage Usage's Clear runs
+tools/relay-remote.py "$UDID" background-refresh          # what the BGAppRefreshTask runs (catch-up of every account)
+```
+
+- `RELAY_REMOTE_TIMEOUT=<s>` makes `relay-remote.py` wait longer than 15 s for an answer.
+- Every launch logs `[Relay] perf: chat list ready <ms> after didFinishLaunching, <ms> after process start`; the bootstrap logs `bootstrap: newest pages n/N after <ms>` and `bootstrap: done in <ms>`, each catch-up `catch-up since …: N channels, M with new posts …, K stale, in <ms>`, the foreground check `foreground: active after <s> s in the background; websocket alive|…`.
+- `tools/relay-session.py "$UDID" --minutes 10 --out session.jsonl`: a scripted session (chats, profiles, thread, search, Settings screens, threads list, background/foreground) with a memory and parked-request sample every minute; the last line lists every parked function.
+- **Background refresh** (`BGAppRefreshTask` `org.relaychat.Relay.refresh`): the simulator refuses `BGTaskScheduler.submit` (`BGTaskSchedulerErrorDomain` 1, logged as "could not schedule", although `backgroundRefreshStatus` is available), so `_simulateLaunchForTaskWithIdentifier:` has no pending request to launch there. `tools/relay-remote.py "$UDID" background-refresh` runs what the task runs (also while the app is in the background); the app logs `background refresh: started` and `… N account(s) caught up in … ms`. On a device, after the app was put in the background once: attach lldb (Xcode, or `xcrun lldb -p <pid>`), `e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"org.relaychat.Relay.refresh"]`, continue.
+
+**Large-server data** (`tools/mm-large-server.py`, standard library; bulk import through `mmctl --local`): team `relay-4b-large` ("4B Large") with 1,000 channels `l4b-NNNN-<topic>` (~25,000 posts over 60 days, 8 % with replies), 2,000 users `l4bNNNN` (190 active: unlicensed 11.7 servers cap active users at 200/250 — the rest are deactivated but still post and are members; `l4b0001`–`l4b0005` have the shared seed password and post the unread posts):
+
+```sh
+tools/mm-large-server.py seed        # ~5 min (bulk import)
+tools/mm-large-server.py join        # alice: the team, 500 channels (read), 40 DMs + 5 GMs with load users, then 150 channels with new posts (30 @alice)
+tools/mm-large-server.py unread      # more new posts; mark-read: alice reads her load channels
+tools/mm-large-server.py status
+tools/mm-large-server.py detach      # alice leaves the team (and its channels); her DMs/GMs with load users are hidden (direct/group_channel_show=false)
+tools/mm-large-server.py purge       # delete the team and the load users permanently (mmctl)
+```
+
 #### Phase 2D hooks (debug builds only)
 
 - `RELAY_DEBUG_OPEN_SCREEN=devices` (Settings → Devices), `openlinks` (Open Links In), `reaction-notifications`, `authorinfo` (profile of the newest message's author in the chat `RELAY_DEBUG_OPEN_CHAT` opened, e.g. a webhook's name override), `settings:add-account` (Settings → Add Account through the Settings handler, account limit included).

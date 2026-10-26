@@ -72,6 +72,12 @@ extension MattermostAccountSync {
                     await self.announceMemberAdded(channelId: event.broadcast.channelId, userId: userId)
                 }
             }
+        case .leaveTeam, .addedToTeam:
+            // Phase 4B: the user's teams changed (removal from a team sends no `user_removed` per channel); the
+            // catch-up reloads the teams, writes the new channels and removes what the user left.
+            if (event.data["user_id"]?.stringValue ?? event.broadcast.userId) == self.ownUserId {
+                await self.catchUp()
+            }
         case .userRemoved:
             let channelId = event.data["channel_id"]?.stringValue ?? event.broadcast.channelId
             let userId = event.data["user_id"]?.stringValue ?? event.broadcast.userId

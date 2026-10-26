@@ -114,6 +114,8 @@ extension MattermostAccountSync {
         }
         self.state.with { $0.favoritesByTeam = favoritesByTeam }
         await self.postbox.mmTransaction { transaction in
+            // Chat list rows follow root posts with collapsed reply threads (4F).
+            self.applyChatListOrder(transaction: transaction)
             self.writeUsers(users, transaction: transaction)
             self.writePresences(statuses, transaction: transaction)
             for item in included {
@@ -142,6 +144,22 @@ extension MattermostAccountSync {
             transaction.setPinnedItemIds(groupId: .root, itemIds: pinned)
         }
         await self.writeTeamFolders(teams: teams)
+        // Chats and team folders of memberships that ended while the app wasn't running, and DMs closed on another
+        // client (Phase 4B).
+        await self.reconcileMembership(teams: teams, channelIds: Set(included.filter { $0.channel.type != .directMessage }.map { $0.channel.id }))
+        let closedDirectPeers: [PeerId] = snapshot.channels.values.compactMap { item in
+            guard item.channel.type == .directMessage, let partnerId = item.channel.directMessagePartnerId(myUserId: me.id), partnerId != me.id, hiddenDirectUsers.contains(partnerId) else {
+                return nil
+            }
+            return self.userPeerId(partnerId)
+        }
+        if !closedDirectPeers.isEmpty {
+            await self.postbox.mmTransaction { transaction in
+                for peerId in closedDirectPeers {
+                    transaction.updatePeerChatListInclusion(peerId, inclusion: .notIncluded)
+                }
+            }
+        }
         // Member counts ("N members" in a chat's title) load when a chat or profile asks for its cached data
         // (`ChatObserver`), not for every chat at every launch (Phase 4B: one request per chat).
         self.state.with { $0.isBootstrapped = true }

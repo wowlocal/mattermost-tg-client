@@ -283,6 +283,60 @@ One card per post, and only when the message carrying the text has no other medi
 | Channel member notify props (`push`, `push_threads`, `ignore_channel_mentions`, `mark_unread`, `channel_auto_follow_threads`) | the chat profile's Notifications → Customize opens Mattermost's settings instead of Telegram's: default/all/mentions/nothing, thread replies and follow all new threads (collapsed threads), ignore channel-wide mentions (channels), mute. `PUT …/members/me/notify_props`, then the channel is rewritten (mute → Telegram's mute). | SyncCore `ChannelNotificationPreferences`; `PeerInfoScreenPerformButtonAction` (one hunk) |
 | Share extension | Telegram's share extension and its chat picker (over each account's Postbox via `standaloneStateManager`, null network; the picker's avatars load with the account's session: `MattermostShareExtension.prepareAccount`). Send runs `mattermostShareExternalItems`: the other app's items (`TGItemProviderSignals`: text, URL, image, file, video, audio) become texts and files; MattermostShare finds the account (`<root>/account-<id>/mattermost/sync.sqlite`, read-only) and its token (shared Keychain group, 3A), the Mattermost chat of each chosen peer (channel, GM, DM — created with `POST /channels/direct` when missing — or a thread's root post when the picker passes a thread id), plans the posts (comment + texts as one message, at most 10 files per post, the message on the first) and uploads (`POST /files`, then `POST /posts`). The server's `MaxFileSize` is checked first. No stories, no Telegram chat import. Simulator builds give the extension the app group (`ShareSimulatorEntitlements`). | `submodules/MattermostShare` (SwiftPM, tested, live test against the dev server); MattermostSync `Share/MattermostShareExtension.swift`; ShareExtensionContext |
 
+## Runtime hygiene and performance (4B)
+
+**Nothing reaches the null network engine in normal use.** Every Telegram request that a kept screen or manager still
+issued (a scripted 10-minute session parked 941 requests of 51 functions, 264 never disposed) is switched off at its
+start site while `MattermostBackend.isEnabled` (all `// MATTERMOST:`), returning what Telegram itself returns for a
+peer it can't address (an empty list, `nil`, `.none`, no value) rather than an error:
+
+| Where | What is off |
+|---|---|
+| `Account.init` | presence (`account.updateStatus` every 30 s), autolock reports, configuration updates (`help.getConfig`, `getDefaultHistoryTTL`), story subscriptions |
+| `AccountViewTracker` | view counts, reaction polling, story stats, live locations, extended/unsupported/secret media, inline calls, can-send checks; history validation (channels, threads, scheduled) |
+| Cached peer data (`users.getFullUser`, `channels.getFullChannel`, `getPeerSettings`) | answered locally; the peer view tells MattermostSync instead (below) |
+| Engine functions | sticker sets (a pack not stored loads as `.none`), featured packs, chat/cloud themes and wallpapers, gift codes, send-as peers, top peers, stories, saved reaction tags, group-call join-as, boosts, user photos (the gallery shows the current photo), media-tab counts and sparse positions/calendar, profile gifts, saved music, groups in common, post-search flood, content settings, notification exceptions, privacy settings, composer link previews |
+| Settings / `AccountContext` | privacy, exceptions, archived stickers, two-step verification, Telegram sessions, personal channels; the country list (bundled only) |
+
+`NullNetworkStatistics` counts what still arrives (per function: total, not disposed, the first caller's stack in
+debug builds; debug remote `runtime`), and the engine no longer keeps parked requests: a fire-and-forget caller's
+subscriber chain was never released.
+
+**`MattermostChatObserver`** (TelegramCore → MattermostSync `ChatObserver`) replaces what Telegram did while a chat is
+on screen: a peer view's cached-data refresh (at most every 5 minutes per peer) loads a channel's member count (at
+most once a minute), so the bootstrap no longer asks `/channels/{id}/stats` for every chat at every launch; an opened
+chat history catches up a stale channel (below).
+
+**Bootstrap** (first sync): structure as before, then the newest page of every chat (unread first, then by
+`last_post_at`) fetched 6 at a time and written in batches of 25 chats — one users request (≤100 ids each), one
+Postbox transaction, one thread-roots request per batch — while the next batch loads. One transaction per page made
+600 chats take 87 s on the local server (each transaction also re-renders the chat list); batched: 5.7 s.
+
+**Catch-up** (non-resumed reconnect, foreground, background refresh; concurrent requests join the running one): reload
+channels and members; ask `since=` only for channels whose `last_post_at` is newer than `last_sync_at` (600 requests →
+the active ones); quiet channels get their read state from the new counters (one transaction, only those whose
+counters moved) and become **stale** (`stale_channels` cursor: channel → the `since` it still needs). A stale channel
+is caught up when its chat opens or when a later catch-up fetches it anyway (with the older `since`), because edits,
+deletions and reactions don't move `last_post_at`. Channels the user was added to meanwhile are written in one
+transaction. Launch catch-up of 600 chats: 1.8–2.3 s → 50–120 ms.
+
+**Connection:** after more than 10 s in the background each account pings its WebSocket (3 s timeout) and reconnects
+if it is dead or waiting for a retry; a socket waiting out its backoff (up to 60 s) reconnects as soon as a REST
+request gets an answer (`MattermostClient.Configuration.onServerReached`) or `NWPathMonitor` reports the network
+back. Sends queued while offline go out with the sender's own retry (≤ 5 s).
+
+**Background refresh:** `BGAppRefreshTask` `org.relaychat.Relay.refresh` (Telegram's Info.plist already permits
+`<bundle id>.refresh`; `UIBackgroundModes` has `fetch`), registered by `RelayBackgroundRefresh` (TelegramUI) when
+`MattermostBackend.isEnabled`, scheduled at each entry into the background (earliest 15 minutes later): waits up to
+25 s for the accounts to start, then catches every running account up (`MattermostSync.backgroundRefresh`).
+
+**Cache:** Mattermost media (`mm-file-…`, `mm-avatar-…`, `mm-url-…`) is fetched through `MediaBox.fetchedResource`
+like Telegram's, so `StorageBox` attributes each file to the chat (and message) that showed it: Storage Usage lists
+it per chat and category, Clear removes it, and `AutomaticCacheEvictionContext` evicts it by the keep-media
+settings (verified with a per-chat exception, debug remote `storage`; the evicted files load again when shown).
+Part of the files on disk (about 40 % by size in the check) is attributed to no chat — not investigated; those
+go only with Clear for all chats or the cache size limit.
+
 ## Media resources
 
 `MattermostFileResource(fileId, variant)`, `MattermostAvatarResource(userId, lastPictureUpdate)`, `MattermostURLImageResource(url)` (attachment images, webhook icons, link preview images: on the server directly, elsewhere only through the server's image proxy, see "Rich content and links (3E)"; flattened onto white because Telegram draws photos opaque), all `TelegramMediaResource` + `PostboxCoding`, registered in `mattermostDeclareEncodables()` (app and every extension; R§6). Type names are part of the storage format: never rename them. Fetched through the auxiliary `fetchResource` hook with a `URLSession` that adds the bearer token and supports byte ranges.

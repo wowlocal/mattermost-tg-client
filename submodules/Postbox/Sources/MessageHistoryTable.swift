@@ -771,6 +771,23 @@ final class MessageHistoryTable: Table {
         return topIndex
     }
     
+    // MATTERMOST: the newest message carrying `tag` (the chat list's top message under collapsed reply threads).
+    func topIndex(peerId: PeerId, tag: MessageTags) -> MessageIndex? {
+        var topIndex: MessageIndex?
+        for namespace in self.messageHistoryIndexTable.existingNamespaces(peerId: peerId) where self.seedConfiguration.chatMessagesNamespaces.contains(namespace) {
+            if let index = self.tagsTable.newestIndex(tag: tag, peerId: peerId, namespace: namespace) {
+                if let topIndexValue = topIndex {
+                    if topIndexValue < index {
+                        topIndex = index
+                    }
+                } else {
+                    topIndex = index
+                }
+            }
+        }
+        return topIndex
+    }
+    
     func topMessage(peerId: PeerId) -> IntermediateMessage? {
         return self.topIndex(peerId: peerId).flatMap(self.getMessage)
     }
