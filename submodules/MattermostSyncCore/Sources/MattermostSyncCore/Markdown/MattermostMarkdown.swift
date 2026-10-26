@@ -2,17 +2,36 @@ import Foundation
 
 /// Mattermost markdown ⇄ Telegram-style plain text + entities.
 public enum MattermostMarkdown {
+    /// What the parser renders besides CommonMark, as Mattermost's clients do depending on server and user
+    /// settings.
+    public struct Options: Equatable, Sendable {
+        /// Emoticons (`:)`, `;-)`, `<3`, …) become emoji, as Mattermost's clients render them unless the user's
+        /// "Render emoticons as emoji" display setting (`render_emoticons_as_emoji`) is off.
+        public var emoticons: Bool
+        /// `$…$` inline LaTeX, shown as inline code (the server's `EnableLatex` and `EnableInlineLatex`).
+        public var inlineLatex: Bool
+
+        public init(emoticons: Bool = true, inlineLatex: Bool = false) {
+            self.emoticons = emoticons
+            self.inlineLatex = inlineLatex
+        }
+
+        public static let `default` = Options()
+    }
+
     /// Parses Mattermost markdown into plain text (markdown syntax removed) and entities with
     /// UTF-16 ranges.
     ///
     /// Blocks: paragraphs (every newline is kept, as Mattermost renders soft breaks as line
-    /// breaks), fenced and indented code (`pre`), `>` quotes (`blockQuote`), and plain-text
-    /// fallbacks for headings (bold line), lists (`• ` / `1. ` prefixes, `☐`/`☑` for tasks),
-    /// tables (an aligned monospaced `pre` block) and horizontal rules (`———`).
-    public static func parse(_ markdown: String) -> FormattedText {
+    /// breaks), fenced and indented code (`pre` with the highlighter's language name), `>` quotes
+    /// (`blockQuote`), headings (`heading` + `bold`), lists (`• ` / `1. ` prefixes, `☐`/`☑` for tasks,
+    /// nested items and continuation lines indented by spaces as wide as the prefix), tables (an
+    /// aligned monospaced `pre` block when narrow enough, else one record per row) and horizontal
+    /// rules (`———`).
+    public static func parse(_ markdown: String, options: Options = .default) -> FormattedText {
         let lines = splitLines(markdown)
         let blocks = BlockParser.parseBlocks(lines)
-        let rendered = BlockRenderer.render(blocks, depth: 0)
+        let rendered = BlockRenderer(options: options).render(blocks, depth: 0)
         return finalize(rendered)
     }
 
@@ -117,13 +136,19 @@ private struct ListItem {
     var blocks: [BlockItem]
 }
 
+private enum TableAlignment {
+    case left
+    case center
+    case right
+}
+
 private indirect enum Block {
     case paragraph(String)
-    case heading(String)
+    case heading(level: Int, text: String)
     case code(language: String?, content: String)
     case quote([BlockItem])
     case list(ordered: Bool, start: Int, items: [ListItem])
-    case table([[String]])
+    case table(rows: [[String]], alignments: [TableAlignment])
     case rule
 }
 
@@ -200,7 +225,7 @@ private enum BlockParser {
             }
 
             if let heading = atxHeading(line) {
-                push(.heading(heading))
+                push(.heading(level: heading.level, text: heading.text))
                 i += 1
                 continue
             }
@@ -290,6 +315,12 @@ private enum BlockParser {
 
             if isTableStart(lines, i) {
                 let header = splitTableRow(lines[i])
+                let alignments = splitTableRow(lines[i + 1]).map { cell -> TableAlignment in
+                    if cell.hasPrefix(":") && cell.hasSuffix(":") && cell.count > 1 {
+                        return .center
+                    }
+                    return cell.hasSuffix(":") ? .right : .left
+                }
                 var rows: [[String]] = [header]
                 i += 2
                 while i < lines.count, !isBlank(lines[i]), lines[i].contains("|"), !startsOtherBlock(lines[i]) {
@@ -302,13 +333,13 @@ private enum BlockParser {
                     rows.append(cells)
                     i += 1
                 }
-                push(.table(rows))
+                push(.table(rows: rows, alignments: alignments))
                 continue
             }
 
             // Paragraph (or setext heading).
             var paragraph: [String] = [line]
-            var isHeading = false
+            var headingLevel: Int?
             i += 1
             while i < lines.count {
                 let next = lines[i]
@@ -316,7 +347,7 @@ private enum BlockParser {
                     break
                 }
                 if isSetextUnderline(next) {
-                    isHeading = true
+                    headingLevel = next.trimmingCharacters(in: .whitespaces).first == "=" ? 1 : 2
                     i += 1
                     break
                 }
@@ -327,7 +358,7 @@ private enum BlockParser {
                 i += 1
             }
             let text = paragraph.map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: "\n")
-            push(isHeading ? .heading(text) : .paragraph(text))
+            push(headingLevel.map { .heading(level: $0, text: text) } ?? .paragraph(text))
         }
         return items
     }
@@ -391,7 +422,7 @@ private enum BlockParser {
         return count >= fence.count && rest.dropFirst(count).allSatisfy { $0 == " " || $0 == "\t" }
     }
 
-    static func atxHeading(_ line: String) -> String? {
+    static func atxHeading(_ line: String) -> (level: Int, text: String)? {
         let indent = leadingSpaces(line)
         guard indent <= 3 else {
             return nil
@@ -411,7 +442,7 @@ private enum BlockParser {
         if withoutClosing.count < content.count && (withoutClosing.isEmpty || withoutClosing.last == " ") {
             content = withoutClosing.trimmingCharacters(in: .whitespaces)
         }
-        return content
+        return (level, content)
     }
 
     static func isThematicBreak(_ line: String) -> Bool {
@@ -602,8 +633,24 @@ private struct TextBuilder {
     }
 }
 
-private enum BlockRenderer {
-    static func render(_ items: [BlockItem], depth: Int) -> FormattedText {
+private struct BlockRenderer {
+    let options: MattermostMarkdown.Options
+
+    /// Tables up to this many characters per line are drawn as a monospaced grid (a `pre` block); wider ones as
+    /// one record per row. A chat bubble fits about 30 monospaced characters on a phone; a wrapped grid line is
+    /// unreadable.
+    static let tableGridMaxWidth = 30
+
+    /// The grid's code block language: Telegram labels a code block with its language (a header row that also
+    /// holds the copy button, which would otherwise sit on the first line of a narrow block); no highlighter
+    /// grammar has this name.
+    static let tableLanguage = "table"
+
+    func inline(_ text: String) -> FormattedText {
+        return InlineParser.parse(text, options: self.options)
+    }
+
+    func render(_ items: [BlockItem], depth: Int) -> FormattedText {
         var builder = TextBuilder()
         for (index, item) in items.enumerated() {
             if index > 0 {
@@ -611,18 +658,19 @@ private enum BlockRenderer {
             }
             switch item.block {
             case let .paragraph(text):
-                builder.append(InlineParser.parse(text))
-            case let .heading(text):
+                builder.append(self.inline(text))
+            case let .heading(level, text):
                 let start = builder.length
-                builder.append(InlineParser.parse(text))
+                builder.append(self.inline(text))
                 builder.addEntity(from: start, type: .bold)
+                builder.addEntity(from: start, type: .heading(level: level))
             case let .code(language, content):
                 let start = builder.length
                 builder.append(content)
-                builder.addEntity(from: start, type: .pre(language: language))
+                builder.addEntity(from: start, type: .pre(language: MattermostMarkdown.codeLanguage(language)))
             case let .quote(inner):
                 let start = builder.length
-                builder.append(render(inner, depth: depth))
+                builder.append(self.render(inner, depth: depth))
                 builder.addEntity(from: start, type: .blockQuote)
             case let .list(ordered, start, listItems):
                 for (k, listItem) in listItems.enumerated() {
@@ -638,20 +686,18 @@ private enum BlockRenderer {
                     } else if let task = listItem.task {
                         prefix = task ? "☑ " : "☐ "
                     } else {
-                        prefix = bullet(depth: depth) + " "
+                        prefix = BlockRenderer.bullet(depth: depth) + " "
                     }
-                    let content = render(listItem.blocks, depth: depth + 1)
+                    let content = self.render(listItem.blocks, depth: depth + 1)
                     if content.text.isEmpty {
                         builder.append(String(prefix.dropLast()))
                     } else {
                         builder.append(prefix)
-                        builder.append(indentContinuationLines(content, width: prefix.count))
+                        builder.append(BlockRenderer.indentContinuationLines(content, indent: BlockRenderer.indent(matching: prefix)))
                     }
                 }
-            case let .table(rows):
-                let start = builder.length
-                builder.append(formatTable(rows))
-                builder.addEntity(from: start, type: .pre(language: nil))
+            case let .table(rows, alignments):
+                self.renderTable(rows: rows, alignments: alignments, into: &builder)
             case .rule:
                 builder.append("———")
             }
@@ -666,14 +712,40 @@ private enum BlockRenderer {
         case 1:
             return "◦"
         default:
-            return "▪"
+            return "‣"
         }
     }
 
-    /// Indents every non-empty line after the first by `width` spaces, remapping entity ranges.
-    static func indentContinuationLines(_ formatted: FormattedText, width: Int) -> FormattedText {
+    /// Whitespace about as wide as `prefix` in the system font (SF Pro), so continuation lines and nested blocks
+    /// line up with the text after a bullet or number: Telegram's text layout has no hanging indents, and plain
+    /// spaces are much narrower than "•" or digits. The widths scale with the font size (all em-based).
+    static func indent(matching prefix: String) -> String {
+        var result = ""
+        for character in prefix {
+            switch character {
+            case "•", "◦", "‣":
+                result.append("\u{2002}") // en space ≈ the bullet
+            case "☐", "☑":
+                result.append("\u{2002}\u{2009}\u{2009}\u{2009}") // en + 3 thin ≈ the box
+            case "1":
+                result.append("\u{2002}") // a narrow digit
+            case "0" ... "9":
+                result.append("\u{2007}") // figure space = digit width
+            case ".":
+                result.append("\u{2008}") // punctuation space = period width
+            default:
+                result.append(" ")
+            }
+        }
+        return result
+    }
+
+    /// Indents every non-empty line after the first by `indent`, remapping entity ranges.
+    static func indentContinuationLines(_ formatted: FormattedText, indent: String) -> FormattedText {
         let units = Array(formatted.text.utf16)
         let newline = UInt16(UInt8(ascii: "\n"))
+        let indentUnits = Array(indent.utf16)
+        let width = indentUnits.count
         // Positions where an indent is inserted: after a newline, before a non-newline character.
         var insertionPoints: [Int] = []
         for index in 0 ..< units.count where units[index] == newline && index + 1 < units.count && units[index + 1] != newline {
@@ -682,13 +754,12 @@ private enum BlockRenderer {
         if insertionPoints.isEmpty || width == 0 {
             return formatted
         }
-        let indent = Array(String(repeating: " ", count: width).utf16)
         var result: [UInt16] = []
         result.reserveCapacity(units.count + insertionPoints.count * width)
         var next = 0
         for index in 0 ..< units.count {
             if next < insertionPoints.count && insertionPoints[next] == index {
-                result.append(contentsOf: indent)
+                result.append(contentsOf: indentUnits)
                 next += 1
             }
             result.append(units[index])
@@ -704,24 +775,110 @@ private enum BlockRenderer {
         return FormattedText(text: String(decoding: result, as: UTF16.self), entities: entities)
     }
 
-    static func formatTable(_ rows: [[String]]) -> String {
-        let plainRows = rows.map { row in
-            row.map { InlineParser.parse($0).text.replacingOccurrences(of: "\n", with: " ") }
+    // MARK: Tables
+
+    /// A narrow table as an aligned monospaced grid; a wider one as records (the first column's value in bold,
+    /// then "Column: value" lines with the cells' inline formatting), separated by blank lines, which reads well
+    /// in a narrow bubble where a wrapped grid would not.
+    func renderTable(rows: [[String]], alignments: [TableAlignment], into builder: inout TextBuilder) {
+        let cells = rows.map { row in
+            row.map { cell -> FormattedText in
+                let parsed = self.inline(cell)
+                return FormattedText(text: parsed.text.replacingOccurrences(of: "\n", with: " "), entities: parsed.entities)
+            }
         }
-        guard let columnCount = plainRows.first?.count, columnCount > 0 else {
-            return ""
+        guard let header = cells.first, !header.isEmpty else {
+            return
+        }
+        if let grid = BlockRenderer.tableGrid(cells.map { $0.map { $0.text } }, alignments: alignments) {
+            let start = builder.length
+            builder.append(grid)
+            builder.addEntity(from: start, type: .pre(language: BlockRenderer.tableLanguage))
+            return
+        }
+        let body = cells.dropFirst()
+        if body.isEmpty {
+            // Only a header row: its cells, one per line.
+            for (index, cell) in header.enumerated() {
+                if index > 0 {
+                    builder.append("\n")
+                }
+                let start = builder.length
+                builder.append(cell)
+                builder.addEntity(from: start, type: .bold)
+            }
+            return
+        }
+        for (rowIndex, row) in body.enumerated() {
+            if rowIndex > 0 {
+                builder.append("\n\n")
+            }
+            var wroteLine = false
+            for (column, cell) in row.enumerated() where column < header.count {
+                if column == 0 {
+                    if !cell.text.isEmpty {
+                        let start = builder.length
+                        builder.append(cell)
+                        builder.addEntity(from: start, type: .bold)
+                        wroteLine = true
+                    }
+                    continue
+                }
+                if cell.text.isEmpty {
+                    continue
+                }
+                if wroteLine {
+                    builder.append("\n")
+                }
+                let label = header[column].text
+                if !label.isEmpty {
+                    let start = builder.length
+                    builder.append(label + ":")
+                    builder.addEntity(from: start, type: .italic)
+                    builder.append(" ")
+                }
+                builder.append(cell)
+                wroteLine = true
+            }
+            if !wroteLine {
+                builder.append("—")
+            }
+        }
+    }
+
+    /// The grid text, or nil when a line would be wider than `tableGridMaxWidth`.
+    static func tableGrid(_ rows: [[String]], alignments: [TableAlignment]) -> String? {
+        guard let columnCount = rows.first?.count, columnCount > 0 else {
+            return nil
         }
         var widths = [Int](repeating: 0, count: columnCount)
-        for row in plainRows {
+        for row in rows {
             for (column, cell) in row.enumerated() where column < columnCount {
                 widths[column] = max(widths[column], cell.count)
+            }
+        }
+        widths = widths.map { max(1, $0) }
+        let lineWidth = widths.reduce(0, +) + 3 * (columnCount - 1)
+        if lineWidth > tableGridMaxWidth {
+            return nil
+        }
+        func pad(_ cell: String, width: Int, alignment: TableAlignment) -> String {
+            let missing = max(0, width - cell.count)
+            switch alignment {
+            case .left:
+                return cell + String(repeating: " ", count: missing)
+            case .right:
+                return String(repeating: " ", count: missing) + cell
+            case .center:
+                let left = missing / 2
+                return String(repeating: " ", count: left) + cell + String(repeating: " ", count: missing - left)
             }
         }
         func line(_ row: [String]) -> String {
             var cells: [String] = []
             for column in 0 ..< columnCount {
                 let cell = column < row.count ? row[column] : ""
-                cells.append(cell + String(repeating: " ", count: max(0, widths[column] - cell.count)))
+                cells.append(pad(cell, width: widths[column], alignment: column < alignments.count ? alignments[column] : .left))
             }
             var text = cells.joined(separator: " | ")
             while text.last == " " {
@@ -729,9 +886,9 @@ private enum BlockRenderer {
             }
             return text
         }
-        var lines: [String] = [line(plainRows[0])]
-        lines.append(widths.map { String(repeating: "-", count: max(1, $0)) }.joined(separator: "-+-"))
-        for row in plainRows.dropFirst() {
+        var lines: [String] = [line(rows[0])]
+        lines.append(widths.map { String(repeating: "-", count: $0) }.joined(separator: "-+-"))
+        for row in rows.dropFirst() {
             lines.append(line(row))
         }
         return lines.joined(separator: "\n")

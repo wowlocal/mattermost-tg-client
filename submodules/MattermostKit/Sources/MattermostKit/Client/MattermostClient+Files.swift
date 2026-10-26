@@ -48,6 +48,9 @@ public enum MattermostResource: Sendable, Hashable {
     case userImage(userId: String, lastPictureUpdate: Int64? = nil)
     /// `GET /emoji/{emoji_id}/image`.
     case emojiImage(emojiId: String)
+    /// `GET /image?url=<url>`: an external image through the server's image proxy (`HasImageProxy` in the
+    /// client config). Mattermost's clients build these URLs themselves; the server never rewrites embed images.
+    case proxiedImage(url: String)
 
     var apiRequest: APIRequest {
         switch self {
@@ -63,6 +66,8 @@ public enum MattermostResource: Sendable, Hashable {
             return APIRequest(.get, apiPath("users", userId, "image"), query: query.items, expectsJSON: false)
         case .emojiImage(let emojiId):
             return APIRequest(.get, apiPath("emoji", emojiId, "image"), expectsJSON: false)
+        case .proxiedImage(let url):
+            return APIRequest(.get, "/image", query: [URLQueryItem(name: "url", value: url)], expectsJSON: false)
         }
     }
 }

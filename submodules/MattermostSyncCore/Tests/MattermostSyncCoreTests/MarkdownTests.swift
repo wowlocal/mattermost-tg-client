@@ -271,28 +271,51 @@ final class MarkdownTests: XCTestCase {
 
     func testHeadings() {
         check([
-            Case("# Heading\ntext", "Heading\ntext", [on(.bold, "Heading")]),
-            Case("## **Big** title ##", "Big title", [on(.bold, "Big title")]),
-            Case("### Heading with [link](https://x.com)", "Heading with link", [on(.bold, "Heading with link"), on(.textUrl(url: "https://x.com"), "link")]),
+            Case("# Heading\ntext", "Heading\ntext", [on(.bold, "Heading"), on(.heading(level: 1), "Heading")]),
+            Case("## **Big** title ##", "Big title", [on(.bold, "Big title"), on(.heading(level: 2), "Big title")]),
+            Case("### Heading with [link](https://x.com)", "Heading with link", [on(.bold, "Heading with link"), on(.heading(level: 3), "Heading with link"), on(.textUrl(url: "https://x.com"), "link")]),
+            Case("###### Six", "Six", [on(.bold, "Six"), on(.heading(level: 6), "Six")]),
             Case("#hashtag at start", "#hashtag at start", [on(.hashtag, "#hashtag")]),
-            Case("Title\n===\nbody", "Title\nbody", [on(.bold, "Title")]),
-            Case("Subtitle\n---", "Subtitle", [on(.bold, "Subtitle")]),
+            Case("Title\n===\nbody", "Title\nbody", [on(.bold, "Title"), on(.heading(level: 1), "Title")]),
+            Case("Subtitle\n---", "Subtitle", [on(.bold, "Subtitle"), on(.heading(level: 2), "Subtitle")]),
             Case("####### seven", "####### seven"),
+            Case("> # Quoted", "Quoted", [on(.blockQuote, "Quoted"), on(.bold, "Quoted"), on(.heading(level: 1), "Quoted")]),
         ])
     }
 
+    func testHeadingCustomEntityCodes() {
+        for level in 1 ... 6 {
+            XCTAssertEqual(MattermostCustomEntity.headingLevel(MattermostCustomEntity.heading(level: level)), level)
+        }
+        XCTAssertEqual(MattermostCustomEntity.heading(level: 0), MattermostCustomEntity.heading(level: 1))
+        XCTAssertEqual(MattermostCustomEntity.heading(level: 9), MattermostCustomEntity.heading(level: 6))
+        // Telegram's own custom entities (timecode 1, button 2) are not headings.
+        XCTAssertNil(MattermostCustomEntity.headingLevel(1))
+        XCTAssertNil(MattermostCustomEntity.headingLevel(2))
+        XCTAssertGreaterThan(MattermostCustomEntity.headingScale(level: 1), MattermostCustomEntity.headingScale(level: 3))
+        XCTAssertEqual(MattermostCustomEntity.headingScale(level: 6), 1.0)
+    }
+
     func testLists() {
+        // Continuation lines and nested blocks are indented by whitespace about as wide as the prefix:
+        // "• " → en space + space, "1. " → en space (narrow digit) + punctuation space + space.
+        let bulletIndent = "\u{2002} "
+        let oneIndent = "\u{2002}\u{2008} "
         check([
-            Case("- one\n- two\n  - nested\n- three", "• one\n• two\n  ◦ nested\n• three"),
+            Case("- one\n- two\n  - nested\n- three", "• one\n• two\n\(bulletIndent)◦ nested\n• three"),
             Case("* **bold** item\n+ other", "• bold item\n• other", [on(.bold, "bold")]),
             Case("1. a\n2. b\n3. c", "1. a\n2. b\n3. c"),
             Case("3. a\n4. b", "3. a\n4. b"),
             Case("1) paren\n1) again", "1. paren\n2. again"),
             Case("- [ ] todo\n- [x] done", "☐ todo\n☑ done"),
-            Case("- item with\n  continuation", "• item with\n  continuation"),
+            Case("- item with\n  continuation", "• item with\n\(bulletIndent)continuation"),
             Case("Steps:\n1. first\n2. second", "Steps:\n1. first\n2. second"),
-            Case("1. one\n   - sub\n2. two", "1. one\n   ◦ sub\n2. two"),
+            Case("1. one\n   - sub\n2. two", "1. one\n\(oneIndent)◦ sub\n2. two"),
+            Case("- a\n  - b\n    - c\n      - d", "• a\n\(bulletIndent)◦ b\n\(bulletIndent)\(bulletIndent)‣ c\n\(bulletIndent)\(bulletIndent)\(bulletIndent)‣ d"),
+            Case("10. ten\n    more", "10. ten\n\u{2002}\u{2007}\u{2008} more"),
+            Case("- [ ] task\n  details", "☐ task\n\u{2002}\u{2009}\u{2009}\u{2009} details"),
             Case("- `code` item", "• code item", [on(.code, "code")]),
+            Case("- **x**\n  **y**", "• x\n\(bulletIndent)y", [at(.bold, 2 ..< 3), at(.bold, 6 ..< 7)]),
             Case("-not a list", "-not a list"),
             Case("2020. A good year", "2020. A good year"),
         ])
@@ -300,11 +323,82 @@ final class MarkdownTests: XCTestCase {
 
     func testTables() {
         check([
-            Case("| a | b |\n|---|:-:|\n| 1 | 22 |\n| 333 | 4 |", "a   | b\n----+---\n1   | 22\n333 | 4", [on(.pre(language: nil), "a   | b\n----+---\n1   | 22\n333 | 4")]),
-            Case("| **a** | `b` |\n|--|--|\n| c | d |", "a | b\n--+--\nc | d", [on(.pre(language: nil), "a | b\n--+--\nc | d")]),
-            Case("Name | Value\n--- | ---\nx | 1\n\nafter", "Name | Value\n-----+------\nx    | 1\n\nafter", [on(.pre(language: nil), "Name | Value\n-----+------\nx    | 1")]),
+            Case("| a | b |\n|---|:-:|\n| 1 | 22 |\n| 333 | 4 |", "a   | b\n----+---\n1   | 22\n333 | 4", [on(.pre(language: "table"), "a   | b\n----+---\n1   | 22\n333 | 4")]),
+            Case("| **a** | `b` |\n|--|--|\n| c | d |", "a | b\n--+--\nc | d", [on(.pre(language: "table"), "a | b\n--+--\nc | d")]),
+            Case("Name | Value\n--- | ---\nx | 1\n\nafter", "Name | Value\n-----+------\nx    | 1\n\nafter", [on(.pre(language: "table"), "Name | Value\n-----+------\nx    | 1")]),
             Case("a | b\nnot a table", "a | b\nnot a table"),
+            // Alignment from the delimiter row.
+            Case("| Item | Qty |\n|:--|--:|\n| tea | 2 |\n| coffee | 10 |", "Item   | Qty\n-------+----\ntea    |   2\ncoffee |  10", [on(.pre(language: "table"), "Item   | Qty\n-------+----\ntea    |   2\ncoffee |  10")]),
+            Case("| x | mid | y |\n|---|:---:|---|\n| 1 | a | 2 |", "x | mid | y\n--+-----+--\n1 |  a  | 2", [on(.pre(language: "table"), "x | mid | y\n--+-----+--\n1 |  a  | 2")]),
         ])
+    }
+
+    func testWideTablesBecomeRecords() {
+        let markdown = """
+        | Service | Owner | Status | Notes |
+        |---|---|---|---|
+        | **api** | @alice | :white_check_mark: up | see [runbook](https://x.com/rb) |
+        | worker | bob | down |  |
+        """
+        check([
+            Case(markdown, "api\nOwner: @alice\nStatus: ✅ up\nNotes: see runbook\n\nworker\nOwner: bob\nStatus: down", [
+                on(.bold, "api"),
+                on(.italic, "Owner:"), on(.mention(username: "alice"), "@alice"),
+                on(.italic, "Status:"),
+                on(.italic, "Notes:"), on(.textUrl(url: "https://x.com/rb"), "runbook"),
+                on(.bold, "worker"),
+                on(.italic, "Owner:", 1),
+                on(.italic, "Status:", 1),
+            ]),
+            // A wide table with an empty first cell, and one with a header only.
+            Case("| Key | A rather long column header |\n|---|---|\n|  | value |", "A rather long column header: value", [on(.italic, "A rather long column header:")]),
+            Case("| First wide header | Second wide header |\n|---|---|", "First wide header\nSecond wide header", [on(.bold, "First wide header"), on(.bold, "Second wide header")]),
+        ])
+    }
+
+    func testCodeBlockLanguages() {
+        check([
+            Case("```golang\nfunc main() {}\n```", "func main() {}", [on(.pre(language: "go"), "func main() {}")]),
+            Case("```C++\nint x;\n```", "int x;", [on(.pre(language: "cpp"), "int x;")]),
+            Case("```Swift\nlet x = 1\n```", "let x = 1", [on(.pre(language: "swift"), "let x = 1")]),
+            Case("```zsh\necho hi\n```", "echo hi", [on(.pre(language: "bash"), "echo hi")]),
+            Case("```text\nplain\n```", "plain", [on(.pre(language: "text"), "plain")]),
+        ])
+        XCTAssertEqual(MattermostMarkdown.codeLanguage("js"), "js")
+        XCTAssertEqual(MattermostMarkdown.codeLanguage(" PgSQL "), "sql")
+        XCTAssertNil(MattermostMarkdown.codeLanguage(" "))
+        XCTAssertNil(MattermostMarkdown.codeLanguage(nil))
+    }
+
+    func testEmoticons() {
+        check([
+            Case("Nice :) thanks", "Nice 🙂 thanks"),
+            Case(":-) ;) ;-) :D :-d :P :o :-O :] :( :/ :s :| :$ :-x :@ x-D <3 </3 :'(", "🙂 😉 😉 😄 😄 😛 😮 😱 😏 🙁 😕 😖 😐 😳 😷 😡 😝 ❤️ 💔 😢"),
+            Case("**great :)**", "great 🙂", [on(.bold, "great 🙂")]),
+            // Not between word characters, not in URLs, code, times or emoji names.
+            Case("http://example.com/a:)b 10:30 Note:D a:(b", "http://example.com/a:)b 10:30 Note:D a:(b", [on(.url, "http://example.com/a:)b")]),
+            Case("`:)` and :smile: and :Done", ":) and 😄 and :Done", [on(.code, ":)")]),
+            Case("(see :/path) :pizza:", "(see :/path) 🍕"),
+        ])
+        let off = MattermostMarkdown.parse("hi :) <3", options: MattermostMarkdown.Options(emoticons: false))
+        XCTAssertEqual(off.text, "hi :) <3")
+    }
+
+    func testInlineLatex() {
+        let options = MattermostMarkdown.Options(inlineLatex: true)
+        func latex(_ markdown: String) -> FormattedText {
+            return MattermostMarkdown.parse(markdown, options: options)
+        }
+        XCTAssertEqual(latex("Energy $E = mc^2$ here").text, "Energy E = mc^2 here")
+        XCTAssertEqual(latex("Energy $E = mc^2$ here").entities, [TextEntity(range: 7 ..< 15, type: .code)])
+        // Prices and spaced dollars stay text.
+        XCTAssertEqual(latex("costs $5 and $10").text, "costs $5 and $10")
+        XCTAssertEqual(latex("$ a $").text, "$ a $")
+        XCTAssertEqual(latex("US$5x$").text, "US$5x$")
+        XCTAssertEqual(latex("a $b\nc$").text, "a $b\nc$")
+        XCTAssertEqual(latex("`$x$`").entities, [TextEntity(range: 0 ..< 3, type: .code)])
+        // Off unless the server enables it.
+        XCTAssertEqual(MattermostMarkdown.parse("$x$").text, "$x$")
     }
 
     func testHorizontalRules() {

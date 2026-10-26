@@ -19,6 +19,8 @@ swift_library(
         "//submodules/Markdown:Markdown",
         "//submodules/Emoji:Emoji",
         "//third-party/libprisma",
+        # MATTERMOST: heading sizes (`MattermostCustomEntity`, Sources/MattermostHeadings.swift).
+        "//submodules/MattermostSyncCore:MattermostSyncCore",
     ],
     visibility = [
         "//visibility:public",

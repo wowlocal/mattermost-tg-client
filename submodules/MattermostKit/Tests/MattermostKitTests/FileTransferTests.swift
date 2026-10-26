@@ -170,6 +170,9 @@ final class FileTransferTests: StubbedClientTestCase {
         XCTAssertEqual(try url(.userImage(userId: "u1", lastPictureUpdate: 1_700_000_600_000)), "https://chat.example.com/api/v4/users/u1/image?_=1700000600000")
         XCTAssertEqual(try url(.userImage(userId: "u1")), "https://chat.example.com/api/v4/users/u1/image")
         XCTAssertEqual(try url(.emojiImage(emojiId: "e1")), "https://chat.example.com/api/v4/emoji/e1/image")
+        // The image proxy takes the external URL encoded as the webapp's encodeURIComponent does.
+        XCTAssertEqual(try url(.proxiedImage(url: "http://img.example.org/a b.png?x=1&y=2+3")), "https://chat.example.com/api/v4/image?url=http%3A%2F%2Fimg.example.org%2Fa%20b.png%3Fx%3D1%26y%3D2%2B3")
+        XCTAssertEqual(try client.urlRequest(for: .proxiedImage(url: "http://x/y.png")).value(forHTTPHeaderField: "Authorization"), "Bearer tok3n")
         XCTAssertEqual(try client.urlRequest(for: .file(id: "f1")).value(forHTTPHeaderField: "Authorization"), "Bearer tok3n")
     }
 

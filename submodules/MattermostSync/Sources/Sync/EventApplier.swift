@@ -95,15 +95,22 @@ extension MattermostAccountSync {
                 if event.data["preferences"]?.stringValue?.contains("collapsed_reply_threads") == true {
                     await self.refreshCollapsedThreadsConfig()
                 }
+                // Link previews / emoticons back to their defaults (3E).
+                let deleted = event.data["preferences"]?.stringValue ?? ""
+                if deleted.contains(DisplaySettingName.linkPreviews) || deleted.contains(DisplaySettingName.renderEmoticonsAsEmoji) {
+                    await self.reloadRichContentPreferences()
+                }
             } else {
                 var changed = event.decodeEmbedded([Preference].self, key: "preferences") ?? []
                 if let single = event.decodeEmbedded(Preference.self, key: "preference") {
                     changed.append(single)
                 }
                 await self.applyPreferencesChanged(changed)
+                await self.applyRichContentPreferences(changed)
             }
         case .configChanged:
             await self.refreshCollapsedThreadsConfig()
+            await self.refreshRichContentConfig()
         case .threadUpdated, .threadReadChanged, .threadFollowChanged:
             await self.applyThreadEvent(event)
         case .userUpdated:

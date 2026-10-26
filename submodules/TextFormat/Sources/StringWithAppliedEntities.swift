@@ -521,7 +521,10 @@ public func stringWithAppliedEntities(_ text: String, entities: [MessageTextEnti
             setFont(range: NSRange(location: currentAttributeSpan.startIndex, length: fontAttributeMask.count - currentAttributeSpan.startIndex), fontAttributes: currentAttributeSpan.attributes)
         }
     }
-    
+
+    // MATTERMOST: Mattermost headings render larger (`MattermostHeadings.swift`).
+    mattermostApplyHeadingSizes(string, entities: entities, adjustedRanges: adjustedRanges)
+
     string.enumerateAttribute(NSAttributedString.Key("Attribute__Blockquote"), in: NSRange(location: 0, length: string.length), using: { value, range, _ in
         guard let value = value as? TextNodeBlockQuoteData, case let .code(language) = value.kind, let language, !language.isEmpty else {
             return

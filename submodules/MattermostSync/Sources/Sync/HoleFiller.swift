@@ -509,6 +509,12 @@ func referencedUserIds(_ posts: [Post]) -> Set<String> {
         for participant in post.participants ?? [] {
             result.insert(participant.id)
         }
+        // The author of a linked post (a permalink preview's title, 3E).
+        for embed in post.metadata?.embeds ?? [] where embed.type == "permalink" {
+            if let userId = embed.permalink?.post?.userId, !userId.isEmpty {
+                result.insert(userId)
+            }
+        }
     }
     return result
 }

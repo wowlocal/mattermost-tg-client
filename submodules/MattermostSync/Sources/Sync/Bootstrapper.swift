@@ -51,8 +51,14 @@ extension MattermostAccountSync {
         let preferences = try await self.client.preferences()
         // Collapsed reply threads (3B): decided before anything is written, since read states and messages
         // depend on it. Without the config (an old server), the last known server setting stays.
-        let collapsedThreadsSetting = (try? await self.client.clientConfig())?.collapsedThreads ?? self.state.with { $0.collapsedThreadsSetting }
+        let config = try? await self.client.clientConfig()
+        let collapsedThreadsSetting = config?.collapsedThreads ?? self.state.with { $0.collapsedThreadsSetting }
         let collapsedThreadsChanged = self.updateCollapsedThreads(setting: collapsedThreadsSetting, preferences: preferences)
+        // Rich content (3E): link previews, the image proxy, emoticons and inline LaTeX, before posts are written.
+        self.setRichContent(self.richContent.withConfig(config).withPreferences(preferences), reason: "bootstrap")
+        if let siteURL = config?.siteURL, !siteURL.isEmpty {
+            self.state.with { $0.siteURL = siteURL }
+        }
         let teams = try await self.client.teams().filter { $0.deleteAt == 0 }
         let snapshot = try await self.loadChannels(teams: teams, categories: true)
 
@@ -146,6 +152,9 @@ extension MattermostAccountSync {
 
         if !isFirstSync {
             await self.finishCollapsedThreadsBootstrap(changed: collapsedThreadsChanged, isFirstSync: false)
+            self.addTask(Task { [weak self] in
+                await self?.finishRichContentBootstrap(isFirstSync: false)
+            })
             self.state.with { $0.newestPagesLoaded = true }
             MMLog.log("bootstrap: already synced before; catch-up follows")
             return
@@ -175,6 +184,7 @@ extension MattermostAccountSync {
         }
 
         await self.finishCollapsedThreadsBootstrap(changed: collapsedThreadsChanged, isFirstSync: true)
+        await self.finishRichContentBootstrap(isFirstSync: true)
         self.state.with { $0.newestPagesLoaded = true }
 
         // 4. Live updates take over from here.
