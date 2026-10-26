@@ -109,27 +109,43 @@ public struct MessageIdAllocator: Sendable {
     /// - Older than everything while the oldest island reaches the start: prepended to it.
     /// - Otherwise: becomes a single-post island inside the hole.
     ///
+    /// `partCount` > 1 maps the post's parts too (`PostParts`, one message per file). For a post that is
+    /// already mapped, missing parts are added right after its last mapped part (an edit that added
+    /// files); fewer parts are not removed here (`removeParts`).
+    ///
     /// Idempotent: an already mapped post returns `.existing`, a tombstoned one `.deleted`.
     public func insertPost<Store: MessageIdStore>(_ post: PostOrderKey, channelId: String, store: inout Store) throws -> IngestResult {
-        let known = store.entries(channelId: channelId, postIds: [post.postId])
-        if let entry = known[post.postId] {
+        // An overload rather than a default argument: Swift 6.4 crashes compiling a defaulted argument next
+        // to an opened existential `inout` store.
+        return try insertPost(post, partCount: 1, channelId: channelId, store: &store)
+    }
+
+    public func insertPost<Store: MessageIdStore>(_ post: PostOrderKey, partCount: Int, channelId: String, store: inout Store) throws -> IngestResult {
+        let keys = post.parts(count: partCount)
+        let known = store.entries(channelId: channelId, postIds: keys.map { $0.postId })
+        let postDeleted = known[post.postId]?.isDeleted ?? !store.unmappedTombstones(channelId: channelId, among: [post.postId]).isEmpty
+        let missing = postDeleted ? [] : keys.filter { known[$0.postId] == nil }
+        if missing.isEmpty {
             return IngestResult(
-                allocations: [PostAllocation(postId: post.postId, localId: entry.localId, status: entry.isDeleted ? .deleted : .existing)],
+                allocations: keys.map { key in
+                    let entry = known[key.postId]
+                    return PostAllocation(postId: key.postId, localId: entry?.localId, status: postDeleted || (entry?.isDeleted ?? true) ? .deleted : .existing)
+                },
                 holes: holes(channelId: channelId, store: store)
             )
         }
-        if !store.unmappedTombstones(channelId: channelId, among: [post.postId]).isEmpty {
-            return IngestResult(
-                allocations: [PostAllocation(postId: post.postId, localId: nil, status: .deleted)],
-                holes: holes(channelId: channelId, store: store)
-            )
-        }
-        let lower = store.entries(channelId: channelId, olderThan: post, limit: 1).first
-        let upper = store.entries(channelId: channelId, newerThan: post, limit: 1).first
+        let lower = store.entries(channelId: channelId, olderThan: missing[0], limit: 1).first
+        let upper = store.entries(channelId: channelId, newerThan: missing[missing.count - 1], limit: 1).first
         let islands = store.islands(channelId: channelId)
         let index = IslandIndex(islands: islands)
         var anchors: [String] = []
-        if let lower = lower, let upper = upper {
+        if let lower = lower, lower.serverPostId == post.postId {
+            // New parts of a mapped post: nothing else lies between the post and its parts.
+            anchors = [lower.postId]
+            if let upper = upper, let lowerIsland = index.index(of: lower.key), lowerIsland == index.index(of: upper.key) {
+                anchors.append(upper.postId)
+            }
+        } else if let lower = lower, let upper = upper {
             if let lowerIsland = index.index(of: lower.key), lowerIsland == index.index(of: upper.key) {
                 anchors = [lower.postId, upper.postId]
             }
@@ -142,7 +158,40 @@ public struct MessageIdAllocator: Sendable {
                 anchors = [upper.postId]
             }
         }
-        return try ingestRun([post], anchors: anchors, reachesStart: false, reachesLatest: false, channelId: channelId, store: &store)
+        var result = try ingestRun(missing, anchors: anchors, reachesStart: false, reachesLatest: false, channelId: channelId, store: &store)
+        if keys.count > missing.count {
+            // Report every part, with the current ids of the parts that were mapped already.
+            let inserted = Set(result.allocations.filter { $0.status == .inserted }.map { $0.postId })
+            let current = store.entries(channelId: channelId, postIds: keys.map { $0.postId })
+            result.allocations = keys.map { key in
+                let entry = current[key.postId]
+                if inserted.contains(key.postId) {
+                    return PostAllocation(postId: key.postId, localId: entry?.localId, status: .inserted)
+                }
+                return PostAllocation(postId: key.postId, localId: entry?.localId, status: (entry?.isDeleted ?? true) ? .deleted : .existing)
+            }
+        }
+        return result
+    }
+
+    /// The mapped entries of a post and its parts (`PostParts`), in key order; empty when the post is
+    /// unknown.
+    public func partEntries<Store: MessageIdStore>(postId: String, channelId: String, store: Store) -> [MessageIdEntry] {
+        guard let entry = store.entries(channelId: channelId, postIds: [postId])[postId] else {
+            return []
+        }
+        return store.entries(channelId: channelId, keyRange: entry.key.partsRange)
+    }
+
+    /// Tombstones the parts of a post from `keeping` on (an edit removed files). Returns the entries that
+    /// were newly tombstoned.
+    @discardableResult
+    public func removeParts<Store: MessageIdStore>(postId: String, keeping: Int, channelId: String, store: inout Store) -> [MessageIdEntry] {
+        let extra = partEntries(postId: postId, channelId: channelId, store: store).filter { $0.partIndex >= max(1, keeping) && !$0.isDeleted }
+        if extra.isEmpty {
+            return []
+        }
+        return markDeleted(extra.map { $0.postId }, channelId: channelId, store: &store)
     }
 
     /// The general operation behind all the others: `posts` (in any order, duplicates ignored)
@@ -161,7 +210,17 @@ public struct MessageIdAllocator: Sendable {
             throw MessageIdAllocationError.unknownAnchor(postId: anchor)
         }
         let unknownIds = unique.compactMap { known[$0.postId] == nil ? $0.postId : nil }
-        let tombstoned = unknownIds.isEmpty ? Set<String>() : store.unmappedTombstones(channelId: channelId, among: unknownIds)
+        var tombstoned = unknownIds.isEmpty ? Set<String>() : store.unmappedTombstones(channelId: channelId, among: unknownIds)
+        // Parts of a deleted post are deleted too, even when they were never mapped.
+        let partOwners = Set(unknownIds.filter { PostParts.isPartId($0) }.map { PostParts.postId(ofPartId: $0) })
+        if !partOwners.isEmpty {
+            let owners = Array(partOwners)
+            let ownerEntries = store.entries(channelId: channelId, postIds: owners)
+            let deletedOwners = store.unmappedTombstones(channelId: channelId, among: owners).union(ownerEntries.values.filter { $0.isDeleted }.map { $0.postId })
+            for id in unknownIds where PostParts.isPartId(id) && deletedOwners.contains(PostParts.postId(ofPartId: id)) {
+                tombstoned.insert(id)
+            }
+        }
         let newPosts = unique.filter { known[$0.postId] == nil && !tombstoned.contains($0.postId) }.sorted()
 
         // The key span covered by this run; islands overlapping it merge into one.
@@ -271,12 +330,23 @@ public struct MessageIdAllocator: Sendable {
         )
     }
 
-    /// Tombstones posts (WebSocket `post_deleted`, or deletions found during catch-up). Mapped
-    /// posts keep their id and are flagged; unmapped ones are remembered so they're never
-    /// inserted later. Returns the mapped entries that were newly tombstoned.
+    /// Tombstones posts (WebSocket `post_deleted`, or deletions found during catch-up), with their
+    /// parts. Mapped posts keep their id and are flagged; unmapped ones are remembered so they're
+    /// never inserted later. Returns the mapped entries that were newly tombstoned (parts included).
     @discardableResult
     public func markDeleted<Store: MessageIdStore>(_ postIds: [String], channelId: String, store: inout Store) -> [MessageIdEntry] {
-        let known = store.entries(channelId: channelId, postIds: postIds)
+        var postIds = postIds
+        var known = store.entries(channelId: channelId, postIds: postIds)
+        // A deleted post takes its parts (`PostParts`) with it.
+        for postId in postIds where !PostParts.isPartId(postId) {
+            guard let entry = known[postId] else {
+                continue
+            }
+            for part in store.entries(channelId: channelId, keyRange: entry.key.partsRange) where part.postId != postId && known[part.postId] == nil {
+                known[part.postId] = part
+                postIds.append(part.postId)
+            }
+        }
         var newlyDeleted: [MessageIdEntry] = []
         var unmapped: [String] = []
         var seen = Set<String>()
@@ -357,7 +427,8 @@ public struct MessageIdAllocator: Sendable {
     ///   or below it, or nil when nothing is mapped below (Mattermost can't page forward from the
     ///   channel start; fill that hole with `.older` instead).
     ///
-    /// Tombstoned boundary posts are skipped in favour of a live post of the same island.
+    /// Tombstoned boundary posts are skipped in favour of a live post of the same island. A part
+    /// (`PostParts`) gives the cursor of its post.
     /// Ingest the response with `ingestPage(_:extending:direction:reachedEnd:)` using the
     /// cursor's post as the anchor (or `ingestLatestPage` for `.latest`).
     public func fillCursor<Store: MessageIdStore>(direction: HistoryDirection, boundaryLocalId: Int32, channelId: String, store: Store) -> HistoryCursor? {
@@ -373,11 +444,12 @@ public struct MessageIdAllocator: Sendable {
                 chosen = live
             }
         }
+        // Cursors name server posts: a part pages like its post (nothing lies between them).
         switch direction {
         case .older:
-            return .before(postId: chosen.postId)
+            return .before(postId: chosen.serverPostId)
         case .newer:
-            return .after(postId: chosen.postId)
+            return .after(postId: chosen.serverPostId)
         }
     }
 
@@ -386,7 +458,7 @@ public struct MessageIdAllocator: Sendable {
         guard let entry = store.entries(channelId: channelId, fromLocalId: localId, ascending: true, limit: 1).first, entry.localId == localId else {
             return nil
         }
-        return .around(postId: entry.postId)
+        return .around(postId: entry.serverPostId)
     }
 
     // MARK: - Placement

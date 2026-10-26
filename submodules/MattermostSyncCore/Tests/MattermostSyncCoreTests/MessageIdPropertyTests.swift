@@ -5,6 +5,8 @@ import XCTest
 /// ids are unique, positive and within range, strictly increasing in `(createAt, postId)` order;
 /// every renumber plan describes exactly the id changes that happened; every island really is
 /// contiguous on the server; holes contain no mapped ids; the start/latest flags are true.
+/// Some posts have several parts (`PostParts`, one message per file) whose count changes by edits;
+/// every mapped post has exactly its current parts and cursors always name server posts.
 /// `SQLiteMessageIdPropertyTests` runs them again against the SQLite store.
 class MessageIdPropertyTests: XCTestCase {
     func makeStore() throws -> any InspectableMessageIdStore {
@@ -24,6 +26,10 @@ class MessageIdPropertyTests: XCTestCase {
         var undelivered: [PostOrderKey] = []
         var clock: Int64
         var stats: [String: Int] = [:]
+        /// Current part count of posts with more than one part (one message per file).
+        var partCounts: [String: Int] = [:]
+        /// Posts whose part count shrank (removed parts stay tombstoned, so they never grow again).
+        var shrunk = Set<String>()
 
         init(seed: UInt64, configuration: MessageIdAllocator.Configuration, initialPosts: Int, store: any InspectableMessageIdStore) {
             self.store = store
@@ -44,7 +50,11 @@ class MessageIdPropertyTests: XCTestCase {
                 default:
                     time += Int64(rng.next() % (6 * 3_600_000))
                 }
-                posts.append(PostOrderKey(createAt: time, postId: randomPostId(&rng)))
+                let post = PostOrderKey(createAt: time, postId: randomPostId(&rng))
+                posts.append(post)
+                if rng.next() % 8 == 0 {
+                    partCounts[post.postId] = 2 + Int(rng.next() % 4)
+                }
             }
             server = FakeServer(posts: posts)
             clock = time + 60_000
@@ -52,6 +62,28 @@ class MessageIdPropertyTests: XCTestCase {
 
         mutating func random(_ upperBound: Int) -> Int {
             return Int(rng.next() % UInt64(upperBound))
+        }
+
+        func partCount(_ postId: String) -> Int {
+            return partCounts[postId] ?? 1
+        }
+
+        /// A page as the sync engine ingests it: every post followed by its parts.
+        func expand(_ posts: [PostOrderKey]) -> [PostOrderKey] {
+            return posts.flatMap { $0.parts(count: partCount($0.postId)) }
+        }
+
+        mutating func newPost(createAt: Int64) -> PostOrderKey {
+            let post = PostOrderKey(createAt: createAt, postId: randomPostId(&rng))
+            if random(8) == 0 {
+                partCounts[post.postId] = 2 + random(4)
+            }
+            return post
+        }
+
+        /// Cursors must name a post the server knows, never a part.
+        func checkAnchor(_ anchor: String) {
+            XCTAssertNotNil(server.key(of: anchor), "cursor \(anchor) is not a server post")
         }
 
         /// Set `SIM_TRACE=<directory>` to write the operation log of a failing seed there.
@@ -99,8 +131,10 @@ class MessageIdPropertyTests: XCTestCase {
                 try latePost()
             case 72 ..< 78:
                 try burst()
-            case 78 ..< 85:
+            case 78 ..< 83:
                 deleteRandomPost()
+            case 83 ..< 85:
+                try editParts()
             case 85 ..< 90:
                 try toggleConnection()
             default:
@@ -115,7 +149,7 @@ class MessageIdPropertyTests: XCTestCase {
         mutating func openLatest() throws {
             count("openLatest")
             let page = server.latest(limit: perPage())
-            let result = try allocator.ingestLatestPage(page.posts, reachedStart: page.reachedEnd, channelId: channel, store: &store)
+            let result = try allocator.ingestLatestPage(expand(page.posts), reachedStart: page.reachedEnd, channelId: channel, store: &store)
             try absorb(result)
             if !connected {
                 allocator.invalidateLatest(channelId: channel, store: &store)
@@ -138,21 +172,23 @@ class MessageIdPropertyTests: XCTestCase {
                 count("fillHole.latest")
                 let page = server.latest(limit: limit)
                 trace("page=\(page.posts.first.map { "\($0)" } ?? "-")…\(page.posts.last.map { "\($0)" } ?? "-") n=\(page.posts.count) end=\(page.reachedEnd)")
-                try absorb(try allocator.ingestLatestPage(page.posts, reachedStart: page.reachedEnd, channelId: channel, store: &store))
+                try absorb(try allocator.ingestLatestPage(expand(page.posts), reachedStart: page.reachedEnd, channelId: channel, store: &store))
                 if !connected {
                     allocator.invalidateLatest(channelId: channel, store: &store)
                 }
             case let .before(anchor)?:
                 count("fillHole.before")
+                checkAnchor(anchor)
                 let page = server.before(anchor, limit: limit)
                 trace("anchor=\(server.key(of: anchor)!) page=\(page.posts.first.map { "\($0)" } ?? "-")…\(page.posts.last.map { "\($0)" } ?? "-") n=\(page.posts.count) end=\(page.reachedEnd)")
-                try absorb(try allocator.ingestPage(page.posts, extending: anchor, direction: .older, reachedEnd: page.reachedEnd, channelId: channel, store: &store))
+                try absorb(try allocator.ingestPage(expand(page.posts), extending: anchor, direction: .older, reachedEnd: page.reachedEnd, channelId: channel, store: &store))
             case let .after(anchor)?:
                 count("fillHole.after")
+                checkAnchor(anchor)
                 let page = server.after(anchor, limit: limit)
                 trace("anchor=\(server.key(of: anchor)!) page=\(page.posts.first.map { "\($0)" } ?? "-")…\(page.posts.last.map { "\($0)" } ?? "-") n=\(page.posts.count) end=\(page.reachedEnd)")
                 // Only a connected client may treat the newest page as live.
-                try absorb(try allocator.ingestPage(page.posts, extending: anchor, direction: .newer, reachedEnd: page.reachedEnd && connected, channelId: channel, store: &store))
+                try absorb(try allocator.ingestPage(expand(page.posts), extending: anchor, direction: .newer, reachedEnd: page.reachedEnd && connected, channelId: channel, store: &store))
             case .around?, nil:
                 count("fillHole.nil")
             }
@@ -169,17 +205,19 @@ class MessageIdPropertyTests: XCTestCase {
             let older = server.before(target.postId, limit: limit)
             let newer = server.after(target.postId, limit: limit)
             trace("target=\(target) older=\(older.posts.first.map { "\($0)" } ?? "-") n=\(older.posts.count) end=\(older.reachedEnd) newer=\(newer.posts.last.map { "\($0)" } ?? "-") n=\(newer.posts.count) end=\(newer.reachedEnd)")
-            let result = try allocator.ingestAround(target: target, older: older.posts, newer: newer.posts, olderReachedStart: older.reachedEnd, newerReachedLatest: newer.reachedEnd && connected, channelId: channel, store: &store)
+            // The target's parts follow it, so they belong to the newer side.
+            let targetParts = Array(target.parts(count: partCount(target.postId)).dropFirst())
+            let result = try allocator.ingestAround(target: target, older: expand(older.posts), newer: targetParts + expand(newer.posts), olderReachedStart: older.reachedEnd, newerReachedLatest: newer.reachedEnd && connected, channelId: channel, store: &store)
             try absorb(result)
         }
 
         mutating func livePost() throws {
             count("live")
             clock += Int64(random(5) == 0 ? 0 : random(120_000))
-            let post = PostOrderKey(createAt: clock, postId: randomPostId(&rng))
+            let post = newPost(createAt: clock)
             server.add(post)
             if connected {
-                try absorb(try allocator.insertPost(post, channelId: channel, store: &store))
+                try absorb(try allocator.insertPost(post, partCount: partCount(post.postId), channelId: channel, store: &store))
             } else {
                 undelivered.append(post)
             }
@@ -197,16 +235,19 @@ class MessageIdPropertyTests: XCTestCase {
             } else {
                 time = Times.year2013 + Int64(rng.next() % UInt64(clock - Times.year2013))
             }
-            let post = PostOrderKey(createAt: time, postId: randomPostId(&rng))
+            let post = newPost(createAt: time)
             server.add(post)
-            try absorb(try allocator.insertPost(post, channelId: channel, store: &store))
+            try absorb(try allocator.insertPost(post, partCount: partCount(post.postId), channelId: channel, store: &store))
         }
 
         /// A bot posting many messages in one millisecond, delivered out of order.
         mutating func burst() throws {
             count("burst")
             clock += 1
-            var posts = (0 ..< (1 + random(40))).map { _ in PostOrderKey(createAt: clock, postId: randomPostId(&rng)) }
+            var posts: [PostOrderKey] = []
+            for _ in 0 ..< (1 + random(40)) {
+                posts.append(newPost(createAt: clock))
+            }
             for post in posts {
                 server.add(post)
             }
@@ -216,7 +257,7 @@ class MessageIdPropertyTests: XCTestCase {
             }
             posts.shuffle(using: &rng)
             for post in posts {
-                try absorb(try allocator.insertPost(post, channelId: channel, store: &store))
+                try absorb(try allocator.insertPost(post, partCount: partCount(post.postId), channelId: channel, store: &store))
             }
         }
 
@@ -233,6 +274,45 @@ class MessageIdPropertyTests: XCTestCase {
             let deleted = allocator.markDeleted([post.postId], channelId: channel, store: &store)
             for entry in deleted {
                 XCTAssertEqual(shadow[entry.postId], entry.localId)
+                XCTAssertEqual(entry.serverPostId, post.postId, "only the post and its parts are deleted")
+            }
+            if shadow[post.postId] != nil {
+                let parts = store.entries(channelId: channel, keyRange: post.partsRange)
+                XCTAssertTrue(parts.allSatisfy { $0.isDeleted }, "a deleted post keeps no live parts")
+            }
+        }
+
+        /// An edit that adds files (more parts) or removes some (fewer parts) of a post.
+        mutating func editParts() throws {
+            let live = server.livePosts
+            guard !live.isEmpty else {
+                return
+            }
+            // Half of the edits change a post that has several parts already.
+            let multi = live.filter { partCount($0.postId) > 1 }
+            let post = !multi.isEmpty && random(2) == 0 ? multi[random(multi.count)] : live[random(live.count)]
+            let current = partCount(post.postId)
+            let updated = shrunk.contains(post.postId) ? max(1, current - random(2)) : 1 + random(5)
+            if updated == current {
+                return
+            }
+            count(updated > current ? "parts.grow" : "parts.shrink")
+            trace("parts \(post) \(current)→\(updated)")
+            partCounts[post.postId] = updated
+            if updated < current {
+                shrunk.insert(post.postId)
+            }
+            guard shadow[post.postId] != nil else {
+                // Not loaded: the post comes with its current parts when its page loads.
+                return
+            }
+            if updated > current {
+                try absorb(try allocator.insertPost(post, partCount: updated, channelId: channel, store: &store))
+            } else {
+                for entry in allocator.removeParts(postId: post.postId, keeping: updated, channelId: channel, store: &store) {
+                    XCTAssertEqual(shadow[entry.postId], entry.localId)
+                    XCTAssertGreaterThanOrEqual(entry.partIndex, updated)
+                }
             }
         }
 
@@ -253,7 +333,7 @@ class MessageIdPropertyTests: XCTestCase {
             let missed = undelivered.sorted()
             undelivered = []
             for post in missed {
-                try absorb(try allocator.insertPost(post, channelId: channel, store: &store))
+                try absorb(try allocator.insertPost(post, partCount: partCount(post.postId), channelId: channel, store: &store))
             }
         }
 
@@ -265,9 +345,9 @@ class MessageIdPropertyTests: XCTestCase {
             }
             count("replay")
             let anchor = entries[random(entries.count)]
-            let page = server.before(anchor.postId, limit: perPage())
+            let page = server.before(anchor.serverPostId, limit: perPage())
             trace("anchor=\(anchor) page=\(page.posts.first.map { "\($0)" } ?? "-")…\(page.posts.last.map { "\($0)" } ?? "-") n=\(page.posts.count) end=\(page.reachedEnd)")
-            try absorb(try allocator.ingestPage(page.posts, extending: anchor.postId, direction: .older, reachedEnd: page.reachedEnd, channelId: channel, store: &store))
+            try absorb(try allocator.ingestPage(expand(page.posts), extending: anchor.serverPostId, direction: .older, reachedEnd: page.reachedEnd, channelId: channel, store: &store))
         }
 
         // MARK: Checking
@@ -314,9 +394,29 @@ class MessageIdPropertyTests: XCTestCase {
             let islands = store.islands(channelId: channel)
             let pending = Set(undelivered.map { $0.postId })
             for island in islands {
-                for post in server.livePosts(in: island.lower, island.upper) where shadow[post.postId] == nil && !pending.contains(post.postId) {
-                    problems.append("island \(island) misses server post \(post)")
+                for post in server.livePosts(in: island.lower, island.upper) where !pending.contains(post.postId) {
+                    if shadow[post.postId] == nil {
+                        problems.append("island \(island) misses server post \(post)")
+                        continue
+                    }
+                    for part in post.parts(count: partCount(post.postId)).dropFirst() where shadow[part.postId] == nil {
+                        problems.append("post \(post) misses part \(part)")
+                    }
                 }
+            }
+            // Mapped parts: consecutive with their post, and live exactly while the post has them.
+            var previous: MessageIdEntry?
+            for entry in entries {
+                if entry.partIndex > 0 {
+                    if let previous = previous, previous.serverPostId != entry.serverPostId || previous.partIndex != entry.partIndex - 1 {
+                        problems.append("part \(entry) does not follow \(entry.serverPostId) directly (after \(previous))")
+                    }
+                    let isLive = !server.isDeleted(entry.serverPostId) && entry.partIndex < partCount(entry.serverPostId)
+                    if isLive == entry.isDeleted {
+                        problems.append("part \(entry) is \(entry.isDeleted ? "deleted" : "live") but the post has \(partCount(entry.serverPostId)) parts")
+                    }
+                }
+                previous = entry
             }
             if let first = islands.first, first.reachesStart, server.hasLivePost(olderThan: first.lower) {
                 problems.append("lowest island claims the channel start but older posts exist")
@@ -366,18 +466,21 @@ class MessageIdPropertyTests: XCTestCase {
             let cursor = simulation.allocator.fillCursor(direction: .older, boundaryLocalId: hole.range.upperBound, channelId: simulation.channel, store: simulation.store)
             switch cursor {
             case let .before(anchor)?:
+                simulation.checkAnchor(anchor)
                 let page = simulation.server.before(anchor, limit: 200)
-                try simulation.absorb(try simulation.allocator.ingestPage(page.posts, extending: anchor, direction: .older, reachedEnd: page.reachedEnd, channelId: simulation.channel, store: &simulation.store))
+                try simulation.absorb(try simulation.allocator.ingestPage(simulation.expand(page.posts), extending: anchor, direction: .older, reachedEnd: page.reachedEnd, channelId: simulation.channel, store: &simulation.store))
             default:
                 let page = simulation.server.latest(limit: 200)
-                try simulation.absorb(try simulation.allocator.ingestLatestPage(page.posts, reachedStart: page.reachedEnd, channelId: simulation.channel, store: &simulation.store))
+                try simulation.absorb(try simulation.allocator.ingestLatestPage(simulation.expand(page.posts), reachedStart: page.reachedEnd, channelId: simulation.channel, store: &simulation.store))
             }
         }
         let problems = simulation.check(step: steps)
         XCTAssertEqual(problems, [], "seed \(seed)")
         let mapped = Set(simulation.store.allEntries(channelId: simulation.channel).filter { !$0.isDeleted }.map { $0.postId })
         for post in simulation.server.livePosts {
-            XCTAssertTrue(mapped.contains(post.postId), "seed \(seed): \(post) never loaded")
+            for part in post.parts(count: simulation.partCount(post.postId)) {
+                XCTAssertTrue(mapped.contains(part.postId), "seed \(seed): \(part) never loaded")
+            }
         }
         // A persistent store reads back exactly what it held.
         let channel = simulation.channel
@@ -405,6 +508,8 @@ class MessageIdPropertyTests: XCTestCase {
         XCTAssertGreaterThan(totals["permalink", default: 0], 0)
         XCTAssertGreaterThan(totals["burst", default: 0], 0)
         XCTAssertGreaterThan(totals["renumber", default: 0], 0, "same-millisecond bursts exhaust midpoints")
+        XCTAssertGreaterThan(totals["parts.grow", default: 0], 0)
+        XCTAssertGreaterThan(totals["parts.shrink", default: 0], 0)
     }
 
     /// A small id space so holes run out constantly and every renumber path is exercised.
