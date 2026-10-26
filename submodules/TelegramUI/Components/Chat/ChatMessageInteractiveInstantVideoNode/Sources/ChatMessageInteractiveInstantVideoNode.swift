@@ -527,7 +527,7 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                 } else if let attribute = attribute as? ViewCountMessageAttribute {
                     viewCount = attribute.count
                 } else if let attribute = attribute as? ReplyThreadMessageAttribute, case .peer = item.chatLocation {
-                    if let channel = item.message.peers[item.message.id.peerId] as? TelegramChannel, case .group = channel.info {
+                    if let channel = item.message.peers[item.message.id.peerId] as? TelegramChannel, case .group = channel.info, !(MattermostBackend.isEnabled && attribute.commentsPeerId == item.message.id.peerId) { // MATTERMOST: not with the "N replies" button
                         dateReplies = Int(attribute.count)
                     }
                 } else if let attribute = attribute as? PaidStarsMessageAttribute, item.message.id.peerId.namespace == Namespaces.Peer.CloudChannel {

@@ -153,7 +153,8 @@ public final class ChatMessageCommentFooterContentNode: ChatMessageBubbleContent
                     rawAlternativeSegments = rawSegments
                     accessibilityLabel = item.presentationData.strings.Conversation_ViewReply
                 } else if dateReplies > 0 {
-                    var commentsPart = item.presentationData.strings.Conversation_MessageViewComments(Int32(dateReplies))
+                    // MATTERMOST: a Mattermost thread has replies, not comments.
+                    var commentsPart = MattermostBackend.isEnabled ? item.presentationData.strings.Conversation_TitleReplies(Int32(dateReplies)) : item.presentationData.strings.Conversation_MessageViewComments(Int32(dateReplies))
                     if commentsPart.contains("[") && commentsPart.contains("]") {
                         if let startIndex = commentsPart.firstIndex(of: "["), let endIndex = commentsPart.firstIndex(of: "]") {
                             commentsPart.removeSubrange(startIndex ... endIndex)

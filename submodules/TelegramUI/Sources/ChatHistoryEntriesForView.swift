@@ -460,7 +460,8 @@ func chatHistoryEntriesForView(
     }
     
     var addedThreadHead = false
-    if case let .replyThread(replyThreadMessage) = location, !replyThreadMessage.isForumPost, view.earlierId == nil, !view.holeEarlier, !view.isLoading, !isMusicPlaylist {
+    // MATTERMOST: a Mattermost thread (a forum-post thread view of its root's id) shows its root post on top too.
+    if case let .replyThread(replyThreadMessage) = location, !replyThreadMessage.isForumPost || MattermostBackend.isEnabled, view.earlierId == nil, !view.holeEarlier, !view.isLoading, !isMusicPlaylist {
         loop: for entry in view.additionalData {
             switch entry {
             case let .message(id, messages) where id == replyThreadMessage.effectiveTopId:
@@ -511,7 +512,7 @@ func chatHistoryEntriesForView(
                         }
                     }
                     
-                    if !replyThreadMessage.isForumPost {
+                    if !replyThreadMessage.isForumPost || MattermostBackend.isEnabled {
                         let replyCount = view.entries.isEmpty ? 0 : 1
                         entries.insert(.ReplyCountEntry(messages[0].index, replyThreadMessage.isChannelPost, replyCount, presentationData), at: 1)
                     }

@@ -545,6 +545,8 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
     
     private let historyDisposable = MetaDisposable()
     private let readHistoryDisposable = MetaDisposable()
+    // MATTERMOST: collapsed reply threads switched (the main history's view changes, `AccountViewTracker`).
+    private var mattermostCollapsedThreadsDisposable: Disposable?
     
     private var dequeuedInitialTransitionOnLayout = false
     private var enqueuedHistoryViewTransitions: [ChatHistoryListViewTransition] = []
@@ -1137,7 +1139,19 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
         
         self.beginChatHistoryTransitions(resetScrolling: false, switchedToAnotherSource: false)
         self.beginReadHistoryManagement()
-        
+
+        // MATTERMOST: with collapsed reply threads switched on or off, the main history shows other messages.
+        if MattermostBackend.isEnabled, case .peer = chatLocation, tag == nil {
+            var previous: Bool?
+            self.mattermostCollapsedThreadsDisposable = (MattermostBackend.collapsedThreadsUpdates(accountPeerId: context.account.peerId)
+            |> deliverOnMainQueue).startStrict(next: { [weak self] value in
+                if let previous, previous != value {
+                    self?.beginChatHistoryTransitions(resetScrolling: true, switchedToAnotherSource: false)
+                }
+                previous = value
+            })
+        }
+
         if let subject = subject, case let .message(messageSubject, highlight, _, setupReply) = subject {
             let initialSearchLocation: ChatHistoryInitialSearchLocation
             switch messageSubject {
@@ -1415,6 +1429,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
     deinit {
         self.historyDisposable.dispose()
         self.readHistoryDisposable.dispose()
+        self.mattermostCollapsedThreadsDisposable?.dispose()
         self.interactiveReadActionDisposable?.dispose()
         self.interactiveReadReactionsDisposable?.dispose()
         self.canReadHistoryDisposable?.dispose()

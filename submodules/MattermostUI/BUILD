@@ -24,6 +24,8 @@ swift_library(
         "//submodules/CodeInputView:CodeInputView",
         "//submodules/OverlayStatusController:OverlayStatusController",
         "//submodules/ItemListUI:ItemListUI",
+        # Phase 3B: the threads screen's avatars.
+        "//submodules/AvatarNode:AvatarNode",
         "//submodules/MattermostKit:MattermostKit",
         "//submodules/MattermostSync:MattermostSync",
         # Phase 3A: the debug remote's simulated push delivery.

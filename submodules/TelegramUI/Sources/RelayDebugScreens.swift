@@ -29,6 +29,7 @@ import ChatMessageItemView
 extension TelegramRootController {
     func relayDebugOpenScreenIfRequested() {
         #if DEBUG
+        self.relayDebugInstallChatCommands()
         guard let screen = ProcessInfo.processInfo.environment["RELAY_DEBUG_OPEN_SCREEN"], !screen.isEmpty else {
             return
         }

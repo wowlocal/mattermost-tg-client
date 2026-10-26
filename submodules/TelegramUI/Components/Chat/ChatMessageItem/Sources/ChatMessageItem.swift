@@ -143,7 +143,19 @@ public protocol ChatMessageItem: ListViewItem, ChatHistoryItemWithHeaders {
 
 public func hasCommentButton(item: ChatMessageItem) -> Bool {
     let firstMessage = item.content.firstMessage
-    
+
+    // MATTERMOST: with collapsed reply threads a root post with replies shows them as an "N replies" button
+    // (MattermostSync marks it with the chat as `commentsPeerId`), in its chat's history only.
+    if MattermostBackend.isEnabled {
+        if case .pinnedMessages = item.associatedData.subject {
+            return false
+        }
+        if case .peer = item.chatLocation, let attribute = firstMessage.attributes.first(where: { $0 is ReplyThreadMessageAttribute }) as? ReplyThreadMessageAttribute, attribute.count > 0, attribute.commentsPeerId == firstMessage.id.peerId {
+            return true
+        }
+        return false
+    }
+
     var hasDiscussion = false
     if let channel = firstMessage.peers[firstMessage.id.peerId] as? TelegramChannel, case let .broadcast(info) = channel.info, info.flags.contains(.hasDiscussionGroup) {
         hasDiscussion = true

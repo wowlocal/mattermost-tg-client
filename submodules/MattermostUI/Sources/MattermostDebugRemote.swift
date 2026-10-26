@@ -9,6 +9,13 @@ import AccountContext
 import MattermostSync
 import MattermostPushService
 
+/// **Debug builds only.** Phase 3B: the debug remote's chat-screen commands, installed by TelegramUI (which can
+/// reach the chat controller, `RelayDebugThreads`). The handler returns false for an action it doesn't know and
+/// calls `completion` once done.
+public enum MattermostDebugChatCommands {
+    public static var handler: ((_ action: String, _ command: [String: Any], _ completion: @escaping (_ ok: Bool, _ error: String?, _ extra: [String: Any]) -> Void) -> Bool)?
+}
+
 /// A login screen the debug remote can fill and press.
 protocol MattermostDebugDrivable: AnyObject {
     var debugScreenName: String { get }
@@ -41,6 +48,10 @@ protocol MattermostDebugDrivable: AnyObject {
 ///   own handler (Phase 3A). The result's `visibleChat` shows the chat on top afterwards;
 /// - `simulate-push` (`payload`: the APNs JSON, or `file`: its path; `delay`: seconds, default 1): a push as the
 ///   notification service extension would show it (Phase 3A, see `simulatePush`).
+/// - `threads-row` (`index`): a tap on that row of the visible threads screen (Phase 3B);
+/// - chat-screen commands (Phase 3B), handled by TelegramUI's `chatCommandHandler` (`RelayDebugScreens`): `chat`,
+///   `post`, `replies`, `threads`, `follow`, `unfollow`, `scroll`, `visible`, `menu`, `back`. Their output is in
+///   the result's `extra`.
 ///
 /// Passwords filled by the remote are cleared once the login succeeds, so iOS doesn't offer to save them
 /// (its "Save Password?" sheet would cover the next screenshots).
@@ -50,6 +61,7 @@ final class MattermostDebugRemote {
 
     private weak var screen: (AnyObject & MattermostDebugDrivable)?
     private var sharedContext: SharedAccountContext?
+    private var lastExtra: [String: Any] = [:]
 
     static func screenAppeared(_ screen: AnyObject & MattermostDebugDrivable) {
         #if DEBUG
@@ -82,6 +94,7 @@ final class MattermostDebugRemote {
         }
         let id = command["id"] as? String
         NSLog("[Relay] debug remote: %@", action)
+        self.lastExtra = [:]
         switch action {
         case "state":
             self.writeResult(id: id, ok: true, error: nil)
@@ -167,7 +180,65 @@ final class MattermostDebugRemote {
                 }
             }
             self.writeResult(id: id, ok: dismissed, error: dismissed ? nil : "no alert")
+        case "dump-chatlist":
+            // Phase 3B: `Documents/relay-debug/chatlist.json` now (badges against the server's counters).
+            self.withAccount(command: command, completion: { [weak self] accountId in
+                guard let accountId = accountId else {
+                    self?.writeResult(id: id, ok: false, error: "no account")
+                    return
+                }
+                let _ = (MattermostSync.debugDumpChatList(accountId: accountId) |> deliverOnMainQueue).start(next: { ok in
+                    self?.writeResult(id: id, ok: ok, error: ok ? nil : "no sync")
+                })
+            })
+        case "threads-list":
+            // Phase 3B: what the threads screen shows for a team (`team`, default the current account's first).
+            self.withAccount(command: command, completion: { [weak self] accountId in
+                guard let self, let accountId = accountId else {
+                    self?.writeResult(id: id, ok: false, error: "no account")
+                    return
+                }
+                let teamId = (command["team"] as? String) ?? MattermostSync.teams(accountId: accountId).first?.id ?? ""
+                let _ = (MattermostSync.threadList(accountId: accountId, teamId: teamId)
+                |> filter { $0?.isLoaded ?? true }
+                |> take(1)
+                |> deliverOnMainQueue).start(next: { [weak self] list in
+                    guard let self else {
+                        return
+                    }
+                    if let list = list {
+                        self.lastExtra = [
+                            "teamId": list.teamId,
+                            "unreadThreads": list.unreadThreadCount,
+                            "unreadMentions": list.unreadMentionCount,
+                            "threads": list.items.map { item -> [String: Any] in
+                                return ["id": item.rootPostId, "channel": item.channelTitle, "replies": item.replyCount, "unreadReplies": item.unreadReplies, "unreadMentions": item.unreadMentions, "lastReplyAt": item.lastReplyAt, "participants": item.participants.count, "threadId": item.threadId ?? 0, "text": String(item.rootText.prefix(40))]
+                            }
+                        ]
+                    } else {
+                        self.lastExtra = ["collapsedThreads": false]
+                    }
+                    self.writeResult(id: id, ok: true, error: nil)
+                })
+            })
+        case "threads-row":
+            let index = (command["index"] as? String).flatMap(Int.init) ?? 0
+            if let openRow = MattermostThreadsDebug.openRow {
+                openRow(index)
+                Queue.mainQueue().after(1.5) {
+                    self.writeResult(id: id, ok: true, error: nil)
+                }
+            } else {
+                self.writeResult(id: id, ok: false, error: "no threads screen")
+            }
         default:
+            self.lastExtra = [:]
+            if let handler = MattermostDebugChatCommands.handler, handler(action, command, { [weak self] ok, error, extra in
+                self?.lastExtra = extra
+                self?.writeResult(id: id, ok: ok, error: error)
+            }) {
+                return
+            }
             self.writeResult(id: id, ok: false, error: "unknown action \(action)")
         }
     }
@@ -379,6 +450,9 @@ final class MattermostDebugRemote {
             state["deliveredNotifications"] = self.notificationList
             state["visibleChat"] = self.visibleChatDescription()
             result["state"] = state
+            if !self.lastExtra.isEmpty {
+                result["extra"] = self.lastExtra
+            }
             do {
                 try FileManager.default.createDirectory(at: self.directory, withIntermediateDirectories: true)
                 let data = try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
