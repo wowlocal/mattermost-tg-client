@@ -24,6 +24,24 @@ python3 build-system/Make/Make.py --cacheDir /Volumes/X5/relay-bazel-cache build
 - First build: ~9 minutes on this machine (3,869 actions). Incremental builds are much faster.
 - Output: `bazel-bin/Telegram/Telegram.ipa`. Always install from the `.ipa`, never from `Telegram_archive-root/`, which goes stale on incremental builds (see root `CLAUDE.md`).
 
+## Release builds (Phase 4A)
+
+```sh
+python3 build-system/Make/Make.py --cacheDir /Volumes/X5/relay-bazel-cache build \
+  --configurationPath build-config/appstore-configuration.json \
+  --xcodeManagedCodesigning --disableProvisioningProfiles \
+  --buildNumber=1 --configuration=release_sim_arm64
+tools/relay-release-audit.sh bazel-bin/Telegram/Telegram.ipa
+```
+
+- `release_sim_arm64` / `release_arm64` build with `-c opt` (whole-module optimisation, `-Osize`): `DEBUG` is not defined, so the debug login, every `RELAY_DEBUG_*` hook, the debug remote and the debug screens below are **not compiled** (`#if DEBUG` around whole files and call sites). Release builds can't be driven by `tools/relay-remote.py`; use AXe or real taps.
+- A full release build takes ~25 minutes here (TelegramCore and TelegramUI compile as whole modules); incremental release builds are much slower than debug ones.
+- `build-config/appstore-configuration.json` is the distribution configuration (`is_internal_build` false, `is_appstore_build` true, team id to fill in). `development-configuration.json` also builds `release_sim_arm64`, but has Telegram's internal-build flags (file logging; 10 taps on Chats would crash were it not for Relay's gate in `TelegramRootController`).
+- `tools/relay-release-audit.sh` fails on debug markers in any binary, ATS exceptions for the app's own connections, missing privacy manifests and closed-source/analytics SDK symbols.
+- Device builds, signing and TestFlight: [release/RELEASE.md](release/RELEASE.md).
+- **App Transport Security**: release builds allow no plain HTTP for the app's own connections (the login refuses `http://` servers: "Relay only connects to servers over HTTPS."); only web content in the in-app browser may be `http://`. Debug builds add `NSAllowsLocalNetworking` (`http://localhost:8065`, LAN). To try a release build against the dev server, put a TLS proxy in front of it and trust its CA on the simulator (`xcrun simctl keychain <udid> add-root-cert ca.pem`), then log in to `https://localhost:<port>`.
+- **Version**: `versions.json` `"app"` (`0.1.0`) is `CFBundleShortVersionString`; `--buildNumber` is `CFBundleVersion` (release builds: `git rev-list --count HEAD` on main).
+
 ## Run on the simulator
 
 A dedicated simulator, "Relay iPhone 17 Pro" (iOS 26.5), is used so other projects' simulators aren't touched. Its UDID is in `build-input/relay-sim-udid`.
