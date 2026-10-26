@@ -10,7 +10,13 @@ import MattermostKit
 ///  SIMCTL_CHILD_RELAY_DEBUG_MM_PASSWORD=… xcrun simctl launch …`.
 /// Without these variables (and in release builds) the app shows the login screens.
 public enum MattermostDebugLogin {
-    private static let started = Atomic<Bool>(value: false)
+    private enum State {
+        case notStarted
+        case running
+        case finished
+    }
+
+    private static let state = Atomic<State>(value: .notStarted)
 
     /// True in debug builds launched with all three variables.
     public static var isRequested: Bool {
@@ -24,8 +30,8 @@ public enum MattermostDebugLogin {
 
     /// Called where Telegram would begin its phone login (no account, no login in progress) when
     /// `isRequested`. Logs in and creates the account with `MattermostAccountSetup` (new record);
-    /// `SharedAccountContextImpl` loads it like any other. On failure, `fallback` runs on the main queue
-    /// (it begins the normal login).
+    /// `SharedAccountContextImpl` loads it like any other. Runs once per launch: on failure, and on later calls
+    /// (the last account logged out), `fallback` runs on the main queue instead (it begins the normal login).
     public static func createAccountIfNeeded(accountManager: AccountManager<TelegramAccountManagerTypes>, rootPath: String, encryptionParameters: ValueBoxEncryptionParameters, fallback: @escaping () -> Void) {
         #if DEBUG
         let environment = ProcessInfo.processInfo.environment
@@ -33,7 +39,19 @@ public enum MattermostDebugLogin {
             Queue.mainQueue().async(fallback)
             return
         }
-        if self.started.swap(true) {
+        // Once per launch: after that (logout of the last account, a failed attempt) the login screens show.
+        var previous: State = .notStarted
+        let _ = self.state.modify { current -> State in
+            previous = current
+            return current == .notStarted ? .running : current
+        }
+        switch previous {
+        case .notStarted:
+            break
+        case .running:
+            return
+        case .finished:
+            Queue.mainQueue().async(fallback)
             return
         }
         Task {
@@ -42,9 +60,10 @@ public enum MattermostDebugLogin {
                 let result = try await MattermostAccountSetup.login(server: server.url, loginId: login, password: password, mfaToken: environment["RELAY_DEBUG_MM_MFA"])
                 MMLog.log("debug login: \(result.user.username) on \(server.url)")
                 try await MattermostAccountSetup.createAccount(server: server, serverURL: server.url, login: result, loginId: login, target: .newAccount(rootPath: rootPath, encryptionParameters: encryptionParameters), accountManager: accountManager)
+                let _ = self.state.swap(.finished)
             } catch {
                 MMLog.log("debug login failed: \(error); showing the login screen")
-                let _ = self.started.swap(false)
+                let _ = self.state.swap(.finished)
                 Queue.mainQueue().async(fallback)
             }
         }
