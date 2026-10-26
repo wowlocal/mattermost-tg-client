@@ -4463,8 +4463,9 @@ func settingsSearchableItems(
             }
         )
         allItems.append(deleteAccount)
-    
-        return allItems
+
+        // MATTERMOST: drop search results that lead to hidden Telegram-only settings.
+        return allItems.filter { MattermostFeatures.settingsSearchAllows($0) }
     }
 }
 

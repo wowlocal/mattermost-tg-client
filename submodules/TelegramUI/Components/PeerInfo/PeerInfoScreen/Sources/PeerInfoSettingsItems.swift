@@ -61,7 +61,8 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
         displaySetStatus = false
     }
     
-    if displaySetStatus {
+    // MATTERMOST: emoji status and profile colour are Premium features.
+    if displaySetStatus && MattermostFeatures.premium {
         items[.edit]!.append(PeerInfoScreenActionItem(id: 0, text: setStatusTitle, icon: UIImage(bundleImageName: hasEmojiStatus ? "Settings/EditEmojiStatus" : "Settings/SetEmojiStatus"), action: {
             interaction.openSettings(.emojiStatus)
         }))
@@ -75,7 +76,8 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
         interaction.openSettings(.avatar)
     }))
     
-    if let peer = data.peer, (peer.addressName ?? "").isEmpty {
+    // MATTERMOST: usernames are t.me links here; Mattermost usernames are managed by the server.
+    if MattermostFeatures.tmeLinks, let peer = data.peer, (peer.addressName ?? "").isEmpty {
         items[.edit]!.append(PeerInfoScreenActionItem(id: 3, text: presentationData.strings.Settings_SetUsername, icon: UIImage(bundleImageName: "Settings/SetUsername"), action: {
             interaction.openSettings(.username)
         }))
@@ -225,9 +227,12 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 1, text: presentationData.strings.Settings_SavedMessages, icon: PresentationResourcesSettings.savedMessages, action: {
         interaction.openSettings(.savedMessages)
     }))
-    items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 2, text: presentationData.strings.CallSettings_RecentCalls, icon: PresentationResourcesSettings.recentCalls, action: {
-        interaction.openSettings(.recentCalls)
-    }))
+    // MATTERMOST: no calls.
+    if MattermostFeatures.calls {
+        items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 2, text: presentationData.strings.CallSettings_RecentCalls, icon: PresentationResourcesSettings.recentCalls, action: {
+            interaction.openSettings(.recentCalls)
+        }))
+    }
     
     let devicesLabel: String
     if let settings = data.globalSettings, let otherSessionsCount = settings.otherSessionsCount {
@@ -353,7 +358,9 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     }))
     
     var result: [(AnyHashable, [PeerInfoScreenItem])] = []
-    for section in SettingsSection.allCases {
+    // MATTERMOST: Telegram-only sections (phone/password suggestions, wallet, proxy, bot apps, Premium and
+    // Stars, Passport, Telegram support) are dropped here in one place.
+    for section in SettingsSection.allCases where !MattermostFeatures.hiddenSettingsSections.contains(section) {
         if let sectionItems = items[section], !sectionItems.isEmpty {
             result.append((section, sectionItems))
         }
