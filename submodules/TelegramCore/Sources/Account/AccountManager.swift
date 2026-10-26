@@ -444,6 +444,11 @@ public func managedCleanupAccounts(networkArguments: NetworkInitializationArgume
                 disposable.dispose()
             }
             for (id, attributes, disposable) in beginList {
+                // MATTERMOST: Telegram's cleanup sends `auth.logOut` and waits for the answer, which never
+                // comes; MattermostSync logs the account out and removes the record (`MattermostSync.startLifecycle`).
+                if MattermostBackend.isEnabled {
+                    continue
+                }
                 Logger.shared.log("managedCleanupAccounts", "cleanup \(id), current is \(String(describing: view.currentRecord?.id))")
                 disposable.set(cleanupAccount(networkArguments: networkArguments, accountManager: accountManager, id: id, encryptionParameters: encryptionParameters, attributes: attributes, rootPath: rootPath, auxiliaryMethods: auxiliaryMethods).start())
             }
