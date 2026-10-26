@@ -1507,7 +1507,11 @@ public class Account {
         }))
         
         self.managedOperationsDisposable.add(managedSecretChatOutgoingOperations(auxiliaryMethods: auxiliaryMethods, postbox: self.postbox, network: self.network, accountPeerId: peerId, mode: .all).start())
-        self.managedOperationsDisposable.add(managedCloudChatRemoveMessagesOperations(postbox: self.postbox, network: self.network, stateManager: self.stateManager).start())
+        // MATTERMOST: deletions and the user's own typing go to the Mattermost server (MattermostSync consumes the
+        // same op log and `mattermostLocalInputActivities()`).
+        if !MattermostBackend.isEnabled {
+            self.managedOperationsDisposable.add(managedCloudChatRemoveMessagesOperations(postbox: self.postbox, network: self.network, stateManager: self.stateManager).start())
+        }
         self.managedOperationsDisposable.add(managedAutoremoveMessageOperations(network: self.network, postbox: self.postbox, isRemove: true).start())
         self.managedOperationsDisposable.add(managedAutoremoveMessageOperations(network: self.network, postbox: self.postbox, isRemove: false).start())
         self.managedOperationsDisposable.add(managedAutoexpireStoryOperations(network: self.network, postbox: self.postbox).start())
@@ -1515,7 +1519,9 @@ public class Account {
         self.managedOperationsDisposable.add(managedPendingWalletTransferMessages(postbox: self.postbox).start())
         self.managedOperationsDisposable.add(managedSynchronizeViewStoriesOperations(postbox: self.postbox, network: self.network, stateManager: self.stateManager).start())
         self.managedOperationsDisposable.add(managedSynchronizePeerStoriesOperations(postbox: self.postbox, network: self.network, stateManager: self.stateManager).start())
-        self.managedOperationsDisposable.add(managedLocalTypingActivities(activities: self.localInputActivityManager.allActivities(), postbox: self.stateManager.postbox, network: self.stateManager.network, accountPeerId: self.stateManager.accountPeerId).start())
+        if !MattermostBackend.isEnabled {
+            self.managedOperationsDisposable.add(managedLocalTypingActivities(activities: self.localInputActivityManager.allActivities(), postbox: self.stateManager.postbox, network: self.stateManager.network, accountPeerId: self.stateManager.accountPeerId).start())
+        }
         
         let extractedExpr1: [Signal<AccountRunningImportantTasks, NoError>] = [
             self.walletTransferTasksRunning.get() |> map { hasTasks in
@@ -1744,6 +1750,21 @@ public class Account {
     // same manager from MTProto updates, which never run while `MattermostBackend.isEnabled`.
     public func mattermostAddRemoteInputActivity(chatPeerId: PeerActivitySpace, peerId: PeerId, activity: PeerInputActivity) {
         self.peerInputActivityManager.addActivity(chatPeerId: chatPeerId, peerId: peerId, activity: activity)
+    }
+    
+    // MATTERMOST: the user's own typing and upload activities per chat (the newest one per chat), with an id that
+    // changes when the user keeps typing; MattermostSync sends them as WebSocket `user_typing`.
+    public func mattermostLocalInputActivities() -> Signal<[PeerActivitySpace: (activity: PeerInputActivity, updateId: Int32)], NoError> {
+        return self.localInputActivityManager.allActivities()
+        |> map { activities in
+            var result: [PeerActivitySpace: (activity: PeerInputActivity, updateId: Int32)] = [:]
+            for (space, records) in activities {
+                if let record = records.first?.1 {
+                    result[space] = (record.activity, record.updateId)
+                }
+            }
+            return result
+        }
     }
     
     public func updateLocalInputActivity(peerId: PeerActivitySpace, activity: PeerInputActivity, isPresent: Bool) {
