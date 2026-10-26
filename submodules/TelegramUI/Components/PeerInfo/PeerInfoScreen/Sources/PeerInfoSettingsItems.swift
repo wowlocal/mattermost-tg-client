@@ -276,9 +276,12 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     }))
     
     let languageName = presentationData.strings.primaryComponent.localizedName
-    items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 4, label: .text(languageName.isEmpty ? presentationData.strings.Localization_LanguageName : languageName), text: presentationData.strings.Settings_AppLanguage, icon: PresentationResourcesSettings.language, action: {
-        interaction.openSettings(.language)
-    }))
+    // MATTERMOST: the language list is Telegram's server language packs; Relay ships English only for now.
+    if MattermostFeatures.languagePacks {
+        items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 4, label: .text(languageName.isEmpty ? presentationData.strings.Localization_LanguageName : languageName), text: presentationData.strings.Settings_AppLanguage, icon: PresentationResourcesSettings.language, action: {
+            interaction.openSettings(.language)
+        }))
+    }
     
     let premiumConfiguration = PremiumConfiguration.with(appConfiguration: context.currentAppConfiguration.with { $0 })
     let isPremiumDisabled = premiumConfiguration.isPremiumDisabled

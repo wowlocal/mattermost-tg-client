@@ -562,7 +562,9 @@ private func notificationsAndSoundsEntries(authorizationStatus: AccessType, warn
     entries.append(.categoriesHeader(presentationData.theme, presentationData.strings.Notifications_MessageNotifications.uppercased()))
     entries.append(.privateChats(presentationData.theme, presentationData.strings.Notifications_PrivateChats, !exceptions.users.isEmpty ? presentationData.strings.Notifications_CategoryExceptions(Int32(exceptions.users.peerIds.count)) : "", globalSettings.privateChats.enabled ? presentationData.strings.Notifications_On : presentationData.strings.Notifications_Off))
     entries.append(.groupChats(presentationData.theme, presentationData.strings.Notifications_GroupChats, !exceptions.groups.isEmpty ? presentationData.strings.Notifications_CategoryExceptions(Int32(exceptions.groups.peerIds.count)) : "", globalSettings.groupChats.enabled ? presentationData.strings.Notifications_On : presentationData.strings.Notifications_Off))
-    entries.append(.channels(presentationData.theme, presentationData.strings.Notifications_Channels, !exceptions.channels.isEmpty ? presentationData.strings.Notifications_CategoryExceptions(Int32(exceptions.channels.peerIds.count)) : "", globalSettings.channels.enabled ? presentationData.strings.Notifications_On : presentationData.strings.Notifications_Off))
+    if MattermostFeatures.broadcastChannels { // MATTERMOST: Mattermost channels are groups here
+        entries.append(.channels(presentationData.theme, presentationData.strings.Notifications_Channels, !exceptions.channels.isEmpty ? presentationData.strings.Notifications_CategoryExceptions(Int32(exceptions.channels.peerIds.count)) : "", globalSettings.channels.enabled ? presentationData.strings.Notifications_On : presentationData.strings.Notifications_Off))
+    }
     
     let storiesValue: String
     switch globalSettings.privateChats.storySettings.mute {
@@ -574,7 +576,9 @@ private func notificationsAndSoundsEntries(authorizationStatus: AccessType, warn
         storiesValue = presentationData.strings.Notifications_On
     }
     
-    entries.append(.stories(presentationData.theme, presentationData.strings.Notifications_Stories, !exceptions.stories.isEmpty ? presentationData.strings.Notifications_CategoryExceptions(Int32(exceptions.stories.peerIds.count)) : "", storiesValue))
+    if MattermostFeatures.stories { // MATTERMOST: no stories
+        entries.append(.stories(presentationData.theme, presentationData.strings.Notifications_Stories, !exceptions.stories.isEmpty ? presentationData.strings.Notifications_CategoryExceptions(Int32(exceptions.stories.peerIds.count)) : "", storiesValue))
+    }
     
     var reactionsValue: String = ""
     var hasReactionNotifications = false
@@ -612,11 +616,15 @@ private func notificationsAndSoundsEntries(authorizationStatus: AccessType, warn
     
     let counterTagSettings = CounterTagSettings(summaryTags: inAppSettings.totalUnreadCountIncludeTags)
     
-    entries.append(.includeChannels(presentationData.theme, presentationData.strings.Notifications_Badge_IncludeChannels, counterTagSettings.contains(.channels)))
+    if MattermostFeatures.broadcastChannels { // MATTERMOST: Mattermost channels are groups here
+        entries.append(.includeChannels(presentationData.theme, presentationData.strings.Notifications_Badge_IncludeChannels, counterTagSettings.contains(.channels)))
+    }
     entries.append(.unreadCountCategory(presentationData.theme, presentationData.strings.Notifications_Badge_CountUnreadMessages, inAppSettings.totalUnreadCountDisplayCategory == .messages))
     entries.append(.unreadCountCategoryInfo(presentationData.theme, inAppSettings.totalUnreadCountDisplayCategory == .chats ? presentationData.strings.Notifications_Badge_CountUnreadMessages_InfoOff : presentationData.strings.Notifications_Badge_CountUnreadMessages_InfoOn))
-    entries.append(.joinedNotifications(presentationData.theme, presentationData.strings.NotificationSettings_ContactJoined, globalSettings.contactsJoined))
-    entries.append(.joinedNotificationsInfo(presentationData.theme, presentationData.strings.NotificationSettings_ContactJoinedInfo))
+    if MattermostFeatures.contacts { // MATTERMOST: no phone contacts
+        entries.append(.joinedNotifications(presentationData.theme, presentationData.strings.NotificationSettings_ContactJoined, globalSettings.contactsJoined))
+        entries.append(.joinedNotificationsInfo(presentationData.theme, presentationData.strings.NotificationSettings_ContactJoinedInfo))
+    }
     
     entries.append(.reset(presentationData.theme, presentationData.strings.Notifications_ResetAllNotifications))
     entries.append(.resetNotice(presentationData.theme, presentationData.strings.Notifications_ResetAllNotificationsHelp))

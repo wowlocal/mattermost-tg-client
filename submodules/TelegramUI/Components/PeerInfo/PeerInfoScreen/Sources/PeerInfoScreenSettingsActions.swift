@@ -100,6 +100,11 @@ extension PeerInfoScreenNode {
                 push(notificationsAndSoundsController(context: self.context, exceptionsList: settings.notificationExceptions))
             }
         case .privacyAndSecurity:
+            // MATTERMOST: Passcode and Open Links In only.
+            if !MattermostFeatures.telegramPrivacy {
+                push(relayPrivacyAndSecurityController(context: self.context))
+                return
+            }
             if let settings = self.data?.globalSettings {
                 let _ = (combineLatest(self.blockedPeers.get(), self.hasTwoStepAuth.get())
                 |> take(1)
@@ -256,7 +261,8 @@ extension PeerInfoScreenNode {
                 }
             })
         case .logout:
-            if case let .user(user) = self.data?.peer, let phoneNumber = user.phone {
+            // MATTERMOST: Mattermost users have no phone number.
+            if case let .user(user) = self.data?.peer, let phoneNumber = user.phone ?? (MattermostFeatures.contacts ? nil : "") {
                 if let controller = self.controller, let navigationController = controller.navigationController as? NavigationController {
                     self.controller?.push(logoutOptionsController(context: self.context, navigationController: navigationController, canAddAccounts: true, phoneNumber: phoneNumber))
                 }
