@@ -4,7 +4,7 @@ Working log for the Mattermost client fork. Each work session reads this first a
 
 ## Current state
 
-- **Phase:** 0 (Feasibility), started 2026‑10‑26.
+- **Phase:** 0 done (go), Phase 1 and Phase 2 in progress.
 - **Upstream pin:** Telegram‑iOS `5c20d095d1ab` (app 13.0.1, tag `upstream-pin`), the newest commit built with Xcode 27.0 (installed). Master needs Xcode 27.1.
 - **Working name:** "Relay" (`org.relaychat.Relay`, URL scheme `relay`). Placeholder until D6 is decided.
 - **Build:** simulator build works; commands in [BUILD.md](BUILD.md). Stock app launches on the dedicated "Relay iPhone 17 Pro" simulator (iOS 26.5).
@@ -36,7 +36,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | Telegram internals map (Spike A prep, assumptions) | [telegram-internals.md](research/telegram-internals.md) | Done |
 | SQLite sync store (ID map, peers, cursors) | `submodules/MattermostSyncCore/Sources/MattermostSyncCore/Store` | Done: 100 tests (allocator suites also run on SQLite); Bazel build via sqlcipher untested until Spike D |
 | Spike A: null network engine + seeded account | TelegramCore, `submodules/MattermostSync` | Done (commit `f0820341`); screenshots in `docs/research/spike-a-*.png` |
-| Spike D: real data as alice (bootstrap, holes, live events) | `submodules/MattermostSync` | Agent working (owns Bazel) |
+| Spike D: real data as alice (bootstrap, holes, live events) | `submodules/MattermostSync` | Done (commit `030401d2`); screenshots `docs/research/spike-d-*.png` |
 | UI inventory for Phase 1 hiding, tabs, settings, login reuse, rebrand | [ui-inventory.md](research/ui-inventory.md) | Done |
 | Phase 1 steps 2–12 (feature flags, tabs, settings, chat/peer-info gates, services, rebrand, About) | separate git worktree + own simulator | Agent working; merge after Spike D |
 
@@ -48,9 +48,20 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 - [x] Spike A: boot without MTProto, fake data renders
 - [x] Spike B: MattermostKit skeleton with tests
 - [x] Spike C: message ID allocator with tests
-- [ ] Spike D: real channel history in the chat screen
+- [x] Spike D: real channel history in the chat screen
 - [x] TelegramEngine inventory for kept screens (research doc §7)
 - [x] Assumptions in 09 verified (code reading; see research doc table)
+
+**Phase 0 exit: GO.** All spikes passed; the seam is small (null network engine + marked hooks).
+
+## Phase 2 breakdown
+
+| # | Workstream | Status |
+|---|---|---|
+| 2A | Write path: send (text, replies, files) via PendingMessageManager seam, edit, delete, reactions (+ reaction list), typing out, mute/favorite consumers, synthetic AppConfiguration (Phase 1 step 1) | Agent working (main checkout, owns its Bazel) |
+| 2B | Login UI (server URL → password/SSO → MFA), root swap (Phase 1 step 13), Add server, logout | Waits for Phase 1 merge |
+| 2C | Rendering gaps: multi-file posts (grouped messages), bot attachments bubble, webhook name/icon overrides, Mattermost service-message type, custom emoji, channel member counts | Later |
+| 2D | Media tabs via file search, notification extension encodables, skip Telegram special user ids, ATS local-networking only, DM mention-badge decision | Later |
 
 ## Log
 
@@ -92,3 +103,6 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 - SQLite sync store done (`SQLiteMattermostSyncStore`): allocator calls must run inside `store.transaction {}`; posts are keyed by Mattermost channel id; only the app writes the ID map. Spike D told to switch to it.
 - UI inventory done. Key points: a synthetic local `AppConfiguration` hides Premium/Stars/gifts with no upstream edit (Phase 1 step 1, goes with MattermostSync); Calls/Contacts tabs removable with two small changes; login = new `ItemListController` screens (not Telegram's auth flow); reaction picker is empty until MattermostSync writes `AvailableReactions`; Log Out does nothing for phone-less users; strings are English-only.
 - Phase 1 steps 2–12 started in a separate worktree (agent). Steps 1 and 13 + AvailableReactions wait for Spike D.
+- **Spike D done.** Debug login as alice (env vars), bootstrap 0.7–4.6 s for 39 chats, hole filler, WebSocket + catch-up, converters, media resources, read-state push. Verified: chat list = REST (0 mismatches), full firehose history 11,730/11,730, live events 35–80 ms, only localhost traffic.
+  - Mattermost paging gap: `before`/`after` skip posts in the cursor's exact millisecond; worked around (drop the cut group at a full page's end).
+  - Known gaps moved to 2C/2D. Dev server was reset at the end (all server IDs changed).
