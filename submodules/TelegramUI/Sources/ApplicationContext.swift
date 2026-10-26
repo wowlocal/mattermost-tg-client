@@ -627,6 +627,13 @@ final class AuthorizedApplicationContext {
                 if !MattermostFeatures.contacts {
                     order.removeAll(where: { $0 == .contacts || $0 == .siri })
                 }
+                // MATTERMOST: debug only. `RELAY_DEBUG_NO_PERMISSION_PROMPTS=1` skips the notifications prompt, which
+                // nothing can answer in screenshot runs without UI automation.
+                #if DEBUG
+                if ProcessInfo.processInfo.environment["RELAY_DEBUG_NO_PERMISSION_PROMPTS"] == "1" {
+                    order.removeAll(where: { $0 == .notifications })
+                }
+                #endif
                 var requestedPermissions: [(PermissionState, Bool)] = []
                 var i: Int = 0
                 for subject in order {
