@@ -51,6 +51,7 @@ import WalletSendScreen
 import PasscodeCore
 import LiquidGlassShapes
 import MTProtoRustEngine
+import MattermostSync
 
 #if DEBUG
 import AlertComponent
@@ -1414,6 +1415,16 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                     self.registerForNotifications(context: context.context, authorize: authorizeNotifications)
                     
                     self.resetIntentsIfNeeded(context: context.context)
+                    
+                    // MATTERMOST: debug only. Opens a seeded chat for screenshots without UI automation
+                    // (`SIMCTL_CHILD_RELAY_DEBUG_OPEN_CHAT=1 xcrun simctl launch …`).
+                    #if DEBUG
+                    if firstTime, let peerId = MattermostSpikeSeeder.debugChatToOpen() {
+                        Queue.mainQueue().after(1.0, {
+                            context.openChatWithPeerId(peerId: peerId, threadId: nil, storyId: nil)
+                        })
+                    }
+                    #endif
                 }))
             } else {
                 self.mainWindow.viewController = nil
@@ -1709,6 +1720,11 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             runReflectorBenchmarkDisposable.set(nil)
             
             guard let context = context?.context else {
+                return
+            }
+            // MATTERMOST: the call reflector benchmark (on by default in internal builds, which ours is)
+            // sends UDP to a Telegram reflector.
+            if MattermostBackend.isEnabled {
                 return
             }
             var defaultAutoBenchmarkReflectors = false

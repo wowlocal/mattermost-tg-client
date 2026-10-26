@@ -66,6 +66,10 @@ func networkTelemetryShouldRecord(supplementary: Bool, isAppExtension: Bool, con
     if let recording = networkTelemetryOverrides.recording {
         return recording
     }
+    // MATTERMOST: parked requests (NullNetworkEngine) would all count as stalled or abandoned.
+    if MattermostBackend.isEnabled {
+        return false
+    }
     if supplementary || isAppExtension {
         return false
     }

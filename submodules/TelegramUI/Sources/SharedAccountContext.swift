@@ -45,6 +45,7 @@ import ChatEntityKeyboardInputNode
 import HashtagSearchUI
 import PeerInfoStoryGridScreen
 import TelegramAccountAuxiliaryMethods
+import MattermostSync
 import PeerSelectionController
 import LegacyMessageInputPanel
 import StatisticsUI
@@ -762,7 +763,11 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                             self.activeAccountsValue!.accounts.append((account.id, context, accountRecord.2))
                             
                             self.managedAccountDisposables.set(self.updateAccountBackupData(account: account).start(), forKey: account.id)
-                            account.resetStateManagement()
+                            // MATTERMOST: resetStateManagement starts Telegram sync (getDifference, contacts,
+                            // stickers, history preloading); MattermostSync takes its place.
+                            if !MattermostBackend.isEnabled {
+                                account.resetStateManagement()
+                            }
                             hadUpdates = true
                         }
                     } else {
@@ -818,7 +823,13 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                 }
                 
                 if self.activeAccountsValue!.primary == nil && self.activeAccountsValue!.currentAuth == nil {
-                    self.beginNewAuth(testingEnvironment: self.testingEnvironment)
+                    // MATTERMOST: no Telegram phone login. Until the Mattermost login exists, a debug path
+                    // creates an authorized account with local fake data (Spike A).
+                    if MattermostBackend.isEnabled {
+                        MattermostSpikeSeeder.createSeededAccountIfNeeded(accountManager: accountManager, rootPath: rootPath, encryptionParameters: encryptionParameters)
+                    } else {
+                        self.beginNewAuth(testingEnvironment: self.testingEnvironment)
+                    }
                 }
             }))
         })

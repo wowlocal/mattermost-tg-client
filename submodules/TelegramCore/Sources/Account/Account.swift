@@ -1278,6 +1278,11 @@ public class Account {
     public var networkState: Signal<AccountNetworkState, NoError> {
         return self.networkStateValue.get()
     }
+
+    // MATTERMOST: while `MattermostBackend.isEnabled`, `networkState` takes "updating" from here instead of
+    // `stateManager.isUpdating`, which stays true forever because Telegram's getDifference never runs.
+    // MattermostSync sets it from its bootstrap and catch-up; until then it is constantly false.
+    public let externalIsUpdating = Promise<Bool>(false)
     
     private let networkTypeValue = Promise<NetworkType>()
     public var networkType: Signal<NetworkType, NoError> {
@@ -1406,7 +1411,9 @@ public class Account {
         
         let networkStateQueue = Queue()
         
-        let networkStateSignal = combineLatest(queue: networkStateQueue, self.stateManager.isUpdating, network.connectionStatus)
+        // MATTERMOST: see `externalIsUpdating`.
+        let isUpdatingSignal: Signal<Bool, NoError> = MattermostBackend.isEnabled ? self.externalIsUpdating.get() : self.stateManager.isUpdating
+        let networkStateSignal = combineLatest(queue: networkStateQueue, isUpdatingSignal, network.connectionStatus)
         |> map { isUpdating, connectionStatus -> AccountNetworkState in
             switch connectionStatus {
                 case .waitingForNetwork:
@@ -1475,6 +1482,11 @@ public class Account {
             
             if value {
                 Logger.shared.log("Account", "Became master")
+                // MATTERMOST: Telegram's hole filling (history, chat list, forum topics) and story refresh
+                // would only park requests; MattermostSync fills holes instead.
+                if MattermostBackend.isEnabled {
+                    return
+                }
                 let data = managedServiceViews(accountPeerId: peerId, network: network, postbox: postbox, stateManager: strongSelf.stateManager, pendingMessageManager: strongSelf.pendingMessageManager)
                 
                 let resetPeerHoles = data.resetPeerHoles

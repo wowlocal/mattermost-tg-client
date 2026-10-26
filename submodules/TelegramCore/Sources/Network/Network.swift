@@ -450,6 +450,12 @@ func networkEngineRustDisabledReason(appConfiguration: AppConfiguration, engineS
 }
 
 private func resolveNetworkEngine(accountId: AccountRecordId, context: MTContext, factory: NetworkEngineFactory?, settings: NetworkEngineSettings?, rustDisabledReason: String?, isAppExtension: Bool) -> NetworkEngine {
+    // MATTERMOST: no MTProto session is ever created; requests are parked (see NullNetworkEngine). This runs
+    // for every network, extensions included, whatever factory or engine setting they pass.
+    if MattermostBackend.isEnabled {
+        Logger.shared.log("Network", "Account \(accountId.int64): engine null (Mattermost backend)")
+        return NullNetworkEngine(context: context)
+    }
     let preferredEngine = settings?.engine ?? NetworkEngineSettings.defaultSettings.engine
     guard let factory = factory else {
         Logger.shared.log("Network", "Account \(accountId.int64): engine mtProtoKit (no factory, preferred \(preferredEngine.rawValue))")
