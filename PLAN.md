@@ -36,6 +36,7 @@ Build a native iOS client for Mattermost by forking [Telegram‑iOS](https://git
 | 2 · MVP | 8–12 wks | Daily‑usable for channels and DMs |
 | 3 · Parity | 8–12 wks | Push, threads, search, directory, integrations |
 | 4 · Hardening & release | 4–6 wks | Performance, accessibility, distribution |
+| 5 · After the release candidate | 1–2 wks for 5A | 5A voice messages (Telegram's recorder and voice bubbles, sent as audio attachments) |
 
 The raw sum is ~6–8 months. With a ~15% buffer for surprises in an undocumented codebase, plan for 7–9 months to a parity release.
 

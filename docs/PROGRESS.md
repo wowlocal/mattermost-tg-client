@@ -4,7 +4,7 @@ Working log for the Mattermost client fork. Each work session reads this first a
 
 ## Current state
 
-- **Phase:** 0–3 done; Phase 4: 4A, 4B, 4C, 4F done and merged into `main`; 4G (security and diagnostics) next, then 4E (release-candidate regression); 4D (TestFlight) blocked on the user's Apple Developer account.
+- **Phase:** 0–3 done; Phase 4: 4A, 4B, 4C, 4F done and merged into `main`; 4G (security and diagnostics) next, then 4E (release-candidate regression); 4D (TestFlight) blocked on the user's Apple Developer account. Next after that: 5A voice messages.
 - **Upstream pin:** Telegram‑iOS `5c20d095d1ab` (app 13.0.1, tag `upstream-pin`), the newest commit built with Xcode 27.0 (installed). Master needs Xcode 27.1.
 - **Working name:** "Relay" (`org.relaychat.Relay`, URL scheme `relay`). Placeholder until D6 is decided.
 - **Build:** commands in [BUILD.md](BUILD.md). Main simulator "Relay iPhone 17 Pro" (iOS 26.5). `main` is pushed to `origin` (github.com/wowlocal/mattermost-tg-client) after each merge.
@@ -86,6 +86,12 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | 4G | Security and diagnostics (plan 05 Phase 4): Telegram passcode lock with Relay accounts, managed app configuration (AppConfig/MDM: server URL, restrictions), optional certificate pinning, privacy-respecting local diagnostics (MetricKit, exportable logs) | Next |
 | 4E | Release-candidate regression: written checklist, release build, cold start from cache, supported server versions (11.7 ESR and the newest release), device matrix | After 4G |
 | 4D | Release: TestFlight build — **needs the user's Apple Developer account** ([release/RELEASE.md](release/RELEASE.md)) | Blocked on user |
+
+## Phase 5
+
+| # | Workstream | Status |
+|---|---|---|
+| 5A | Voice messages ([plan 05](plan/05-phases.md#5a--voice-messages-12-weeks)): Telegram's recorder and voice bubbles; sent as an ordinary audio attachment (Mattermost has no voice post type) with a `props` marker, so other clients play it as a file | Planned, after 4E (decision V1, default AAC `.m4a`) |
 
 ## Log
 
@@ -320,3 +326,5 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   - Upstream files touched (all `// MATTERMOST:`): Postbox `ChatListTable.swift`, `MessageHistoryTable.swift`, `MessageHistoryTagsTable.swift`, `MetadataTable.swift`, `Postbox.swift`; TelegramCore `State/AccountViewTracker.swift`, `Mattermost/MattermostChatObserver.swift`, `Mattermost/MattermostChannelAccess.swift`; TextFormat `StringWithAppliedEntities.swift` (one call), `MattermostHeadings.swift`; new TelegramPresentationData `Resources/MattermostStatusIcons.swift`; ChatListUI `Node/ChatListItem.swift`; `ChatAvatarNavigationNode.swift`; TelegramUI `Chat/ChatControllerLoadDisplayNode.swift`, `ChatControllerUpdateSearch.swift`, `ChatInterfaceStateContextMenus.swift`, `MattermostThreads.swift`, `MattermostLinks.swift`, `RelayDebugThreads.swift` (debug); MattermostUI `MattermostDirectoryControllers.swift`; `MattermostPushService`.
   - Dev server state left by 4F: ~sandbox: two 4F thread roots by alice ("4F thread unread separator check", 55 and 13 replies by bob), bob's mixed posts and attachment post, "@alice 4F live mention…", alice's "4F upload kept across a restart" image and a 2-image album; 3E Links and engineering town square: one 4F reply by bob each; `relay-3f-unjoined`: bob's "4F permalink target" + 45 fillers, alice joined and left; `relay-3d2-release-crew`: dave's second "4F admin delete check" post (the first deleted by alice); `channel_admin` role restored; bob, dave online; alice's `name_format` and dave's `collapsed_reply_threads` preferences deleted again; alice's DM with dave and GM alice+carol+dave reopened. Simulator: notifications allowed (`tools/sim-allow-notifications.py`), dave re-added (account `7133911708254456849`).
 - **4F done and pushed** (`da35c59d`): all 13 gaps fixed and checked against the dev server (details in the 4F entry above); 4C merged at `cd723ed9`, its branch deleted. Release audit 0 debug markers; parked requests 0 after a 5-minute `relay-session.py` run. Next: 4G (security and diagnostics), then 4E (release-candidate regression).
+- **Device signing with the user's own team** (branch `device-signing`): Apple Developer portal set up through the cua driver with the user signed in (App Group `group.org.relaychat.Relay`; App IDs `org.relaychat.Relay` with Push, App Groups, Communication Notifications, `.NotificationService` with App Groups and Communication Notifications, `.NotificationContent` and `.Share` with App Groups; four iOS App Development profiles, valid to 2027‑10‑26; an APNs key, team‑scoped, Sandbox & Production, kept outside the repository). The push proxy runs with the real key ("Initializing apple notification server with AuthKey" for `relay_apple` and `relay_apple_sandbox`). `tools/relay-device-build.sh` builds with the team id in git-ignored `build-input/` and installs with `ideviceinstaller` or `devicectl`; signing must run in the GUI login session (BUILD.md "Device builds"). First `debug_arm64` device build installed on the user's iPhone (iOS 27.0.1). 4D still needs the App Store Connect record, a distribution certificate and App Store profiles, D1/D6 and the GPL review.
+- **Voice messages added to the roadmap** as 5A ([plan 05](plan/05-phases.md#5a--voice-messages-12-weeks), decision V1 in plan 09): Mattermost 11.7 has no voice post type (web app and config checked), so they go out as audio attachments with a `props` marker.
