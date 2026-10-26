@@ -247,9 +247,11 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
             }
             strongSelf.pushViewController(debugController(sharedContext: strongSelf.context.sharedContext, context: strongSelf.context))
         }
+        #if !DEBUG
         if !telegramDebugGestures {
             accountSettingsController.tabBarItemDebugTapAction = nil // MATTERMOST: see telegramDebugGestures
         }
+        #endif
         accountSettingsController.parentController = self
         controllers.append(accountSettingsController)
                 
