@@ -46,6 +46,9 @@ swift_library(
         "//submodules/TelegramUI/Components/ContextMenuScreen",
         "//submodules/TelegramUI/Components/ContextControllerImpl",
         "//submodules/TelegramUI/Components/NavigationBarImpl",
+        # MATTERMOST: sharing into Mattermost chats (Phase 3F).
+        "//submodules/MattermostSync:MattermostSync",
+        "//submodules/MtProtoKit:MtProtoKit",
     ],
     visibility = [
         "//visibility:public",

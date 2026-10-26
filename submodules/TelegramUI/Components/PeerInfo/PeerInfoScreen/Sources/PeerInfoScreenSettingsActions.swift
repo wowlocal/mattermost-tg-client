@@ -221,6 +221,9 @@ extension PeerInfoScreenNode {
         case .mattermostSavedPosts:
             // MATTERMOST: Saved Posts (Phase 3C).
             push(MattermostPostListController(context: self.context, kind: .saved))
+        case .mattermostStatus, .mattermostCustomStatus, .mattermostUsername, .mattermostEmail:
+            // MATTERMOST: status, custom status, username and email (Phase 3F).
+            self.mattermostOpenSettings(section)
         case .phoneNumber:
             guard let controller = self.controller, !controller.presentAccountFrozenInfoIfNeeded() else {
                 return

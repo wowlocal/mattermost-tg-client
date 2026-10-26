@@ -183,6 +183,9 @@ extension PeerInfoScreenNode {
                     return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Customize"), color: theme.contextMenu.primaryColor)
                 }, action: { [weak self] _, f in
                     f(.dismissWithoutContent)
+                    if self?.mattermostOpenChatNotificationSettings() == true { // MATTERMOST: Mattermost's settings (Phase 3F)
+                        return
+                    }
                     
                     let _ = (context.engine.data.get(
                         TelegramEngine.EngineData.Item.NotificationSettings.Global()
