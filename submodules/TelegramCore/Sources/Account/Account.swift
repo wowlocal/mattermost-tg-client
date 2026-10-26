@@ -1288,6 +1288,11 @@ public class Account {
     // MattermostSync sets it from its bootstrap and catch-up; until then it is constantly false.
     public let externalIsUpdating = Promise<Bool>(false)
     
+    // MATTERMOST: the server no longer accepts this account's session (set by MattermostSync until the user logs
+    // in again). `networkState` then reads "online": an expired session is not "Connecting…"; the chat list
+    // title says so instead and offers to log in again.
+    public let mattermostSessionExpired = ValuePromise<Bool>(false, ignoreRepeated: true)
+    
     private let networkTypeValue = Promise<NetworkType>()
     public var networkType: Signal<NetworkType, NoError> {
         return self.networkTypeValue.get()
@@ -1417,8 +1422,12 @@ public class Account {
         
         // MATTERMOST: see `externalIsUpdating`.
         let isUpdatingSignal: Signal<Bool, NoError> = MattermostBackend.isEnabled ? self.externalIsUpdating.get() : self.stateManager.isUpdating
-        let networkStateSignal = combineLatest(queue: networkStateQueue, isUpdatingSignal, network.connectionStatus)
-        |> map { isUpdating, connectionStatus -> AccountNetworkState in
+        let sessionExpiredSignal: Signal<Bool, NoError> = MattermostBackend.isEnabled ? self.mattermostSessionExpired.get() : .single(false)
+        let networkStateSignal = combineLatest(queue: networkStateQueue, isUpdatingSignal, network.connectionStatus, sessionExpiredSignal)
+        |> map { isUpdating, connectionStatus, sessionExpired -> AccountNetworkState in
+            if sessionExpired {
+                return .online(proxy: nil)
+            }
             switch connectionStatus {
                 case .waitingForNetwork:
                     return .waitingForNetwork

@@ -27,12 +27,25 @@ final class PostSender: MattermostMessageSender {
     }
 
     private weak var sync: MattermostAccountSync?
+    private let accountId: AccountRecordId
     private let uploads = MMLocked<[MessageId: [UploadedFile]]>([:])
     private let inFlight = MMLocked<Set<String>>([])
     private let channelTails = MMLocked<[String: Task<Void, Never>]>([:])
 
     init(sync: MattermostAccountSync) {
         self.sync = sync
+        self.accountId = sync.account.id
+    }
+
+    /// The sync to write with: this sender's own while it runs. After the session expired (the sync stopped),
+    /// the account's next running sync, which a re-login starts; until then this waits, so messages sent
+    /// while the session is expired stay pending (clock) and go out after the re-login, in order. Nil once
+    /// the account is gone (logged out).
+    private func activeSync() async -> MattermostAccountSync? {
+        if let sync = self.sync, !sync.isStopped {
+            return sync
+        }
+        return await MattermostSync.waitForRunningSync(accountId: self.accountId)
     }
 
     func isInFlight(pendingPostId: String) -> Bool {
@@ -48,22 +61,31 @@ final class PostSender: MattermostMessageSender {
     func uploadMedia(messageId: MessageId) -> Signal<Float, MattermostSendError> {
         return Signal { subscriber in
             let task = Task {
-                guard let sync = self.sync else {
-                    subscriber.putError(.generic)
-                    return
-                }
-                do {
-                    try await self.upload(messageId: messageId, sync: sync, progress: { value in
-                        subscriber.putNext(value)
-                    })
-                    subscriber.putCompletion()
-                } catch {
-                    if Task.isCancelled {
+                while true {
+                    guard let sync = await self.activeSync(), let sender = sync.sender else {
+                        subscriber.putError(.generic)
                         return
                     }
-                    MMLog.log("send: upload of \(messageId) failed: \(error)")
-                    sync.notice("Couldn't upload the attachment: \(describeError(error))")
-                    subscriber.putError(.generic)
+                    do {
+                        // The running sync's sender keeps the uploaded file ids for its `send`.
+                        try await sender.upload(messageId: messageId, sync: sync, progress: { value in
+                            subscriber.putNext(value)
+                        })
+                        subscriber.putCompletion()
+                        return
+                    } catch {
+                        if Task.isCancelled {
+                            return
+                        }
+                        if await MattermostSync.isSessionRejected(error, sync: sync) {
+                            MMLog.log("send: upload of \(messageId) waits for a new login (session expired)")
+                            continue
+                        }
+                        MMLog.log("send: upload of \(messageId) failed: \(error)")
+                        sync.notice("Couldn't upload the attachment: \(describeError(error))")
+                        subscriber.putError(.generic)
+                        return
+                    }
                 }
             }
             return ActionDisposable {
@@ -85,22 +107,33 @@ final class PostSender: MattermostMessageSender {
     func sendMessageGroup(messageIds: [MessageId]) -> Signal<[MessageId], MattermostSendError> {
         return Signal { subscriber in
             let task = Task {
-                guard let sync = self.sync, !messageIds.isEmpty else {
-                    subscriber.putError(.generic)
-                    return
-                }
-                do {
-                    try await self.send(messageIds: messageIds, sync: sync, onRewritten: { cloudIds in
-                        // Called inside the rewriting transaction, like Telegram's `pendingMessageEvent`: the
-                        // delivered event reaches PendingMessageManager before the unsent-ids update does.
-                        subscriber.putNext(cloudIds)
+                while !messageIds.isEmpty {
+                    guard let sync = await self.activeSync(), let sender = sync.sender else {
+                        break
+                    }
+                    do {
+                        // The running sync's sender: its in-flight set deduplicates the WebSocket echo.
+                        try await sender.send(messageIds: messageIds, sync: sync, onRewritten: { cloudIds in
+                            // Called inside the rewriting transaction, like Telegram's `pendingMessageEvent`: the
+                            // delivered event reaches PendingMessageManager before the unsent-ids update does.
+                            subscriber.putNext(cloudIds)
+                            subscriber.putCompletion()
+                        })
                         subscriber.putCompletion()
-                    })
-                    subscriber.putCompletion()
-                } catch {
-                    MMLog.log("send: \(messageIds) failed: \(error)")
-                    subscriber.putError(.generic)
+                        return
+                    } catch {
+                        if Task.isCancelled {
+                            return
+                        }
+                        if await MattermostSync.isSessionRejected(error, sync: sync) {
+                            MMLog.log("send: \(messageIds) wait for a new login (session expired)")
+                            continue
+                        }
+                        MMLog.log("send: \(messageIds) failed: \(error)")
+                        break
+                    }
                 }
+                subscriber.putError(.generic)
             }
             return ActionDisposable {
                 task.cancel()
@@ -111,7 +144,7 @@ final class PostSender: MattermostMessageSender {
     func editMessage(messageId: MessageId, text: String, entities: TextEntitiesMessageAttribute?) -> Signal<RequestEditMessageResult, RequestEditMessageError> {
         return Signal { subscriber in
             let task = Task {
-                guard let sync = self.sync else {
+                guard let sync = await self.activeSync() else {
                     subscriber.putError(.generic)
                     return
                 }
@@ -231,6 +264,10 @@ final class PostSender: MattermostMessageSender {
             await sync.postbox.mmTransaction { _ in
                 sync.store.removePendingPost(pendingPostId: pendingPostId)
             }
+            if sync.isStopped || error.isMattermostUnauthorized {
+                // The session ended: the caller waits for a new login and sends again (no failure toast).
+                throw error
+            }
             if await sync.messageExists(messageId) {
                 sync.notice("Couldn't send the message: \(describeError(error))")
                 throw error
@@ -250,6 +287,15 @@ final class PostSender: MattermostMessageSender {
             return task
         }
         await task.value
+    }
+}
+
+extension Error {
+    var isMattermostUnauthorized: Bool {
+        if let error = self as? MattermostError, case .unauthorized = error {
+            return true
+        }
+        return false
     }
 }
 

@@ -15,4 +15,8 @@ import Foundation
 public enum MattermostBackend {
     /// Set once at launch, before the first account is created. Defaults to true in this fork.
     public static var isEnabled: Bool = true
+
+    /// Opens the re-login for the current account when its session expired (`Account.mattermostSessionExpired`):
+    /// the chat list title "Session Expired" calls it when tapped. Installed by MattermostUI (main app).
+    public static var requestRelogin: (() -> Void)?
 }

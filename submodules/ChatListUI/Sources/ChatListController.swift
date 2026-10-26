@@ -6840,6 +6840,8 @@ private final class ChatListLocationContext {
     private var didShowProxyUnavailableTooltipController = false
     
     private var titleDisposable: Disposable?
+    // MATTERMOST: `Account.mattermostSessionExpired` of this list's account (see `updateChatList`).
+    private var mattermostSessionExpired = false
     
     private(set) var title: String = ""
     private(set) var chatTitleComponent: ChatTitleComponent?
@@ -6973,8 +6975,10 @@ private final class ChatListLocationContext {
         switch location {
         case .chatList:
             if !hideNetworkActivityStatus {
+                // MATTERMOST: an expired session shows "Session Expired" instead of the network state.
+                let networkStateAndSessionExpired = combineLatest(networkState, context.account.mattermostSessionExpired.get())
                 self.titleDisposable = combineLatest(queue: .mainQueue(),
-                    networkState,
+                    networkStateAndSessionExpired,
                     hasProxy,
                     passcode,
                     containerNode.currentItemState,
@@ -6982,10 +6986,12 @@ private final class ChatListLocationContext {
                     peerStatus,
                     parentController.updatedPresentationData.1,
                     storyPostingAvailable
-                ).startStrict(next: { [weak self] networkState, proxy, passcode, stateAndFilterId, isReorderingTabs, peerStatus, presentationData, storyPostingAvailable in
+                ).startStrict(next: { [weak self] networkStateAndSessionExpired, proxy, passcode, stateAndFilterId, isReorderingTabs, peerStatus, presentationData, storyPostingAvailable in
                     guard let self else {
                         return
                     }
+                    let (networkState, sessionExpired) = networkStateAndSessionExpired
+                    self.mattermostSessionExpired = sessionExpired
                     
                     self.updateChatList(
                         networkState: networkState,
@@ -7385,6 +7391,11 @@ private final class ChatListLocationContext {
                 titleContent = NetworkStatusTitle(text: presentationData.strings.State_Updating, activity: true, hasProxy: isRoot && hasProxy, connectsViaProxy: connectsViaProxy, isPasscodeSet: isRoot && isPasscodeSet, isManuallyLocked: isRoot && isManuallyLocked, peerStatus: peerStatus)
             case .online:
                 titleContent = NetworkStatusTitle(text: defaultTitle, activity: false, hasProxy: isRoot && hasProxy, connectsViaProxy: connectsViaProxy, isPasscodeSet: isRoot && isPasscodeSet, isManuallyLocked: isRoot && isManuallyLocked, peerStatus: peerStatus)
+            }
+            // MATTERMOST: the session expired: say so (not "Connecting…"); tapping the title offers to log in again.
+            if self.mattermostSessionExpired && isRoot {
+                titleContent = NetworkStatusTitle(text: presentationData.strings.Relay_Session_ExpiredTitle, activity: false, hasProxy: false, connectsViaProxy: false, isPasscodeSet: false, isManuallyLocked: false, peerStatus: nil)
+                titleContent.mattermostOpensRelogin = true
             }
             
             if titleContent.hasProxy {

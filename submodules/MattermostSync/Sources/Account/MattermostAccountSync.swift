@@ -278,6 +278,7 @@ public final class MattermostAccountSync: @unchecked Sendable {
     /// Stops everything `start()` started (logout, session expiry). The object is not reused; a new session
     /// gets a new `MattermostAccountSync`.
     func stop() {
+        self.stoppedFlag.with { $0 = true }
         let tasks = self.tasks.with { tasks -> [Task<Void, Never>] in
             let current = tasks
             tasks.removeAll()
@@ -289,8 +290,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
         self.disposables.dispose()
         self.holeFiller = nil
         self.readStatePusher = nil
-        // Write path (2A): the operation consumers stop when released. Sends of a stopped sync fail (the
-        // sender holds the sync weakly) and can be resent after a new login.
+        // Write path (2A): the operation consumers stop when released. Sends handed to this sync's sender wait
+        // for the next running sync of the account (a re-login) and go out with it (`PostSender.activeSync`).
         self.operationRunners = []
         self.isConnected.with { $0 = false }
         if let socket = self.socket {

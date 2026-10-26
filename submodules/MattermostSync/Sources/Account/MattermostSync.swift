@@ -230,6 +230,39 @@ public enum MattermostSync {
     private static func markExpired(accountId: AccountRecordId, store: MattermostSyncStore, server: MattermostServerInfo) {
         let session = MattermostExpiredSession(accountId: accountId, serverURL: server.url, siteName: server.siteName, userId: server.userId, loginId: store.cursor(self.loginIdCursor))
         self.updateExpired { $0[accountId] = session }
+        // The title says "Session Expired" instead of "Connecting…".
+        self.registry.with { $0[accountId]?.account }?.mattermostSessionExpired.set(true)
+    }
+
+    /// The account's running sync, waiting while its session is expired (until a re-login starts a new one).
+    /// Nil once the account is gone (logged out, or replaced by a login as another user).
+    static func waitForRunningSync(accountId: AccountRecordId) async -> MattermostAccountSync? {
+        while !Task.isCancelled {
+            if let sync = self.sync(accountId: accountId), !sync.isStopped {
+                return sync
+            }
+            if self.registry.with({ $0[accountId] == nil }) {
+                return nil
+            }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+        }
+        return nil
+    }
+
+    /// Whether `error` (from a request of `sync`) means the session is gone: a 401 confirmed with
+    /// `GET /users/me` (the session is then marked expired), or a sync already stopped for expiry.
+    static func isSessionRejected(_ error: Error, sync: MattermostAccountSync) async -> Bool {
+        if sync.isStopped {
+            return self.registry.with { $0[sync.account.id] != nil }
+        }
+        guard error.isMattermostUnauthorized else {
+            return false
+        }
+        if await sync.client.isTokenAccepted() {
+            return false
+        }
+        self.sessionExpired(accountId: sync.account.id, reason: "a write was rejected (401)")
+        return true
     }
 
     private static func updateExpired(_ f: (inout [AccountRecordId: MattermostExpiredSession]) -> Void) {
@@ -264,6 +297,7 @@ public enum MattermostSync {
             store.setCursor(self.loginIdCursor, loginId)
         }
         self.updateExpired { $0.removeValue(forKey: accountId) }
+        registered.account.mattermostSessionExpired.set(false)
         MMLog.log("account \(accountId.int64): session renewed for \(login.user.username); restarting sync")
         self.run(account: registered.account, store: store, server: registered.server, token: login.token)
     }

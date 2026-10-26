@@ -36,6 +36,10 @@ final class MattermostSessionExpiryPresenter {
 
     func start(sharedContext: SharedAccountContext) {
         self.sharedContext = sharedContext
+        // The chat list title "Session Expired" (tap): log in again to the current account.
+        MattermostBackend.requestRelogin = { [weak self] in
+            self?.openReloginForCurrentAccount()
+        }
         let hasPrimary = sharedContext.activeAccountContexts
         |> map { primary, _, _ -> Bool in
             return primary != nil
@@ -86,13 +90,14 @@ final class MattermostSessionExpiryPresenter {
     private func presentAlert(session: MattermostExpiredSession, username: String?, sharedContext: SharedAccountContext) {
         let host = URL(string: session.serverURL).flatMap { url in url.host.map { host in url.port.map { "\(host):\($0)" } ?? host } } ?? session.serverURL
         let site = (session.siteName?.isEmpty ?? true) ? host : "\(session.siteName!) (\(host))"
-        let who = username.map { "@\($0)" } ?? session.loginId ?? "your account"
-        let text = "Your session as \(who) on \(site) has ended. Log in again to keep your messages up to date. Until then, Relay shows what's already on this device."
-        let alert = textAlertController(sharedContext: sharedContext, title: "Session Expired", text: text, actions: [
-            TextAlertAction(type: .genericAction, title: "Not Now", action: { [weak self] in
+        let strings = sharedContext.currentPresentationData.with { $0 }.strings
+        let who = username.map { "@\($0)" } ?? session.loginId ?? strings.Relay_Session_YourAccount
+        let text = strings.Relay_Session_ExpiredText(who, site).string
+        let alert = textAlertController(sharedContext: sharedContext, title: strings.Relay_Session_ExpiredTitle, text: text, actions: [
+            TextAlertAction(type: .genericAction, title: strings.Relay_Session_NotNow, action: { [weak self] in
                 self?.currentAlertSession = nil
             }),
-            TextAlertAction(type: .defaultAction, title: "Log In", action: { [weak self] in
+            TextAlertAction(type: .defaultAction, title: strings.Relay_Session_LogIn, action: { [weak self] in
                 self?.currentAlertSession = nil
                 self?.openLogin(session: session)
             })
@@ -109,6 +114,37 @@ final class MattermostSessionExpiryPresenter {
         MattermostLoginController.presentRelogin(sharedContext: sharedContext, session: session, presented: { [weak self] controller in
             self?.currentLogin = controller
         })
+    }
+
+    /// The re-login for the current (primary) account, if its session expired.
+    private func openReloginForCurrentAccount() {
+        guard let sharedContext = self.sharedContext, self.currentLogin == nil else {
+            return
+        }
+        let _ = (sharedContext.activeAccountContexts
+        |> take(1)
+        |> deliverOnMainQueue).start(next: { [weak self] primary, _, _ in
+            guard let self, let accountId = primary?.account.id, let session = self.sessions.first(where: { $0.accountId == accountId }) else {
+                return
+            }
+            if let alert = self.currentAlert {
+                alert.dismiss()
+                self.currentAlert = nil
+                self.currentAlertSession = nil
+            }
+            self.openLogin(session: session)
+        })
+    }
+
+    /// Debug: "Not Now" on the visible "Session Expired" alert.
+    func debugDismissAlert() -> Bool {
+        guard let alert = self.currentAlert else {
+            return false
+        }
+        alert.dismiss()
+        self.currentAlert = nil
+        self.currentAlertSession = nil
+        return true
     }
 
     /// Debug: "Log In" on the visible alert, or the re-login for the first expired session.

@@ -99,7 +99,7 @@ extension MattermostAccountSync {
             } catch let error as MattermostError where error.isTransient {
                 attempt += 1
                 let isWanted = await isStillWanted()
-                if Task.isCancelled || !isWanted {
+                if Task.isCancelled || !isWanted || self.isStopped {
                     throw error
                 }
                 let delay = min(5.0, 0.5 * pow(2.0, Double(min(attempt, 4))))

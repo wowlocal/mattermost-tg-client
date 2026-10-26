@@ -84,3 +84,72 @@
 "Relay.About.SourceCode" = "Source Code";
 "Relay.About.SourceCodeInfo" = "Relay is built from the open-source Telegram-iOS project. Its complete source code, including Relay's changes, is published at the address above.";
 "Relay.About.Disclaimer" = "Relay is an independent app. It is not affiliated with or endorsed by Telegram or Mattermost.";
+
+/* Login (MattermostUI). */
+"Relay.Login.AddAccountTitle" = "Add Account";
+"Relay.Login.AddAccountText" = "Enter the address of a Mattermost server. You can switch between your accounts at any time.";
+"Relay.Login.WelcomeText" = "Chat with your team on Mattermost. Enter the address of your team's server to get started.";
+"Relay.Login.ServerPlaceholder" = "chat.example.com";
+"Relay.Login.Connect" = "Connect";
+"Relay.Login.MinimumVersion" = "Works with Mattermost %@ and newer.";
+"Relay.Login.CantConnect" = "Can't Connect";
+"Relay.Login.CantLogIn" = "Can't Log In";
+"Relay.Login.ReloginTitle" = "Log In Again";
+"Relay.Login.ReloginText" = "Your session on %@ has ended. Log in again to keep your messages up to date.";
+"Relay.Login.CredentialsText" = "Log in with your account on %@.";
+"Relay.Login.Password" = "Password";
+"Relay.Login.NoSupportedLogin" = "This server doesn't offer a way to log in that Relay supports.";
+"Relay.Login.LogIn" = "Log In";
+"Relay.Login.WrongCode" = "That code didn't work. Codes change every 30 seconds; enter the current one.";
+"Relay.Login.ReplaceTitle" = "Log In as %@?";
+"Relay.Login.ReplaceText" = "This account belonged to a different user. Relay will remove that user's messages and files from this device and add %@'s account instead.";
+"Relay.Login.Continue" = "Continue";
+"Relay.Login.MFATitle" = "Enter Your Code";
+"Relay.Login.MFAText" = "Multi-factor authentication is on for %@. Enter the 6-digit code from your authenticator app.";
+"Relay.Login.MFACodeField" = "MFA code";
+"Relay.Login.ContinueWith" = "Continue with %@";
+"Relay.Login.SSOCouldNotStart" = "Relay couldn't open the sign-in page.";
+"Relay.Login.SSOIncomplete" = "The server didn't complete the sign-in.";
+"Relay.Login.SSOUnexpected" = "The server returned an unexpected sign-in response.";
+"Relay.Login.Error.EmptyAddress" = "Enter your server's address, for example chat.example.com.";
+"Relay.Login.Error.InvalidAddress" = "That doesn't look like a server address. Enter something like chat.example.com.";
+"Relay.Login.Error.InsecureNotAllowed" = "Relay only connects to servers over HTTPS.";
+"Relay.Login.Error.Unreachable" = "Can't connect to %1$@. Check the address and your internet connection.\n\n%2$@";
+"Relay.Login.Error.NotMattermost" = "%@ doesn't look like a Mattermost server. Check the address; it's the one you open Mattermost at in a browser.";
+"Relay.Login.Error.TooOld" = "This server runs Mattermost %1$@. Relay needs Mattermost %2$@ or newer. Ask your administrator to upgrade the server.";
+"Relay.Login.Error.UnknownVersion" = "Relay can't tell which Mattermost version this server runs, so it can't connect to it.";
+"Relay.Login.Error.Credentials" = "The login id or password is incorrect.";
+"Relay.Login.Error.Offline" = "Can't connect to the server. Check your internet connection.\n\n%@";
+"Relay.Login.Error.RateLimited" = "Too many attempts. Wait a moment and try again.";
+"Relay.Login.Error.ServerBusy" = "The server is busy. Try again in a moment.";
+"Relay.Login.Error.Failed" = "Login failed.";
+"Relay.Login.Error.AlreadyLoggedIn" = "You're already logged in to this server as %@.";
+"Relay.Login.Error.Storage" = "Relay couldn't save the account on this device (%@).";
+"Relay.Login.Error.UnknownAccount" = "This account is no longer on this device.";
+"Relay.Login.Error.DifferentUser" = "You logged in as a different user.";
+"Relay.Login.Error.SessionStorage" = "Relay couldn't save the new session on this device.";
+
+/* Expired session (MattermostUI, chat list title). */
+"Relay.Session.ExpiredTitle" = "Session Expired";
+"Relay.Session.ExpiredText" = "Your session as %1$@ on %2$@ has ended. Log in again to keep your messages up to date. Until then, Relay shows what's already on this device; messages you send now are sent after you log in.";
+"Relay.Session.YourAccount" = "your account";
+"Relay.Session.NotNow" = "Not Now";
+"Relay.Session.LogIn" = "Log In";
+
+/* Settings → Devices (MattermostUI). */
+"Relay.Devices.ThisDevice" = "This Device";
+"Relay.Devices.CurrentSession" = "Relay on this device";
+"Relay.Devices.ActiveSessions" = "Active Sessions";
+"Relay.Devices.LastActive" = "last active %@";
+"Relay.Devices.TerminateSession" = "Terminate Session";
+"Relay.Devices.TerminateOthers" = "Terminate All Other Sessions";
+"Relay.Devices.TerminateOthersInfo" = "Logs out every other device and browser where you're logged in to this server.";
+"Relay.Devices.TerminateOthersConfirm" = "Log out every other device and browser?";
+"Relay.Devices.NoOtherSessions" = "You're not logged in to this server anywhere else.";
+"Relay.Devices.CurrentUnknown" = "Relay can't tell which session is this device, because this account was added by an older version. To end all other sessions at once, log out and in again; you can still end them one by one below.";
+"Relay.Devices.Loading" = "Loading sessions…";
+"Relay.Devices.NotConnected" = "Log in again to see where you're logged in.";
+"Relay.Devices.Error" = "Couldn't load your sessions: %@";
+
+/* Interactive messages (TelegramUI MattermostPostActions). */
+"Relay.PostActions.NoOptions" = "No options";

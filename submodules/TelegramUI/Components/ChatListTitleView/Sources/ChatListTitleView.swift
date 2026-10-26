@@ -27,6 +27,8 @@ public struct NetworkStatusTitle: Equatable {
     public var isPasscodeSet: Bool
     public var isManuallyLocked: Bool
     public var peerStatus: Status?
+    // MATTERMOST: the title is "Session Expired"; a tap calls `MattermostBackend.requestRelogin`.
+    public var mattermostOpensRelogin: Bool = false
     
     public init(
         text: String,
@@ -110,7 +112,7 @@ public final class ChatListTitleView: UIView, NavigationBarTitleView, Navigation
             }
             self.proxyNode.isHidden = !self.title.hasProxy
             
-            self.buttonView.isHidden = !self.title.isPasscodeSet
+            self.buttonView.isHidden = !self.title.isPasscodeSet && !self.title.mattermostOpensRelogin // MATTERMOST
             if self.title.isPasscodeSet && !self.title.activity {
                 if self.lockView.isHidden && animated {
                     self.lockView.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.15)
@@ -459,6 +461,11 @@ public final class ChatListTitleView: UIView, NavigationBarTitleView, Navigation
     }
     
     @objc private func buttonPressed() {
+        // MATTERMOST: "Session Expired" opens the re-login.
+        if self.title.mattermostOpensRelogin {
+            MattermostBackend.requestRelogin?()
+            return
+        }
         self.toggleIsLocked?()
     }
     
