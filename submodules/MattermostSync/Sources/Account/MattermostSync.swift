@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import SwiftSignalKit
 import Postbox
 import TelegramCore
@@ -75,6 +76,7 @@ public enum MattermostSync {
     private static let lifecycleDisposable = MetaDisposable()
     private static let activationObserver = MMLocked<NSObjectProtocol?>(nil)
     private static let backgroundObserver = MMLocked<NSObjectProtocol?>(nil)
+    private static let pathMonitor = MMLocked<NWPathMonitor?>(nil)
     /// Phase 4B: when the app last entered the background (nil while it is active).
     private static let enteredBackgroundAt = MMLocked<Double?>(nil)
 
@@ -128,6 +130,9 @@ public enum MattermostSync {
         var configuration = MattermostClient.Configuration(serverURL: url, userAgent: self.userAgent)
         configuration.onUnauthorized = {
             MattermostSync.reportUnauthorized(accountId: accountId)
+        }
+        configuration.onServerReached = {
+            MattermostSync.sync(accountId: accountId)?.reconnectSoon(reason: "the server answered a request")
         }
         let client = MattermostClient(configuration: configuration, token: token)
         let sync = MattermostAccountSync(account: account, client: client, store: store, server: server)
@@ -219,6 +224,28 @@ public enum MattermostSync {
         for id in ids {
             self.verifySession(accountId: id, reason: "the token was rejected when the app became active")
         }
+    }
+
+    /// Phase 4B: when the network path becomes usable again (airplane mode off, Wi-Fi back), WebSockets waiting out
+    /// their backoff reconnect at once.
+    private static func startPathMonitor() {
+        let monitor = NWPathMonitor()
+        let wasSatisfied = MMLocked<Bool?>(nil)
+        monitor.pathUpdateHandler = { path in
+            let satisfied = path.status == .satisfied
+            let previous = wasSatisfied.with { value -> Bool? in
+                let previous = value
+                value = satisfied
+                return previous
+            }
+            if satisfied && previous == false {
+                for sync in self.accounts.with({ Array($0.values) }) {
+                    sync.reconnectSoon(reason: "the network is back")
+                }
+            }
+        }
+        monitor.start(queue: DispatchQueue(label: "org.relaychat.MattermostSync.path"))
+        self.pathMonitor.with { $0 = monitor }
     }
 
     /// Phase 4B: after more than 10 s in the background, every running account checks that its WebSocket
@@ -386,6 +413,7 @@ public enum MattermostSync {
             MattermostSync.enteredBackgroundAt.with { $0 = CFAbsoluteTimeGetCurrent() }
         })
         self.backgroundObserver.with { $0 = backgroundObserver }
+        self.startPathMonitor()
         let handled = MMLocked<Set<AccountRecordId>>([])
         let isFirstView = MMLocked<Bool>(true)
         self.lifecycleDisposable.set(accountManager.accountRecords().start(next: { view in

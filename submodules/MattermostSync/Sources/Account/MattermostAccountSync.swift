@@ -153,6 +153,9 @@ public final class MattermostAccountSync: @unchecked Sendable {
     let staleCatchUpsInFlight = MMLocked<Set<String>>([])
     /// Threads reloads per team in flight (`reloadThreadsCoalesced`): true when another run was asked for.
     let threadReloads = MMLocked<[String: Bool]>([:])
+    /// Phase 4B: the WebSocket waits out its backoff (`reconnectSoon`); when the last early reconnect was asked for.
+    let isWaitingToReconnect = MMLocked<Bool>(false)
+    private let lastEarlyReconnect = MMLocked<Double>(0)
     private var chatObserver: ChatObserver?
 
     init(account: Account, client: MattermostClient, store: MattermostSyncStore, server: MattermostServerInfo) {
@@ -324,6 +327,7 @@ public final class MattermostAccountSync: @unchecked Sendable {
         case let .connected(info):
             MMLog.log("websocket connected (connection \(info.connectionId), resumed: \(info.resumed))")
             self.isConnected.with { $0 = true }
+            self.isWaitingToReconnect.with { $0 = false }
             self.connectionGeneration.with { $0 += 1 }
             self.account.network.mattermostSetConnectionState(isConnected: true, isNetworkAvailable: true)
             if !info.resumed {
@@ -335,8 +339,13 @@ public final class MattermostAccountSync: @unchecked Sendable {
                     await self?.refreshOwnProfile()
                 })
             }
-        case .connecting, .waitingToReconnect:
+        case .connecting:
             self.isConnected.with { $0 = false }
+            self.isWaitingToReconnect.with { $0 = false }
+            self.account.network.mattermostSetConnectionState(isConnected: false, isNetworkAvailable: true)
+        case .waitingToReconnect:
+            self.isConnected.with { $0 = false }
+            self.isWaitingToReconnect.with { $0 = true }
             self.account.network.mattermostSetConnectionState(isConnected: false, isNetworkAvailable: true)
         case .disconnected:
             self.isConnected.with { $0 = false }
@@ -375,6 +384,29 @@ public final class MattermostAccountSync: @unchecked Sendable {
                 MMLog.log("foreground: active after \(Int(seconds)) s in the background; websocket \(action) (\(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms)")
             }
         })
+    }
+
+    /// Phase 4B: the server answered a REST request, or the network path came back, while the WebSocket waits out
+    /// its backoff (up to a minute after a long outage): reconnect now, at most every 5 s.
+    func reconnectSoon(reason: String) {
+        guard let socket = self.socket, !self.isStopped, self.isWaitingToReconnect.current else {
+            return
+        }
+        let now = CFAbsoluteTimeGetCurrent()
+        let due = self.lastEarlyReconnect.with { last -> Bool in
+            if now - last < 5.0 {
+                return false
+            }
+            last = now
+            return true
+        }
+        if !due {
+            return
+        }
+        MMLog.log("websocket: reconnecting now (\(reason))")
+        Task {
+            await socket.reconnectNow()
+        }
     }
 
     /// Stops everything `start()` started (logout, session expiry). The object is not reused; a new session

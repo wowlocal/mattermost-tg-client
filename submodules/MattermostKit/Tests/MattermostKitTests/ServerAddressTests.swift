@@ -127,3 +127,35 @@ final class UnauthorizedHookTests: StubbedClientTestCase {
         XCTAssertEqual(counter.current, 0)
     }
 }
+
+/// Phase 4B: `onServerReached` tells the sync that the server answers (its WebSocket can stop waiting out a backoff).
+final class ServerReachedHookTests: StubbedClientTestCase {
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        func increment() { lock.lock(); value += 1; lock.unlock() }
+        var current: Int { lock.lock(); defer { lock.unlock() }; return value }
+    }
+
+    private func makeHookedClient(counter: Counter) -> MattermostClient {
+        var configuration = MattermostClient.Configuration(serverURL: self.serverURL)
+        configuration.onServerReached = { counter.increment() }
+        return MattermostClient(configuration: configuration, token: "t", session: StubURLProtocol.makeSession())
+    }
+
+    func testCalledForAnswers() async {
+        StubURLProtocol.respond(with: .json(Fixtures.appError, status: 403))
+        let counter = Counter()
+        let client = makeHookedClient(counter: counter)
+        _ = await expectMattermostError { try await client.me() }
+        XCTAssertEqual(counter.current, 1)
+    }
+
+    func testNotCalledWhenUnreachable() async {
+        StubURLProtocol.respond(with: .failure(.cannotConnectToHost))
+        let counter = Counter()
+        let client = makeHookedClient(counter: counter)
+        _ = await expectMattermostError { try await client.me() }
+        XCTAssertEqual(counter.current, 0)
+    }
+}

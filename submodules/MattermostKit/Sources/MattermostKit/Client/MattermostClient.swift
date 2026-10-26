@@ -17,6 +17,9 @@ public final class MattermostClient: Sendable {
         /// or revoked session. Requests sent without a token (login) never call it. A few endpoints use 401
         /// for other errors, so confirm with `isTokenAccepted()` before acting.
         public var onUnauthorized: (@Sendable () -> Void)?
+        /// Called whenever the server answered a request (any status), e.g. to reconnect a WebSocket that is
+        /// waiting out its backoff after the server was unreachable.
+        public var onServerReached: (@Sendable () -> Void)?
 
         public init(serverURL: URL, userAgent: String? = nil, timeoutInterval: TimeInterval = 30, additionalHeaders: [String: String] = [:], onUnauthorized: (@Sendable () -> Void)? = nil) {
             self.serverURL = serverURL
@@ -118,6 +121,7 @@ public final class MattermostClient: Sendable {
         } catch {
             throw MattermostError.wrap(error)
         }
+        configuration.onServerReached?()
         let http: HTTPURLResponse
         do {
             http = try validate(response: response, body: data)
