@@ -173,7 +173,7 @@ func infoItems(
             ))
         }
         
-        if let phone = user.phone {
+        if MattermostFeatures.contacts, let phone = user.phone { // MATTERMOST: Mattermost users have no phone
             let formattedPhone = formatPhoneNumber(context: context, number: phone)
             let label: String
             if formattedPhone.hasPrefix("+888 ") {
@@ -203,8 +203,12 @@ func infoItems(
                     text: "@\(mainUsername)",
                     additionalText: additionalUsernames,
                     textColor: .accent,
-                    icon: .qrCode,
+                    // MATTERMOST: the username stays visible; its QR code and t.me actions are hidden.
+                    icon: MattermostFeatures.tmeLinks ? .qrCode : nil,
                     action: { _, progress in
+                        guard MattermostFeatures.tmeLinks else {
+                            return
+                        }
                         interaction.openUsername(mainUsername, true, progress)
                     }, linkItemAction: { type, item, _, _, progress in
                         if case .tap = type {
@@ -224,7 +228,7 @@ func infoItems(
         }
         
         if let cachedData = data.cachedData as? CachedUserData {
-            if let birthday = cachedData.birthday {
+            if MattermostFeatures.telegramPrivacy, let birthday = cachedData.birthday { // MATTERMOST: no Telegram birthdays
                 let isBirthdayToday = hasBirthdayToday(birthday: birthday)
                 
                 var birthdayAction: ((ASDisplayNode, Promise<Bool>?) -> Void)?
@@ -254,7 +258,7 @@ func infoItems(
             }
             
             var hasWebApp = false
-            if let botInfo = user.botInfo, botInfo.flags.contains(.hasWebApp) {
+            if MattermostFeatures.botWebApps, let botInfo = user.botInfo, botInfo.flags.contains(.hasWebApp) { // MATTERMOST: no mini apps
                 hasWebApp = true
             }
             

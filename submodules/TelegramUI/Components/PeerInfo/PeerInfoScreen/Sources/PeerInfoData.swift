@@ -528,7 +528,8 @@ final class PeerInfoScreenData {
         self.threadNotificationSettings = threadNotificationSettings
         self.globalNotificationSettings = globalNotificationSettings
         self._isContact = isContact
-        self.availablePanes = availablePanes
+        // MATTERMOST: Telegram-only panes (stories, gifts, bot previews, similar channels/bots, GIFs).
+        self.availablePanes = availablePanes.filter { MattermostFeatures.allowsPeerInfoPane($0) }
         self.groupsInCommon = groupsInCommon
         self.linkedDiscussionPeer = linkedDiscussionPeer
         self.linkedMonoforumPeer = linkedMonoforumPeer
@@ -1329,7 +1330,8 @@ func peerInfoScreenData(
             }
             
             let storyListContext = PeerStoryListContext(account: context.account, peerId: peerId, isArchived: false, folderId: nil)
-            let hasStories: Signal<Bool?, NoError> = storyListContext.state
+            // MATTERMOST: no stories. `false`, not nil: nil hides every pane.
+            let hasStories: Signal<Bool?, NoError> = !MattermostFeatures.stories ? .single(false) : storyListContext.state
             |> map { state -> Bool? in
                 if !state.hasCache {
                     return nil
@@ -1782,7 +1784,8 @@ func peerInfoScreenData(
             let requestsStatePromise = Promise<PeerInvitationImportersState?>(nil)
             
             let storyListContext = PeerStoryListContext(account: context.account, peerId: peerId, isArchived: false, folderId: nil)
-            let hasStories: Signal<Bool?, NoError> = storyListContext.state
+            // MATTERMOST: no stories. `false`, not nil: nil hides every pane.
+            let hasStories: Signal<Bool?, NoError> = !MattermostFeatures.stories ? .single(false) : storyListContext.state
             |> map { state -> Bool? in
                 if !state.hasCache {
                     return nil
@@ -2169,7 +2172,7 @@ func peerInfoScreenData(
             
             let storyListContext: StoryListContext?
             let hasStories: Signal<Bool?, NoError>
-            if peerId.namespace == Namespaces.Peer.CloudChannel {
+            if peerId.namespace == Namespaces.Peer.CloudChannel && MattermostFeatures.stories { // MATTERMOST: no stories
                 storyListContext = PeerStoryListContext(account: context.account, peerId: peerId, isArchived: false, folderId: nil)
                 hasStories = storyListContext!.state
                 |> map { state -> Bool? in
@@ -2782,6 +2785,11 @@ func peerInfoHeaderButtons(peer: EnginePeer?, cachedData: CachedPeerData?, isOpe
         result.append(.mute)
         result.append(.search)
         result.append(.more)
+    }
+    
+    // MATTERMOST: no calls; `callsAvailable` is true for users without cached data.
+    if !MattermostFeatures.calls {
+        result.removeAll(where: { $0 == .call || $0 == .videoCall || $0 == .voiceChat })
     }
     
     return result
