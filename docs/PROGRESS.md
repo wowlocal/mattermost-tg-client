@@ -68,6 +68,11 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | # | Workstream | Status |
 |---|---|---|
 | 3A | Push notifications: push proxy infra, device registration, Notification Service Extension rewrite, reply/mark-read actions, open-on-tap | Done on branch `worktree-agent-a53718b0b6fd32339` (screenshots `docs/research/phase3a-*.png`); 2D agent merging into main. **Real APNs needs the user's key** (steps in `infra/push-proxy/README.md`) |
+| 3B | Collapsed reply threads: channel history without replies, thread view, Threads list per team, follow/unfollow, thread read state, `_root` unread counts | Agent working (own worktree) |
+| 3C | Search (posts), recent mentions, saved posts, pinned posts, channel files | Next |
+| 3D | Directory & membership (browse/join/create channels, DM/GM creation, member lists, channel info edit/archive/leave), composer autocomplete (@ ~ :), slash commands, interactive dialogs | Next |
+| 3E | Link previews, markdown block bubble (headings/lists/tables/code), permalinks & deep links | Next |
+| 3F | Own status (online/away/DND/offline, custom status), profile editing + avatar, share extension | Next |
 
 ## Log
 
@@ -143,3 +148,4 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 - **3A done** (branch `worktree-agent-a53718b0b6fd32339`): push proxy 6.6.0 (`relay_apple` / `relay_apple_sandbox`), registration per account (permission asked after login), tokens moved to the shared Keychain group `group.org.relaychat.Relay`, NSE logic in `MattermostPushService` (routing via server DiagnosticId + membership/mention heuristics, communication notifications with avatars, ack), reply/mark-read actions, open-on-tap (thread aware), `clear`/`update_badge`/`session`.
   - **Not yet exercised:** the real NSE — `simctl push` never launches service extensions; verified via a debug in-app `simulate-push` path instead. Needs the user's APNs key: see `infra/push-proxy/README.md` (App IDs + capabilities, .p8 key, Team ID in `build-config/development-configuration.json`).
   - Gaps: grouping by channel only (two accounts in one channel stack together); a DM `clear` with two local accounts may clear the other's; sender shown as @username; ID-only push untested (needs a license); `clear`/`update_badge` don't reach a force-quit app.
+- 3A worktree removed (branch kept until 2D merges it). 3B (collapsed threads) started in a worktree. Phase 3 split into 3A–3F.
