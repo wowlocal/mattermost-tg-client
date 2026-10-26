@@ -5,6 +5,7 @@ checked in the repository (Phase 4A); **nothing was signed or uploaded**: no App
 or profile was available. The sections say what was verified and what wasn't.
 
 Related: [privacy.md](privacy.md) (App Store privacy answers and the privacy manifest),
+[managed-configuration.md](managed-configuration.md) (MDM/EMM app configuration keys for company deployments),
 [infra/push-proxy/README.md](../../infra/push-proxy/README.md) (APNs key and push proxy),
 [docs/BUILD.md](../BUILD.md) (simulator builds), [docs/plan/08-legal-and-licensing.md](../plan/08-legal-and-licensing.md).
 
@@ -210,6 +211,16 @@ see plan 08). Everyone who gets the app must be able to get the complete corresp
   signup captcha), which could not be part of the source offer; `tools/relay-release-audit.sh` fails if it (or an
   analytics SDK) comes back.
 - Before external distribution: legal review (plan 08, "App Store and the GPL").
+
+## 9. Company deployments (MDM / EMM)
+
+Relay reads managed app configuration with the **same keys as Mattermost's mobile app** (`serverUrl`, `serverName`,
+`allowOtherServers`, `username`, `inAppPinCode`, `blurApplicationScreen`, `copyAndPasteProtection`,
+`jailbreakDetection`, `vendor`) plus Relay's `relayCertificatePins` (SPKI SHA-256 certificate pins per host). The
+administrator's guide with the table of keys, Relay's behaviour for each, the differences from Mattermost's app and an
+example: [managed-configuration.md](managed-configuration.md). For App Store distribution through an MDM, assign the
+App Store app (or an Apple Business Manager custom app, D1) and attach the configuration to bundle id
+`org.relaychat.Relay`.
 
 ## What was verified (Phase 4A) and what wasn't
 

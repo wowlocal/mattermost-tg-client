@@ -370,6 +370,58 @@ SIMCTL_CHILD_RELAY_DEBUG_SEND_DELAY=25 SIMCTL_CHILD_RELAY_DEBUG_WRITE='image|san
 - **delete_others_posts**: `channel_admin` has none on an unlicensed server; add it for a check as sysadmin
   (`PUT /roles/{id}/patch`, keep the old list to restore it); the app follows `role_updated` live (`actions`).
 
+#### Phase 4G: security and diagnostics
+
+**Managed app configuration on the simulator.** `simctl spawn … defaults write <bundle id>` writes the simulated
+user's domain, which the app's `UserDefaults.standard` reads after its own container (checked in 4G: the keys reach
+the app). The app reads it at launch and whenever it becomes active; an external `defaults write` posts no
+`UserDefaults.didChangeNotification` in the app, so put Relay in the background and back to apply a change:
+
+```sh
+xcrun simctl spawn "$UDID" defaults write org.relaychat.Relay com.apple.configuration.managed \
+  -dict serverUrl http://localhost:8065 serverName "Relay Dev" username alice allowOtherServers false \
+        inAppPinCode true blurApplicationScreen true copyAndPasteProtection true vendor "Example Corp" \
+        relayCertificatePins "127.0.0.1=sha256/<base64>"
+xcrun simctl launch "$UDID" com.apple.Preferences && xcrun simctl launch "$UDID" org.relaychat.Relay   # re-read
+xcrun simctl spawn "$UDID" defaults delete org.relaychat.Relay com.apple.configuration.managed            # unmanaged again
+```
+
+Debug remote (MattermostUI `RelaySecurityDebug.swift`, output in `extra`):
+
+```sh
+tools/relay-remote.py "$UDID" managed                      # configuration in effect, raw keys seen, extensions' copy, UI policy
+tools/relay-remote.py "$UDID" passcode                     # passcode kind, auto-lock, locked?, notification action options
+tools/relay-remote.py "$UDID" passcode do=lock             # the chat list's lock button
+tools/relay-remote.py "$UDID" passcode do=set code=1234    # as the setup screen completes (do=clear code=…: Turn Passcode Off)
+tools/relay-remote.py "$UDID" passcode do=press-set        # "Set Passcode" on the "Passcode Required" alert
+tools/relay-remote.py "$UDID" pasteboard                   # the copy/paste guard's view (do=copy text=…: copy as the app does)
+tools/relay-remote.py "$UDID" diagnostics                  # stored MetricKit reports, last export
+tools/relay-remote.py "$UDID" diagnostics do=add-report kind=diagnostics   # a synthetic report (MetricKit delivers none on a simulator)
+RELAY_REMOTE_TIMEOUT=60 tools/relay-remote.py "$UDID" diagnostics do=export   # the export without the share sheet (zip in the app's tmp)
+tools/relay-remote.py "$UDID" screen name=passcode         # Privacy and Security → Passcode (also name=diagnostics)
+```
+
+- **Real taps** on the passcode keypads work with AXe (`axe touch -x … -y … --down --up --delay 0.08`; iPhone 17 Pro
+  points, setup screen keys 1/2/3 at y 622, 4/5/6 at 676, 7/8/9 at 730, 0 at 789, x 69/201/333; lock screen keys at
+  y 328/422/513, 0 at 603, x 98/201/302).
+- **App-switcher snapshot**: iOS saves it in the data container, `Library/SplashBoard/Snapshots/sceneID:org.relaychat.Relay-default/*.ktx`;
+  ImageIO reads KTX (a 10-line Swift script with `CGImageSourceCreateWithURL` writes a PNG).
+- **Jailbreak detection** can't trigger on a simulator; `SIMCTL_CHILD_RELAY_DEBUG_JAILBROKEN=1` (debug builds) makes
+  the check report a jailbreak.
+- **Pasteboard**: `xcrun simctl pbcopy` doesn't reach the simulator here; `pbcopy` on the Mac + `xcrun simctl pbsync
+  host "$UDID"` does (it changes the Mac's pasteboard: save and restore it). The simulator also syncs its pasteboard
+  with the Mac's on its own, so content Relay copies comes back as a new change (`RelayPasteboardGuard` recognises its
+  own content by text/link/images for pasting; the clear when Relay goes to the background only clears an unchanged
+  pasteboard).
+- **Certificate pinning end to end**: a throwaway TLS proxy in front of the dev server (nginx in a container on the
+  `mmdev_default` network, `proxy_pass http://mmdev-mattermost-1:8065` with WebSocket upgrade headers, published on
+  `127.0.0.1:8443`), a test CA trusted on the simulator (`xcrun simctl keychain "$UDID" add-root-cert ca.pem`), an
+  account on `https://127.0.0.1:8443`, then pins for `127.0.0.1` (compute them with the `openssl` pipeline in
+  docs/release/managed-configuration.md). Remove the container afterwards; the CA stays in the simulator's trust store
+  (`simctl keychain reset` would remove everything else too).
+- **MetricKit** on a device: Xcode → Debug → Simulate MetricKit Payloads delivers a sample of each payload to the
+  running app.
+
 If `simctl install` doesn't pick up a rebuilt binary (same build number), replace the installed bundle in place as described in the root `CLAUDE.md` ("Updating the running simulator after a rebuild"). This happened in 2D after a 30-second incremental build: compare the md5 of `Frameworks/TelegramUIFramework.framework/TelegramUIFramework` in the `.ipa` and in the installed app when a change seems missing.
 
 ### Push notifications on the simulator (Phase 3A)

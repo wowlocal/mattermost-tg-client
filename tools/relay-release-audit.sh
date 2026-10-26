@@ -77,6 +77,11 @@ MARKERS=(
   "notification-reply"
   "notification-read"
   "reaction-notifications"
+  "RelaySecurityDebug"
+  "RelayDiagnosticsDebug"
+  "debugPressSetPasscode"
+  "add-report"
+  "press-set"
   "NSAllowsArbitraryLoads"
 )
 

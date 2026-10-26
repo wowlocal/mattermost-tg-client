@@ -28,6 +28,29 @@ Mattermost server ──▶ push proxy (whoever operates it) ──▶ Apple APN
 - On the device: messages and media are cached in the app's data container (Telegram's encrypted Postbox
   database); Mattermost session tokens are in the Keychain (app group access group, `AfterFirstUnlock`), shared
   only with Relay's extensions.
+- **Diagnostics (Phase 4G) stay on the device unless the user exports them.** Relay has no crash reporter or
+  analytics SDK. Two local sources:
+  - **MetricKit**: iOS hands the app its own daily metrics and diagnostic reports (crashes, hangs, disk writes,
+    CPU exceptions: call stacks of Relay's code, device model, iOS version, app version, no user data). Relay keeps
+    them as JSON in its container, at most 30 days, 40 reports and 4 MB (`DiagnosticReportStore`). (iOS also shares
+    these reports with the developer through App Store Connect if the user turned on "Share With App Developers" in
+    iOS Settings → Privacy → Analytics; that is Apple's, not Relay's.)
+  - **Diagnostic log**: Telegram's file log with MattermostSync's lines, **off by default in release builds**
+    (Settings → About Relay → Diagnostics → Save Diagnostic Logs). The log records what the app does (connections,
+    sync steps, errors) and Mattermost ids (posts, channels, users); it never records message text, search terms,
+    names, passwords or session tokens (checked in 4G: the lines that did log a username, search terms, a custom
+    status text or the full APNs device token were changed).
+  - **Export** (Settings → About Relay → Diagnostics → Export Diagnostics) makes a zip and opens the system share
+    sheet; nothing is sent unless the user picks a destination. It contains a summary (Relay and iOS version,
+    device model, language, each account's server address and Mattermost version and sync state, whether a
+    passcode is set, which managed configuration keys are set — not their values), the stored MetricKit reports and
+    the logs of the app and its extensions. Before export the logs and summary are scrubbed again
+    (`DiagnosticsRedactor`): credentials (`Bearer …`, `token=…`, passwords, cookies) and email addresses removed,
+    APNs tokens removed, and every Mattermost id replaced by a pseudonym that is stable within one export but can't be
+    matched to the server or across exports.
+- **Managed configuration** (MDM, Phase 4G, [managed-configuration.md](managed-configuration.md)) is read on the
+  device only. The app copies the certificate pins and the server restriction into its app group for its
+  extensions; nothing of it is sent anywhere.
 
 ## App Store Connect: App Privacy answers (proposal)
 
@@ -39,6 +62,10 @@ not collected by the developer.
 **Proposed answer: "Data Not Collected"**, on these conditions (each must stay true):
 
 1. The app contains no analytics/crash/ads SDK (true today; re-check before each release, see "Checks" below).
+   Diagnostics (MetricKit reports, the optional log) leave the device only when the user exports them and picks
+   where to send them, so they are not "collected" in Apple's sense; if the publisher ever asks users to send
+   exports to a support address and keeps them, declare **Diagnostics → Crash Data / Performance Data / Other
+   Diagnostic Data** (App Functionality, not linked, not tracking).
 2. The push proxy (if the publisher runs it) does not retain payloads or device tokens beyond forwarding them:
    no file logs, console logs not shipped to a log store, or at least no payload contents at the configured
    log level. If its logs are kept, answer instead:

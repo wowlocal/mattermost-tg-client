@@ -4,7 +4,7 @@ Working log for the Mattermost client fork. Each work session reads this first a
 
 ## Current state
 
-- **Phase:** 0–3 done; Phase 4: 4A, 4B, 4C, 4F done and merged into `main`; 4G (security and diagnostics) next, then 4E (release-candidate regression); 4D (TestFlight) blocked on the user's Apple Developer account.
+- **Phase:** 0–3 done; Phase 4: 4A, 4B, 4C, 4F, 4G done on `main`; 4E (release-candidate regression) next; 4D (TestFlight) blocked on the user's Apple Developer account.
 - **Upstream pin:** Telegram‑iOS `5c20d095d1ab` (app 13.0.1, tag `upstream-pin`), the newest commit built with Xcode 27.0 (installed). Master needs Xcode 27.1.
 - **Working name:** "Relay" (`org.relaychat.Relay`, URL scheme `relay`). Placeholder until D6 is decided.
 - **Build:** commands in [BUILD.md](BUILD.md). Main simulator "Relay iPhone 17 Pro" (iOS 26.5). `main` is pushed to `origin` (github.com/wowlocal/mattermost-tg-client) after each merge.
@@ -83,7 +83,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | 4B | Runtime hygiene: gate Telegram managers that still park requests (memory), performance on a large server, offline/background refresh, cache eviction | Done (main checkout; 4A merged in at `da381f9f`); design: mattermost-sync.md "Runtime hygiene and performance (4B)"; screenshots `docs/research/phase4b-*.png` |
 | 4C | Accessibility (VoiceOver, Dynamic Type) on new screens, localization readiness | Done on branch `worktree-agent-a894352d0927065cd` (main merged in three times, last with 4F so far; merged into main by the 4F agent); design: [design/localization.md](design/localization.md); evidence `docs/research/phase4c-a11y/`, screenshots `docs/research/phase4c-*.png` |
 | 4F | Known-gaps burn-down (CRT chat-list preview/sort, thread unread separator, mixed posts, attachment polish, ephemeral semantics, in-chat search incl. replies, permalink into unjoined channel, DND indicator, push sender display name, live DM close, live mentions, persisted upload ids, admin delete) | Done (main checkout; 4C merged in at `cd723ed9`); design: mattermost-sync.md "Known-gaps burn-down (4F)"; screenshots `docs/research/phase4f-*.png` |
-| 4G | Security and diagnostics (plan 05 Phase 4): Telegram passcode lock with Relay accounts, managed app configuration (AppConfig/MDM: server URL, restrictions), optional certificate pinning, privacy-respecting local diagnostics (MetricKit, exportable logs) | Next |
+| 4G | Security and diagnostics (plan 05 Phase 4): Telegram passcode lock with Relay accounts, managed app configuration (AppConfig/MDM: server URL, restrictions), optional certificate pinning, privacy-respecting local diagnostics (MetricKit, exportable logs) | Done (main checkout); design: mattermost-sync.md "Security and diagnostics (4G)"; admin guide: [release/managed-configuration.md](release/managed-configuration.md); privacy: [release/privacy.md](release/privacy.md); BUILD.md "Phase 4G"; evidence `docs/research/phase4g/`, screenshots `docs/research/phase4g-*.png` |
 | 4E | Release-candidate regression: written checklist, release build, cold start from cache, supported server versions (11.7 ESR and the newest release), device matrix | After 4G |
 | 4D | Release: TestFlight build — **needs the user's Apple Developer account** ([release/RELEASE.md](release/RELEASE.md)) | Blocked on user |
 
@@ -320,3 +320,106 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   - Upstream files touched (all `// MATTERMOST:`): Postbox `ChatListTable.swift`, `MessageHistoryTable.swift`, `MessageHistoryTagsTable.swift`, `MetadataTable.swift`, `Postbox.swift`; TelegramCore `State/AccountViewTracker.swift`, `Mattermost/MattermostChatObserver.swift`, `Mattermost/MattermostChannelAccess.swift`; TextFormat `StringWithAppliedEntities.swift` (one call), `MattermostHeadings.swift`; new TelegramPresentationData `Resources/MattermostStatusIcons.swift`; ChatListUI `Node/ChatListItem.swift`; `ChatAvatarNavigationNode.swift`; TelegramUI `Chat/ChatControllerLoadDisplayNode.swift`, `ChatControllerUpdateSearch.swift`, `ChatInterfaceStateContextMenus.swift`, `MattermostThreads.swift`, `MattermostLinks.swift`, `RelayDebugThreads.swift` (debug); MattermostUI `MattermostDirectoryControllers.swift`; `MattermostPushService`.
   - Dev server state left by 4F: ~sandbox: two 4F thread roots by alice ("4F thread unread separator check", 55 and 13 replies by bob), bob's mixed posts and attachment post, "@alice 4F live mention…", alice's "4F upload kept across a restart" image and a 2-image album; 3E Links and engineering town square: one 4F reply by bob each; `relay-3f-unjoined`: bob's "4F permalink target" + 45 fillers, alice joined and left; `relay-3d2-release-crew`: dave's second "4F admin delete check" post (the first deleted by alice); `channel_admin` role restored; bob, dave online; alice's `name_format` and dave's `collapsed_reply_threads` preferences deleted again; alice's DM with dave and GM alice+carol+dave reopened. Simulator: notifications allowed (`tools/sim-allow-notifications.py`), dave re-added (account `7133911708254456849`).
 - **4F done and pushed** (`da35c59d`): all 13 gaps fixed and checked against the dev server (details in the 4F entry above); 4C merged at `cd723ed9`, its branch deleted. Release audit 0 debug markers; parked requests 0 after a 5-minute `relay-session.py` run. Next: 4G (security and diagnostics), then 4E (release-candidate regression).
+- **4G done** (main checkout). Design: mattermost-sync.md "Security and diagnostics (4G)"; admin guide
+  [release/managed-configuration.md](release/managed-configuration.md) (linked from RELEASE.md §9); privacy.md updated;
+  BUILD.md "Phase 4G". Verified on "Relay iPhone 17 Pro" (debug build, alice/bob/dave; a sysadmin account added for
+  the checks and signed out again) with real taps through AXe where the UI matters; screenshots
+  `docs/research/phase4g-*.png`, evidence `docs/research/phase4g/`.
+  - **Managed configuration** (Mattermost's EMM key names: `serverUrl`, `serverName`, `allowOtherServers`, `username`,
+    `inAppPinCode`, `blurApplicationScreen`, `copyAndPasteProtection`, `jailbreakDetection`, `vendor`; Relay's
+    `relayCertificatePins`; `useVPN`/`timeoutVPN`/`inAppSessionAuth` accepted and ignored). **Delivery on the simulator:**
+    `simctl spawn … defaults write org.relaychat.Relay com.apple.configuration.managed -dict …` does reach
+    `UserDefaults.standard` (the simulated user's domain is in the app's search list; checked with the debug remote's
+    `managed`), but posts no change notification inside the app, so the app re-reads whenever it becomes active (a real
+    MDM change also posts `UserDefaults.didChangeNotification`, which is observed). Checked: Add Account prefilled
+    (`phase4g-login-server-prefilled.png`); with `allowOtherServers=false` the address is locked and greyed, VoiceOver
+    "Server address, dimmed, Set by your organization", the remote's `fill` refused (`phase4g-login-server-locked.png`);
+    the credentials screen titled with `serverName`, login id prefilled with `username`
+    (`phase4g-login-managed-credentials.png`); an account on `127.0.0.1` (another server for the app) signed out at the
+    next activation, its data directory deleted, and — after a fix: the first alert vanished with the account switch —
+    a "Signed Out" alert naming both servers once the account is gone (`phase4g-restricted-signed-out.png`).
+    **Decision:** accounts on servers the configuration doesn't allow are signed out (data deleted), not kept dormant.
+  - **Passcode (Telegram's):** reachable at Settings → Privacy and Security → Passcode (Phase 1's slim screen).
+    `inAppPinCode=true` → "Passcode Required — Example Corp requires a passcode for Relay" (no other button;
+    `phase4g-passcode-required-alert.png`) → Telegram's setup, a 6-digit code typed on its keypad with AXe → passcode
+    on, auto-lock 5 min; the options screen without Turn Passcode Off, footer "Required by Example Corp…", Auto-Lock
+    offering only 1 and 5 min (+ the debug build's 10 s) (`phase4g-passcode-required-autolock.png`). Auto-lock (10 s):
+    back after 12 s → "Relay Locked" (`phase4g-autolocked.png`), unlocked by typing the code. Several accounts: one
+    lock for the app; locked while on bob's account, a wrong code refused, the right one unlocked on bob's account.
+    App switcher: iOS's saved snapshot (`Library/SplashBoard/Snapshots/*.ktx`, read with ImageIO) is Telegram's blurred
+    cover with a passcode (`phase4g-app-switcher-snapshot-passcode.png`), and with `blurApplicationScreen` also
+    without one (`phase4g-app-switcher-snapshot-blur.png`; without the key the content is readable). Share extension
+    (the real extension, hosted by the app): "Enter your Relay Passcode" first (`phase4g-share-extension-passcode.png`),
+    Cancel closes it. Notifications while locked: a simulated DM push showed "You have a new message" (the 3A
+    extension's locked text); Reply through the app's handler still sends (the reply reached the server; the app stayed
+    locked). Reply / Mark as Read now carry `.authenticationRequired` while a passcode exists (iOS asks for Face ID /
+    the device passcode first; registered again when the passcode is turned on or off — checked with the remote's
+    `passcode`); on the simulator the system side of that can't be exercised.
+  - **Certificate pinning** (throwaway nginx TLS proxy `relay-4g-tls` on `127.0.0.1:8443` in front of the dev
+    server, a test CA trusted in the simulator, sysadmin signed in on `https://127.0.0.1:8443`): a wrong pin → the
+    account's bootstrap fails with `-1202 … doesn't match the pinned certificates` and retries, the chat list says
+    "Connecting…" (`phase4g-pin-mismatch-connecting.png`), a new login → "The certificate of 127.0.0.1:8443 isn't the
+    one your organization requires" (`phase4g-pin-mismatch-login.png`); the CA's pin (with a wrong backup pin) → the
+    next bootstrap retry succeeded and the WebSocket connected through TLS; the leaf's pin → reconnected; the
+    `http://localhost` accounts unaffected throughout. **Found and fixed:** the first build let a login probe through
+    after wrong pins were set, on the connection opened before — URLSession checks a certificate per connection. Now a
+    pin change renews the session (`MattermostURLSession.renew()`) and reconnects every WebSocket; checked: a pin
+    changed to a wrong one while connected took the account to "Connecting…". Unit tests: 15 in MattermostKit with a
+    CA and leaves generated by openssl per run (SPKI digests equal openssl's for RSA, EC, X.509 v1; decisions on real
+    `SecTrust`s). The TLS container was removed.
+  - **Copy and paste protection:** a copy in Relay is re-marked local-only and cleared when Relay goes to the background
+    (the simulator's pasteboard was empty afterwards); outside content (from the Mac via `simctl pbsync host`) pasted
+    into the composer → "Example Corp doesn't allow pasting content from other apps into Relay." and nothing inserted
+    (`phase4g-paste-refused.png`); Relay's own copy pasted (`phase4g-paste-own-allowed.png`). **Found:** the simulator
+    syncs its pasteboard with the Mac's by itself, so Relay's copy came back as a new change and was refused at first;
+    the guard now also recognises its own content by text/link/images at paste time. `simctl pbcopy` doesn't reach the
+    simulator here. Other text fields (search, login) keep the system's paste; the managed pasteboard restriction of
+    iOS is the complete boundary (documented).
+  - **Jailbreak detection:** heuristic (jailbreak files, writable `/private`, injected libraries; never on the
+    simulator); `RELAY_DEBUG_JAILBROKEN=1` → "Device Not Allowed", OK shows it again (`phase4g-device-not-allowed.png`).
+  - **Diagnostics:** MetricKit subscriber (no third-party SDK) → `DiagnosticReportStore`; Settings → About Relay →
+    Diagnostics: "Save Diagnostic Logs" (Telegram's file log; off by default in release), "Reports from iOS",
+    "Export Diagnostics" (`phase4g-diagnostics-screen.png`) → a 588 KB zip in the share sheet
+    (`phase4g-diagnostics-export-share.png`): summary (app/iOS version, device, accounts' servers and Mattermost
+    versions and sync state, passcode on/off, managed keys in words), the MetricKit reports (synthetic ones from the
+    debug remote: the simulator delivers none) and 12 MB of the newest app/extension logs redacted
+    (`phase4g/diagnostics-export.md`: 0 Mattermost ids left, 5,321 pseudonyms, no emails, no tokens).
+    **Found and fixed:** the first export never finished — its value was delivered after its completion on a concurrent
+    queue (now a serial queue), and redacting a 2 MB log in one piece was quadratic (now line by line: 4 MB in 1.9 s
+    unoptimized, tested). **Log audit:** no password or token in the raw logs of the app and extensions (grep for the
+    dev passwords, `Bearer`, `MMAUTHTOKEN`) and no message text; changed lines that logged search terms, mention keys,
+    autocomplete queries, usernames (login, profile, custom status expiry), a custom status text, a dialog title, a
+    new channel's name, and the full APNs token (release builds log its first 8 hex digits).
+  - **4F leftovers:** VoiceOver: chat list rows read "Bob Brennan, Do Not Disturb", "Dave …, Away" (bob DND and dave
+    away via REST); the DM header reads "Info, Do Not Disturb" (`phase4g/a11y-status-dots.txt`; AXe's point query at
+    the avatar finds an unlabelled group, as it did for 4C's "Info" label — AXe skips Telegram's bar nodes). Deleting
+    the other person's DM post: not offered to alice (`actions`: `deleteGlobally: false`), offered to a system admin
+    (sysadmin's DM with alice: `true`, from `delete_others_posts` of the system roles). Own DM posts can be deleted for
+    everyone at any age (Telegram's 2-day limit for private chats lifted).
+  - **Checks:** parked Telegram requests 0 after the flows and after a 5-minute `tools/relay-session.py` (footprint
+    146 MB); MattermostKit 212 tests (5 skipped; 25 new), MattermostSyncCore 181 (10 new), MattermostPush 41,
+    MattermostShare 9 (1 skipped); `release_sim_arm64` of the final tree
+    (`appstore-configuration.json`, 11 min): `tools/relay-release-audit.sh` (5 new 4G debug markers) 0 debug markers,
+    no ATS exception for the app's own connections, privacy manifests present, 0 closed-source/analytics markers; the
+    managed configuration, pinning and diagnostics code is in the release binaries (MetricKit linked, no new
+    required-reason API category).
+  - **Gaps / not verified:** a real MDM (delivery, change notification while running), iOS's managed pasteboard
+    restriction, Face ID unlock, the system's authentication prompt for notification actions, MetricKit payloads (only
+    on a device: Xcode → Debug → Simulate MetricKit Payloads), jailbreak detection on a jailbroken device; the copy
+    clear on background only clears an unchanged pasteboard (the simulator's Mac sync changes it); content arriving
+    through Universal Clipboard while Relay is open counts as Relay's; extensions use a new configuration only after the
+    app ran once; SSO sign-in pages and links opened in a browser are not pinned; the 4F avatar of bob's DM row is
+    still blank (pre-existing, not investigated).
+  - Upstream files touched (all `// MATTERMOST:`): `AppLock/AppLock.swift` (cover when inactive),
+    `SettingsUI/…/PasscodeOptionsController.swift` (required passcode), `SettingsUI/RelayAboutController.swift`
+    (Diagnostics row), `ChatTextInputPanelNode.swift` (paste), `ChatListUI/…/ChatListItem.swift` (status words),
+    `ChatAvatarNavigationNode.swift` + `Chat/ChatControllerLoadDisplayNode.swift` (status value), `TelegramUI/AppDelegate.swift`
+    (managed configuration start, notification action options), `TelegramUI/RelayDebugScreens.swift` (debug screens);
+    new `AccountContext/MattermostManagedAppPolicy.swift`, `MattermostUIHooks.swift` (one hook);
+    `Telegram-iOS/Relay.strings` (4G block); `tools/relay-release-audit.sh` (4G debug markers).
+  - Dev server state left by 4G: DM alice↔bob: "4G reply from a notification while Relay is locked" (alice, via the
+    notification Reply); bob and dave set DND/away and back to online (now manual online); extra REST sessions for
+    alice, bob, dave (scratch logins); sysadmin signed in through Relay twice (127.0.0.1:8065, 127.0.0.1:8443) and both
+    sessions logged out again. No server settings changed. Simulator: managed configuration deleted, passcode off,
+    accounts alice/bob/dave; the throwaway "Relay 4G Test CA" stays trusted in its keychain; the Mac's pasteboard was
+    used for the paste check (text restored).

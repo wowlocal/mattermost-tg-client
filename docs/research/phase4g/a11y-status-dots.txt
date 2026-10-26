@@ -1,0 +1,10 @@
+# Phase 4G: VoiceOver status of the 4F dots (debug remote ax-tree, alice; bob DND, dave away via REST)
+
+## DM header (chat with bob)
+{'label': 'Back', 'value': None, 'traits': ['button'], 'frame': [16, 64, 44, 44]}
+{'label': 'Info', 'value': 'Do Not Disturb', 'traits': ['button'], 'frame': [342, 64, 44, 44]}
+
+## Chat list rows (label)
+'Bob Brennan\nDo Not Disturb'
+'Bob Brennan\nDo Not Disturb'
+'Dave Okafor-Lindqvist\nAway\n4 unread messages'
