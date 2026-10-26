@@ -36,6 +36,9 @@ public enum TextEntityType: Hashable, Sendable {
     /// A heading (`#`…`######`, setext `===`/`---`), level 1–6. Always paired with `.bold` over the same range, so
     /// renderers without heading sizes show bold text (Telegram: `MattermostCustomEntity.heading`).
     case heading(level: Int)
+    /// The colour of a block quote over the same range (`0xRRGGBB`): a Slack-style attachment's colour bar (4F;
+    /// Telegram: `MattermostCustomEntity.quoteColor`). Renderers without it show the theme's quote colour.
+    case quoteColor(rgb: UInt32)
 
     /// Stable order used to sort entities that share a range (outer first).
     var sortRank: Int {
@@ -56,6 +59,7 @@ public enum TextEntityType: Hashable, Sendable {
         case .specialMention: return 13
         case .hashtag: return 14
         case .customEmoji: return 15
+        case .quoteColor: return 16
         }
     }
 }

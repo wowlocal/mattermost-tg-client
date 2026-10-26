@@ -162,6 +162,45 @@ public final class MattermostURLImageResource: TelegramMediaResource {
     }
 }
 
+/// A small picture shown inline in a message's text (4F): a Slack-style attachment's `author_icon` (round),
+/// `footer_icon` and `thumb_url`, drawn as a static custom-emoji image (a transparent square WebP, see
+/// `MattermostReactionImages.iconFile`). Loaded like `MattermostURLImageResource`: from the server itself, or through
+/// its image proxy, never from a third-party site.
+public final class MattermostIconResource: TelegramMediaResource {
+    public let url: String
+    public let round: Bool
+
+    public init(url: String, round: Bool) {
+        self.url = url
+        self.round = round
+    }
+
+    public required init(decoder: PostboxDecoder) {
+        self.url = decoder.decodeStringForKey("u", orElse: "")
+        self.round = decoder.decodeInt32ForKey("r", orElse: 0) != 0
+    }
+
+    public func encode(_ encoder: PostboxEncoder) {
+        encoder.encodeString(self.url, forKey: "u")
+        encoder.encodeInt32(self.round ? 1 : 0, forKey: "r")
+    }
+
+    public var size: Int64? {
+        return nil
+    }
+
+    public var id: MediaResourceId {
+        return MediaResourceId("mm-icon-\(self.url.persistentHashString)-\(self.round ? 1 : 0)")
+    }
+
+    public func isEqual(to: MediaResource) -> Bool {
+        guard let to = to as? MattermostIconResource else {
+            return false
+        }
+        return self.url == to.url && self.round == to.round
+    }
+}
+
 extension String {
     /// FNV-1a of the UTF-8 bytes as hex: stable across launches (unlike `hashValue`).
     var persistentHashString: String {
@@ -178,6 +217,7 @@ private var mattermostDeclaredEncodables: Void = {
     declareEncodable(MattermostFileResource.self, f: { MattermostFileResource(decoder: $0) })
     declareEncodable(MattermostAvatarResource.self, f: { MattermostAvatarResource(decoder: $0) })
     declareEncodable(MattermostURLImageResource.self, f: { MattermostURLImageResource(decoder: $0) })
+    declareEncodable(MattermostIconResource.self, f: { MattermostIconResource(decoder: $0) })
     return
 }()
 
@@ -247,7 +287,13 @@ public func mattermostFetchResource(postbox: Postbox, resource: MediaResource) -
         return signal
     }
     if let resource = resource as? MattermostURLImageResource {
-        return fetchURLImage(postbox: postbox, resource: resource)
+        return fetchURLImage(postbox: postbox, url: resource.url, resourceId: resource.id.stringRepresentation, transform: flattenedImageData)
+    }
+    if let resource = resource as? MattermostIconResource {
+        let round = resource.round
+        return fetchURLImage(postbox: postbox, url: resource.url, resourceId: resource.id.stringRepresentation, transform: { data in
+            return MattermostReactionImages.iconWebPData(data, round: round) ?? Data()
+        })
     }
     let request: MattermostResource
     if let resource = resource as? MattermostFileResource {
@@ -282,22 +328,21 @@ public func mattermostFetchResource(postbox: Postbox, resource: MediaResource) -
     }
 }
 
-/// A `MattermostURLImageResource`: a plain GET on the server's origin (static images need no session), or the
-/// server's image proxy (with the session) for an image elsewhere.
-private func fetchURLImage(postbox: Postbox, resource: MattermostURLImageResource) -> Signal<MediaResourceDataFetchResult, MediaResourceDataFetchError> {
-    let resourceId = resource.id.stringRepresentation
+/// A `MattermostURLImageResource` (or an icon, 4F): a plain GET on the server's origin (static images need no
+/// session), or the server's image proxy (with the session) for an image elsewhere; `transform` makes the stored data.
+private func fetchURLImage(postbox: Postbox, url resourceURL: String, resourceId: String, transform: @escaping (Data) -> Data) -> Signal<MediaResourceDataFetchResult, MediaResourceDataFetchError> {
     return MattermostResourceClients.shared.client(postbox: postbox)
     |> castError(MediaResourceDataFetchError.self)
     |> mapToSignal { client -> Signal<MediaResourceDataFetchResult, MediaResourceDataFetchError> in
-        var sameOrigin = MattermostURLImageResource.sameOriginURL(resource.url, serverURL: client.serverURL)
-        var externalURL = resource.url
+        var sameOrigin = MattermostURLImageResource.sameOriginURL(resourceURL, serverURL: client.serverURL)
+        var externalURL = resourceURL
         if let url = sameOrigin, let proxied = MattermostURLImageResource.proxiedTarget(url) {
             // The server already pointed it at its image proxy (with the proxy on, it rewrites attachment and
             // markdown images): that endpoint needs the session.
             externalURL = proxied
             sameOrigin = nil
         } else if sameOrigin == nil && !MattermostResourceClients.shared.hasImageProxy(postbox: postbox) {
-            MMLog.log("fetch \(resourceId): \(resource.url) is not on the server and the server has no image proxy; not loaded")
+            MMLog.log("fetch \(resourceId): \(resourceURL) is not on the server and the server has no image proxy; not loaded")
             return .fail(.generic)
         }
         let proxiedURL = externalURL
@@ -319,7 +364,10 @@ private func fetchURLImage(postbox: Postbox, resource: MattermostURLImageResourc
                             throw URLError(.badServerResponse)
                         }
                     }
-                    let image = flattenedImageData(data)
+                    let image = transform(data)
+                    guard !image.isEmpty else {
+                        throw URLError(.cannotDecodeContentData)
+                    }
                     subscriber.putNext(.reset)
                     subscriber.putNext(.dataPart(resourceOffset: 0, data: image, range: 0 ..< Int64(image.count), complete: true))
                     subscriber.putCompletion()

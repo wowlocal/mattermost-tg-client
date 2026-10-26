@@ -149,6 +149,12 @@ enum PostConverter {
                     break
                 }
             }
+            // Attachment icons (4F: `author_icon`, `footer_icon`, `thumb_url`) as inline custom emoji images.
+            for icon in builder.icons {
+                let file = MattermostReactionImages.iconFile(url: icon.url, round: icon.round)
+                result.customEmojiFiles.append(file)
+                entities.append(MessageTextEntity(range: icon.range, type: .CustomEmoji(stickerPack: nil, fileId: file.fileId.id)))
+            }
             if post.type == "me", !text.isEmpty {
                 entities.insert(MessageTextEntity(range: 0 ..< (text as NSString).length, type: .Italic), at: 0)
             }
@@ -402,6 +408,9 @@ enum PostConverter {
         case let .heading(level):
             // Larger text (TextFormat renders the custom entity); the `.bold` entity over the same range stays.
             type = .Custom(type: MattermostCustomEntity.heading(level: level))
+        case let .quoteColor(rgb):
+            // An attachment's colour bar (4F): TextFormat colours the block quote over the same range.
+            type = .Custom(type: MattermostCustomEntity.quoteColor(rgb: rgb))
         }
         return MessageTextEntity(range: entity.range, type: type)
     }

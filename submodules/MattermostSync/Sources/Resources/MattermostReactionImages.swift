@@ -64,6 +64,65 @@ enum MattermostReactionImages {
         )
     }
 
+    // MARK: Inline icons (4F)
+
+    private static let iconRangeTag: Int64 = 0x4D4943 // "MIC"
+
+    /// The custom-emoji file of an inline picture (an attachment's `author_icon`, `footer_icon`, `thumb_url`): the
+    /// image itself is in the resource (`MattermostIconResource`), so no registry is needed after a relaunch.
+    static func iconFile(url: String, round: Bool) -> TelegramMediaFile {
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in (url + (round ? "#round" : "")).utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x100000001b3
+        }
+        let mask = (UInt64(1) << UInt64(hashBits)) - 1
+        let id = (iconRangeTag << hashBits) | Int64(bitPattern: hash & mask)
+        return TelegramMediaFile(
+            fileId: MediaId(namespace: Namespaces.Media.CloudFile, id: id),
+            partialReference: nil,
+            resource: MattermostIconResource(url: url, round: round),
+            previewRepresentations: [],
+            videoThumbnails: [],
+            immediateThumbnailData: nil,
+            mimeType: "image/webp",
+            size: nil,
+            attributes: [
+                .FileName(fileName: "icon.webp"),
+                .CustomEmoji(isPremium: false, isSingleColor: false, alt: round ? "👤" : "🖼", packReference: nil),
+                .ImageSize(size: PixelDimensions(width: Int32(pixelSize), height: Int32(pixelSize)))
+            ],
+            alternativeRepresentations: []
+        )
+    }
+
+    /// An icon's image as a transparent square WebP (aspect fit; clipped to a circle when `round`).
+    static func iconWebPData(_ data: Data, round: Bool) -> Data? {
+        guard let image = UIImage(data: data), image.size.width > 0, image.size.height > 0 else {
+            return nil
+        }
+        let side = CGFloat(self.pixelSize)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1.0
+        format.opaque = false
+        let rendered = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format).image { context in
+            let box = CGRect(x: 0.0, y: 0.0, width: side, height: side)
+            if round {
+                context.cgContext.addEllipse(in: box)
+                context.cgContext.clip()
+                // A round icon fills its circle.
+                let scale = max(box.width / image.size.width, box.height / image.size.height)
+                let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+                image.draw(in: CGRect(x: box.midX - size.width / 2.0, y: box.midY - size.height / 2.0, width: size.width, height: size.height))
+            } else {
+                let scale = min(box.width / image.size.width, box.height / image.size.height)
+                let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+                image.draw(in: CGRect(x: box.midX - size.width / 2.0, y: box.midY - size.height / 2.0, width: size.width, height: size.height))
+            }
+        }
+        return try? WebP.convert(toWebP: rendered, quality: 0.9)
+    }
+
     static func value(forFileId fileId: Int64) -> String? {
         return self.registry.with { $0[fileId] }
     }

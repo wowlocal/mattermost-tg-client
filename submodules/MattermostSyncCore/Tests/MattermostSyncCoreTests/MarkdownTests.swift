@@ -296,6 +296,35 @@ final class MarkdownTests: XCTestCase {
         XCTAssertEqual(MattermostCustomEntity.headingScale(level: 6), 1.0)
     }
 
+    func testAttachmentColorEntityCodes() {
+        for rgb: UInt32 in [0x000000, 0xFF0000, 0x00C100, 0xFFFFFF, 0x123456] {
+            let type = MattermostCustomEntity.quoteColor(rgb: rgb)
+            XCTAssertGreaterThan(type, 0)
+            XCTAssertEqual(MattermostCustomEntity.quoteColorRGB(type), rgb)
+            // Never a heading.
+            XCTAssertNil(MattermostCustomEntity.headingLevel(type))
+        }
+        for level in 1 ... 6 {
+            XCTAssertNil(MattermostCustomEntity.quoteColorRGB(MattermostCustomEntity.heading(level: level)))
+        }
+        XCTAssertNil(MattermostCustomEntity.quoteColorRGB(1))
+        XCTAssertNil(MattermostCustomEntity.quoteColorRGB(2))
+        XCTAssertEqual(MattermostCustomEntity.quoteColorRGB(MattermostCustomEntity.quoteColor(rgb: 0xFF_123456)), 0x123456)
+    }
+
+    func testAttachmentColors() {
+        XCTAssertEqual(MattermostCustomEntity.attachmentColor("#FF0000"), 0xFF0000)
+        XCTAssertEqual(MattermostCustomEntity.attachmentColor("ff8800"), 0xFF8800)
+        XCTAssertEqual(MattermostCustomEntity.attachmentColor(" #0f8 "), 0x00FF88)
+        XCTAssertEqual(MattermostCustomEntity.attachmentColor("good"), 0x00C100)
+        XCTAssertEqual(MattermostCustomEntity.attachmentColor("Warning"), 0xDEDE01)
+        XCTAssertEqual(MattermostCustomEntity.attachmentColor("danger"), 0xE40303)
+        XCTAssertNil(MattermostCustomEntity.attachmentColor(""))
+        XCTAssertNil(MattermostCustomEntity.attachmentColor("#12345"))
+        XCTAssertNil(MattermostCustomEntity.attachmentColor("#GGGGGG"))
+        XCTAssertNil(MattermostCustomEntity.attachmentColor("blue"))
+    }
+
     func testLists() {
         // Continuation lines and nested blocks are indented by whitespace about as wide as the prefix:
         // "• " → en space + space, "1. " → en space (narrow digit) + punctuation space + space.
