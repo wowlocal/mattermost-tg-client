@@ -1,0 +1,16 @@
+{
+  "event": "post_deleted",
+  "data": {
+    "post": "{\"id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"create_at\":1792998039320,\"update_at\":1792998044185,\"edit_at\":1792998041394,\"delete_at\":0,\"is_pinned\":false,\"user_id\":\"9ik4bw7aybbqupuhs9fjsprsie\",\"channel_id\":\"4gq5dooa3iguik5izypw3ugjmh\",\"root_id\":\"\",\"original_id\":\"\",\"message\":\"fixture capture: hello from bob :wave: (edited)\",\"type\":\"\",\"props\":{},\"hashtags\":\"\",\"file_ids\":[],\"pending_post_id\":\"\",\"reply_count\":2,\"last_reply_at\":0,\"participants\":null}"
+  },
+  "broadcast": {
+    "omit_users": null,
+    "user_id": "",
+    "channel_id": "4gq5dooa3iguik5izypw3ugjmh",
+    "team_id": "",
+    "connection_id": "",
+    "omit_connection_id": "",
+    "contains_sanitized_data": true
+  },
+  "seq": 10
+}

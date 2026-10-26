@@ -1,0 +1,22 @@
+[
+  {
+    "team_id": "i4a7jt5r8pn59kxp8pfsb88jqa",
+    "msg_count": 10,
+    "mention_count": 1,
+    "mention_count_root": 1,
+    "msg_count_root": 10,
+    "thread_count": 0,
+    "thread_mention_count": 0,
+    "thread_urgent_mention_count": 0
+  },
+  {
+    "team_id": "x3wnh555offqbkfx9usn17xo1y",
+    "msg_count": 56,
+    "mention_count": 4,
+    "mention_count_root": 4,
+    "msg_count_root": 51,
+    "thread_count": 3,
+    "thread_mention_count": 1,
+    "thread_urgent_mention_count": 0
+  }
+]

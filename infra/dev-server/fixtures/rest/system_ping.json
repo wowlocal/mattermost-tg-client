@@ -1,0 +1,10 @@
+{
+  "ActiveSearchBackend": "database",
+  "AndroidLatestVersion": "",
+  "AndroidMinVersion": "",
+  "IosLatestVersion": "",
+  "IosMinVersion": "",
+  "database_status": "OK",
+  "filestore_status": "OK",
+  "status": "OK"
+}

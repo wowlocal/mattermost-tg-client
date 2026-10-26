@@ -1,0 +1,135 @@
+{
+  "order": [
+    "3dfsnqf91idg3pd9te5x8mr4eo",
+    "74ta1rti8bn37qaayfdydwhq9a"
+  ],
+  "posts": {
+    "3dfsnqf91idg3pd9te5x8mr4eo": {
+      "id": "3dfsnqf91idg3pd9te5x8mr4eo",
+      "create_at": 1792998001542,
+      "update_at": 1792998022498,
+      "edit_at": 0,
+      "delete_at": 0,
+      "is_pinned": true,
+      "user_id": "9ik4bw7aybbqupuhs9fjsprsie",
+      "channel_id": "fmmhkpzzytfr5f1mgp71xpcsmo",
+      "root_id": "",
+      "original_id": "",
+      "message": "## Release 2.4.0 :tada:\n\n### Highlights\n- Collapsed reply threads in the chat list\n- Custom emoji picker\n- Cold start is **38% faster**\n\n### Fixes\n1. Crash when opening a permalink to a deleted post\n2. Unread badge stuck after marking a thread as read\n3. Images with EXIF rotation shown sideways\n\n| Platform | Min version | Status |\n|---|---|---|\n| iOS | 16.0 | :white_check_mark: |\n| iPadOS | 16.0 | :white_check_mark: |\n| macOS (Catalyst) | n/a | :x: |\n\nFull changelog: https://example.com/changelog/2.4.0",
+      "type": "",
+      "props": {},
+      "hashtags": "",
+      "file_ids": [],
+      "pending_post_id": "",
+      "has_reactions": true,
+      "reply_count": 0,
+      "last_reply_at": 0,
+      "participants": null,
+      "metadata": {
+        "embeds": [
+          {
+            "type": "link",
+            "url": "https://example.com/changelog/2.4.0"
+          }
+        ],
+        "emojis": [
+          {
+            "id": "phkpc7abrtg7dkuks1az39m4aw",
+            "create_at": 1792997986097,
+            "update_at": 1792997986097,
+            "delete_at": 0,
+            "creator_id": "k65qqt958pnrtxetxp6j5m3sec",
+            "name": "lgtm"
+          }
+        ],
+        "reactions": [
+          {
+            "user_id": "x6y9ko87wtrq7m9k3dbk3qt7me",
+            "post_id": "3dfsnqf91idg3pd9te5x8mr4eo",
+            "emoji_name": "tada",
+            "create_at": 1792998002178,
+            "update_at": 1792998002178,
+            "delete_at": 0,
+            "remote_id": "",
+            "channel_id": "fmmhkpzzytfr5f1mgp71xpcsmo"
+          },
+          {
+            "user_id": "dbqu13jbwpfo3rwphe3nzpzrer",
+            "post_id": "3dfsnqf91idg3pd9te5x8mr4eo",
+            "emoji_name": "tada",
+            "create_at": 1792998002183,
+            "update_at": 1792998002183,
+            "delete_at": 0,
+            "remote_id": "",
+            "channel_id": "fmmhkpzzytfr5f1mgp71xpcsmo"
+          },
+          {
+            "user_id": "ss7wxdxkkpyrjy568rtzqy6nua",
+            "post_id": "3dfsnqf91idg3pd9te5x8mr4eo",
+            "emoji_name": "tada",
+            "create_at": 1792998002187,
+            "update_at": 1792998002187,
+            "delete_at": 0,
+            "remote_id": "",
+            "channel_id": "fmmhkpzzytfr5f1mgp71xpcsmo"
+          },
+          {
+            "user_id": "ss7wxdxkkpyrjy568rtzqy6nua",
+            "post_id": "3dfsnqf91idg3pd9te5x8mr4eo",
+            "emoji_name": "rocket",
+            "create_at": 1792998002197,
+            "update_at": 1792998002197,
+            "delete_at": 0,
+            "remote_id": "",
+            "channel_id": "fmmhkpzzytfr5f1mgp71xpcsmo"
+          },
+          {
+            "user_id": "dbqu13jbwpfo3rwphe3nzpzrer",
+            "post_id": "3dfsnqf91idg3pd9te5x8mr4eo",
+            "emoji_name": "lgtm",
+            "create_at": 1792998002207,
+            "update_at": 1792998002207,
+            "delete_at": 0,
+            "remote_id": "",
+            "channel_id": "fmmhkpzzytfr5f1mgp71xpcsmo"
+          },
+          {
+            "user_id": "x6y9ko87wtrq7m9k3dbk3qt7me",
+            "post_id": "3dfsnqf91idg3pd9te5x8mr4eo",
+            "emoji_name": "heart",
+            "create_at": 1792998002215,
+            "update_at": 1792998002215,
+            "delete_at": 0,
+            "remote_id": "",
+            "channel_id": "fmmhkpzzytfr5f1mgp71xpcsmo"
+          }
+        ]
+      }
+    },
+    "74ta1rti8bn37qaayfdydwhq9a": {
+      "id": "74ta1rti8bn37qaayfdydwhq9a",
+      "create_at": 1792998002076,
+      "update_at": 1792998022509,
+      "edit_at": 0,
+      "delete_at": 0,
+      "is_pinned": true,
+      "user_id": "dbqu13jbwpfo3rwphe3nzpzrer",
+      "channel_id": "fmmhkpzzytfr5f1mgp71xpcsmo",
+      "root_id": "",
+      "original_id": "",
+      "message": "Release checklist :clipboard: (pinned)\n- [x] Freeze strings\n- [x] Update App Store screenshots\n- [ ] Smoke test on iPhone SE and iPad\n- [ ] Submit for review",
+      "type": "",
+      "props": {},
+      "hashtags": "",
+      "file_ids": [],
+      "pending_post_id": "",
+      "reply_count": 0,
+      "last_reply_at": 0,
+      "participants": null,
+      "metadata": {}
+    }
+  },
+  "next_post_id": "",
+  "prev_post_id": "",
+  "first_inaccessible_post_time": 0
+}

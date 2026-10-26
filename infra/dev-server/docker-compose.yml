@@ -1,0 +1,142 @@
+# Local Mattermost dev server for the iOS client (Telegram-iOS fork).
+# DEVELOPMENT ONLY. Do not expose to untrusted networks.
+#
+#   ./up.sh       start (creates .env if missing)
+#   ./seed.py     seed test data (idempotent)
+#   ./down.sh     stop, keep data
+#   ./reset.sh    wipe this project's volumes, start, seed
+#
+# Everything is namespaced under the compose project "mmdev"
+# (containers mmdev-*, volumes mmdev_*, network mmdev_default).
+
+name: mmdev
+
+services:
+  postgres:
+    # Mattermost's official docker repo recommends Postgres 18 for v11.7 ESR.
+    image: postgres:18.6-alpine
+    restart: unless-stopped
+    environment:
+      TZ: UTC
+      POSTGRES_USER: ${POSTGRES_USER:?set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-mattermost}
+    volumes:
+      # Postgres 18 images keep PGDATA under /var/lib/postgresql/18/docker.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  mattermost:
+    # Current Extended Support Release (v11.7 ESR, supported until 2027-05-15),
+    # Team Edition: the unlicensed Enterprise build ("Mattermost Entry") hides
+    # history beyond the most recent 10,000 messages, which would break the
+    # firehose channel. The image is amd64-only; OrbStack runs it via Rosetta.
+    image: mattermost/mattermost-team-edition:11.7.14
+    platform: linux/amd64
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      # 127.0.0.1 by default. Set MM_BIND_ADDRESS=0.0.0.0 in .env to reach the
+      # server from a device on the LAN (see README).
+      - "${MM_BIND_ADDRESS:-127.0.0.1}:${MM_PORT:-8065}:8065"
+    volumes:
+      - mm-config:/mattermost/config
+      - mm-data:/mattermost/data
+      - mm-logs:/mattermost/logs
+      - mm-plugins:/mattermost/plugins
+      - mm-client-plugins:/mattermost/client/plugins
+    environment:
+      TZ: UTC
+      MM_SQLSETTINGS_DRIVERNAME: postgres
+      MM_SQLSETTINGS_DATASOURCE: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mattermost}?sslmode=disable&connect_timeout=10"
+
+      # --- Service ---------------------------------------------------------
+      MM_SERVICESETTINGS_SITEURL: ${MM_SITE_URL:-http://localhost:8065}
+      MM_SERVICESETTINGS_LISTENADDRESS: ":8065"
+      # Local mode: mmctl --local inside the container (socket in /var/tmp).
+      MM_SERVICESETTINGS_ENABLELOCALMODE: "true"
+      MM_SERVICESETTINGS_ENABLEUSERACCESSTOKENS: "true"
+      MM_SERVICESETTINGS_ENABLEBOTACCOUNTCREATION: "true"
+      MM_SERVICESETTINGS_ENABLECUSTOMEMOJI: "true"
+      MM_SERVICESETTINGS_ENABLEEMOJIPICKER: "true"
+      MM_SERVICESETTINGS_COLLAPSEDTHREADS: default_on
+      MM_SERVICESETTINGS_THREADAUTOFOLLOW: "true"
+      MM_SERVICESETTINGS_ENABLELINKPREVIEWS: "true"
+      MM_SERVICESETTINGS_ENABLEPERMALINKPREVIEWS: "true"
+      MM_SERVICESETTINGS_ENABLESVGS: "true"
+      MM_SERVICESETTINGS_ENABLELATEX: "true"
+      MM_SERVICESETTINGS_ENABLEINLINELATEX: "true"
+      MM_SERVICESETTINGS_ENABLEINCOMINGWEBHOOKS: "true"
+      MM_SERVICESETTINGS_ENABLEOUTGOINGWEBHOOKS: "true"
+      MM_SERVICESETTINGS_ENABLECOMMANDS: "true"
+      MM_SERVICESETTINGS_ENABLEPOSTUSERNAMEOVERRIDE: "true"
+      MM_SERVICESETTINGS_ENABLEPOSTICONOVERRIDE: "true"
+      MM_SERVICESETTINGS_POSTEDITTIMELIMIT: "-1"
+      MM_SERVICESETTINGS_ALLOWSYNCEDDRAFTS: "true"
+      MM_SERVICESETTINGS_POSTPRIORITY: "true"
+      MM_SERVICESETTINGS_ENABLEONBOARDINGFLOW: "false"
+      MM_SERVICESETTINGS_ENABLETUTORIAL: "false"
+      MM_SERVICESETTINGS_ENABLEDESKTOPLANDINGPAGE: "false"
+      MM_SERVICESETTINGS_ENABLESECURITYFIXALERT: "false"
+      # Let the server fetch link/image metadata from itself (e.g. images
+      # under http://localhost:8065/static/...). Dev only.
+      MM_SERVICESETTINGS_ALLOWEDUNTRUSTEDINTERNALCONNECTIONS: "localhost 127.0.0.1"
+
+      # --- Teams / users ---------------------------------------------------
+      MM_TEAMSETTINGS_ENABLEOPENSERVER: "true"
+      MM_TEAMSETTINGS_ENABLEUSERCREATION: "true"
+      MM_TEAMSETTINGS_ENABLECUSTOMUSERSTATUSES: "true"
+      MM_TEAMSETTINGS_EXPERIMENTALVIEWARCHIVEDCHANNELS: "true"
+      MM_TEAMSETTINGS_MAXUSERSPERTEAM: "1000"
+      MM_EMAILSETTINGS_ENABLESIGNUPWITHEMAIL: "true"
+      MM_EMAILSETTINGS_ENABLESIGNINWITHEMAIL: "true"
+      MM_EMAILSETTINGS_ENABLESIGNINWITHUSERNAME: "true"
+      MM_EMAILSETTINGS_REQUIREEMAILVERIFICATION: "false"
+      MM_EMAILSETTINGS_SENDEMAILNOTIFICATIONS: "false"
+      # No push proxy yet; flip to true and set PushNotificationServer once the
+      # dev push proxy exists.
+      MM_EMAILSETTINGS_SENDPUSHNOTIFICATIONS: "false"
+
+      # --- Files -----------------------------------------------------------
+      MM_FILESETTINGS_ENABLEFILEATTACHMENTS: "true"
+      MM_FILESETTINGS_ENABLEMOBILEUPLOAD: "true"
+      MM_FILESETTINGS_ENABLEMOBILEDOWNLOAD: "true"
+      MM_FILESETTINGS_ENABLEPUBLICLINK: "true"
+      MM_FILESETTINGS_MAXFILESIZE: "104857600" # 100 MiB
+
+      # --- Local seeding: no rate limiting ---------------------------------
+      MM_RATELIMITSETTINGS_ENABLE: "false"
+
+      # --- No telemetry / phoning home -------------------------------------
+      MM_LOGSETTINGS_ENABLEDIAGNOSTICS: "false"
+      MM_LOGSETTINGS_ENABLESENTRY: "false"
+      MM_PLUGINSETTINGS_ENABLEMARKETPLACE: "false"
+      MM_PLUGINSETTINGS_ENABLEREMOTEMARKETPLACE: "false"
+      MM_ANNOUNCEMENTSETTINGS_ADMINNOTICESENABLED: "false"
+      MM_ANNOUNCEMENTSETTINGS_USERNOTICESENABLED: "false"
+
+      # --- Logging ---------------------------------------------------------
+      MM_LOGSETTINGS_CONSOLELEVEL: INFO
+      MM_LOGSETTINGS_CONSOLEJSON: "false"
+    healthcheck:
+      # Distroless image: no shell/curl, so ask the server over the local socket.
+      test: ["CMD", "/mattermost/bin/mmctl", "system", "status", "--local"]
+      interval: 5s
+      timeout: 10s
+      retries: 60
+      start_period: 30s
+
+volumes:
+  postgres-data:
+  mm-config:
+  mm-data:
+  mm-logs:
+  mm-plugins:
+  mm-client-plugins:

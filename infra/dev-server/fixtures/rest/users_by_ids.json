@@ -1,0 +1,128 @@
+[
+  {
+    "id": "9ik4bw7aybbqupuhs9fjsprsie",
+    "create_at": 1792997983212,
+    "update_at": 1792998031111,
+    "delete_at": 0,
+    "username": "bob",
+    "auth_data": "",
+    "auth_service": "",
+    "email": "bob@example.com",
+    "nickname": "",
+    "first_name": "Bob",
+    "last_name": "Brennan",
+    "position": "Backend Lead",
+    "roles": "system_user",
+    "last_picture_update": 1792997984024,
+    "locale": "en",
+    "timezone": {
+      "automaticTimezone": "",
+      "manualTimezone": "",
+      "useAutomaticTimezone": "true"
+    },
+    "remote_id": "",
+    "disable_welcome_email": false
+  },
+  {
+    "id": "pq8g9zg3ipf7xehxhiptt3hi5h",
+    "create_at": 1792997985643,
+    "update_at": 1792997986004,
+    "delete_at": 0,
+    "username": "buildbot",
+    "auth_data": "",
+    "auth_service": "",
+    "email": "buildbot@localhost",
+    "nickname": "",
+    "first_name": "Build Bot",
+    "last_name": "",
+    "position": "",
+    "roles": "system_user",
+    "last_picture_update": 1792997985730,
+    "locale": "en",
+    "timezone": {
+      "automaticTimezone": "",
+      "manualTimezone": "",
+      "useAutomaticTimezone": "true"
+    },
+    "is_bot": true,
+    "bot_description": "CI/CD notifications and interactive deploy approvals (seeded)",
+    "disable_welcome_email": false
+  },
+  {
+    "id": "x6y9ko87wtrq7m9k3dbk3qt7me",
+    "create_at": 1792997982387,
+    "update_at": 1792998030723,
+    "delete_at": 0,
+    "username": "alice",
+    "auth_data": "",
+    "auth_service": "",
+    "email": "alice@example.com",
+    "nickname": "Al",
+    "first_name": "Alice",
+    "last_name": "Anderson",
+    "position": "iOS Engineer",
+    "roles": "system_user",
+    "last_picture_update": 1792997983203,
+    "locale": "en",
+    "timezone": {
+      "automaticTimezone": "",
+      "manualTimezone": "",
+      "useAutomaticTimezone": "true"
+    },
+    "remote_id": "",
+    "disable_welcome_email": false
+  },
+  {
+    "id": "dbqu13jbwpfo3rwphe3nzpzrer",
+    "create_at": 1792997984033,
+    "update_at": 1792998032093,
+    "delete_at": 0,
+    "username": "carol",
+    "auth_data": "",
+    "auth_service": "",
+    "email": "carol@example.com",
+    "nickname": "CJ",
+    "first_name": "Carol",
+    "last_name": "Núñez",
+    "position": "Product Designer",
+    "roles": "system_user",
+    "props": {
+      "customStatus": "{\"emoji\":\"art\",\"text\":\"In design review\",\"duration\":\"\",\"expires_at\":\"0001-01-01T00:00:00Z\"}"
+    },
+    "last_picture_update": 1792997984861,
+    "locale": "en",
+    "timezone": {
+      "automaticTimezone": "",
+      "manualTimezone": "",
+      "useAutomaticTimezone": "true"
+    },
+    "remote_id": "",
+    "disable_welcome_email": false
+  },
+  {
+    "id": "ss7wxdxkkpyrjy568rtzqy6nua",
+    "create_at": 1792997984871,
+    "update_at": 1792998032099,
+    "delete_at": 0,
+    "username": "dave",
+    "auth_data": "",
+    "auth_service": "",
+    "email": "dave@example.com",
+    "nickname": "",
+    "first_name": "Dave",
+    "last_name": "Okafor-Lindqvist",
+    "position": "Site Reliability Engineer",
+    "roles": "system_user",
+    "props": {
+      "customStatus": "{\"emoji\":\"palm_tree\",\"text\":\"OOO until Monday\",\"duration\":\"\",\"expires_at\":\"0001-01-01T00:00:00Z\"}"
+    },
+    "locale": "en",
+    "timezone": {
+      "automaticTimezone": "",
+      "manualTimezone": "",
+      "useAutomaticTimezone": "true"
+    },
+    "remote_id": "",
+    "disable_welcome_email": false
+  }
+]

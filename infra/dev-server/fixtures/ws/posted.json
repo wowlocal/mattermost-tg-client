@@ -1,0 +1,21 @@
+{
+  "event": "posted",
+  "data": {
+    "channel_display_name": "Sandbox",
+    "channel_name": "sandbox",
+    "channel_type": "O",
+    "post": "{\"id\":\"zgjwsgzgj3nmbjrbxrtbg4jocr\",\"create_at\":1792998039320,\"update_at\":1792998039320,\"edit_at\":0,\"delete_at\":0,\"is_pinned\":false,\"user_id\":\"9ik4bw7aybbqupuhs9fjsprsie\",\"channel_id\":\"4gq5dooa3iguik5izypw3ugjmh\",\"root_id\":\"\",\"original_id\":\"\",\"message\":\"fixture capture: hello from bob :wave:\",\"type\":\"\",\"props\":{},\"hashtags\":\"\",\"file_ids\":[],\"pending_post_id\":\"\",\"remote_id\":\"\",\"reply_count\":0,\"last_reply_at\":0,\"participants\":null,\"metadata\":{}}",
+    "sender_name": "@bob",
+    "set_online": true,
+    "team_id": "x3wnh555offqbkfx9usn17xo1y"
+  },
+  "broadcast": {
+    "omit_users": null,
+    "user_id": "",
+    "channel_id": "4gq5dooa3iguik5izypw3ugjmh",
+    "team_id": "",
+    "connection_id": "",
+    "omit_connection_id": ""
+  },
+  "seq": 2
+}

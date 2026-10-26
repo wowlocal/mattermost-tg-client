@@ -1,0 +1,578 @@
+{
+  "server": "http://localhost:8065",
+  "captured_at": 1792998036568,
+  "rest": [
+    {
+      "file": "rest/users_login.json",
+      "method": "POST",
+      "path": "/api/v4/users/login",
+      "body": {
+        "login_id": "alice",
+        "password": "<see .env>"
+      },
+      "status": 200,
+      "note": "response body only; Token header stripped"
+    },
+    {
+      "file": "rest/system_ping.json",
+      "method": "GET",
+      "path": "/api/v4/system/ping",
+      "query": {
+        "get_server_status": "true"
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/users_me.json",
+      "method": "GET",
+      "path": "/api/v4/users/me",
+      "query": {},
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Etag": "11.7.14.x6y9ko87wtrq7m9k3dbk3qt7me.1792998030723..0.true.true.0",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/users_by_ids.json",
+      "method": "POST",
+      "path": "/api/v4/users/ids",
+      "query": {},
+      "body": [
+        "x6y9ko87wtrq7m9k3dbk3qt7me",
+        "9ik4bw7aybbqupuhs9fjsprsie",
+        "pq8g9zg3ipf7xehxhiptt3hi5h",
+        "dbqu13jbwpfo3rwphe3nzpzrer",
+        "ss7wxdxkkpyrjy568rtzqy6nua"
+      ],
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/users_status_ids.json",
+      "method": "POST",
+      "path": "/api/v4/users/status/ids",
+      "query": {},
+      "body": [
+        "x6y9ko87wtrq7m9k3dbk3qt7me",
+        "9ik4bw7aybbqupuhs9fjsprsie",
+        "pq8g9zg3ipf7xehxhiptt3hi5h",
+        "dbqu13jbwpfo3rwphe3nzpzrer",
+        "ss7wxdxkkpyrjy568rtzqy6nua"
+      ],
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/teams.json",
+      "method": "GET",
+      "path": "/api/v4/users/me/teams",
+      "query": {},
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/team_members.json",
+      "method": "GET",
+      "path": "/api/v4/users/me/teams/members",
+      "query": {},
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/teams_unread.json",
+      "method": "GET",
+      "path": "/api/v4/users/me/teams/unread",
+      "query": {
+        "include_collapsed_threads": "true"
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/channels_engineering.json",
+      "method": "GET",
+      "path": "/api/v4/users/me/teams/x3wnh555offqbkfx9usn17xo1y/channels",
+      "query": {
+        "include_deleted": "true"
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Etag": "11.7.14.1isdixjozigsdbrqcfdm4kgyka.1792998022597.0.24",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/channels_all.json",
+      "method": "GET",
+      "path": "/api/v4/users/me/channels",
+      "query": {
+        "include_deleted": "true"
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/channel_members_engineering.json",
+      "method": "GET",
+      "path": "/api/v4/users/me/teams/x3wnh555offqbkfx9usn17xo1y/channels/members",
+      "query": {},
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/channel_members_all.json",
+      "method": "GET",
+      "path": "/api/v4/users/me/channel_members",
+      "query": {
+        "page": 0,
+        "per_page": 200
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/sidebar_categories_engineering.json",
+      "method": "GET",
+      "path": "/api/v4/users/me/teams/x3wnh555offqbkfx9usn17xo1y/channels/categories",
+      "query": {},
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/channel_by_id.json",
+      "method": "GET",
+      "path": "/api/v4/channels/dtrcjim8sf8h3dsh4kqtepgdzh",
+      "query": {},
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/channel_stats.json",
+      "method": "GET",
+      "path": "/api/v4/channels/dtrcjim8sf8h3dsh4kqtepgdzh/stats",
+      "query": {},
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/posts_page_code_review.json",
+      "method": "GET",
+      "path": "/api/v4/channels/dtrcjim8sf8h3dsh4kqtepgdzh/posts",
+      "query": {
+        "page": 0,
+        "per_page": 60,
+        "collapsedThreads": "true",
+        "collapsedThreadsExtended": "false"
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Etag": "11.7.14.1792998003587",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/posts_page_firehose.json",
+      "method": "GET",
+      "path": "/api/v4/channels/4ca6fbcg1fffmpc8ir5hwztt9w/posts",
+      "query": {
+        "page": 0,
+        "per_page": 60,
+        "collapsedThreads": "true"
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Etag": "11.7.14.1792997997521",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/posts_page_firehose_before.json",
+      "method": "GET",
+      "path": "/api/v4/channels/4ca6fbcg1fffmpc8ir5hwztt9w/posts",
+      "query": {
+        "before": "nta5fh9g97y4fxiokud5wx1hie",
+        "per_page": 60,
+        "collapsedThreads": "true"
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Etag": "11.7.14.1792997997521",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/posts_around_unread_firehose.json",
+      "method": "GET",
+      "path": "/api/v4/users/me/channels/4ca6fbcg1fffmpc8ir5hwztt9w/posts/unread",
+      "query": {
+        "limit_before": 30,
+        "limit_after": 30,
+        "collapsedThreads": "true"
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/posts_page_integrations.json",
+      "method": "GET",
+      "path": "/api/v4/channels/we7rxq8ng7n678d5wgo4mqu8kw/posts",
+      "query": {
+        "page": 0,
+        "per_page": 30,
+        "collapsedThreads": "true"
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Etag": "11.7.14.1792998022469",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/posts_page_dm_bob.json",
+      "method": "GET",
+      "path": "/api/v4/channels/ao55dbeah7bnpdbsswnhy1x4ye/posts",
+      "query": {
+        "page": 0,
+        "per_page": 60
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Etag": "11.7.14.1792998019961",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/thread.json",
+      "method": "GET",
+      "path": "/api/v4/posts/x6b9h6tdipraby95rjs4wmg8nw/thread",
+      "query": {
+        "collapsedThreads": "true"
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Etag": "11.7.14.x6b9h6tdipraby95rjs4wmg8nw.x6b9h6tdipraby95rjs4wmg8nw.1792998022533",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/thread_paged.json",
+      "method": "GET",
+      "path": "/api/v4/posts/x6b9h6tdipraby95rjs4wmg8nw/thread",
+      "query": {
+        "perPage": 20,
+        "direction": "down",
+        "collapsedThreads": "true",
+        "skipFetchThreads": "false"
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Etag": "11.7.14.x6b9h6tdipraby95rjs4wmg8nw.x6b9h6tdipraby95rjs4wmg8nw.1792998022533",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/post_with_files_reactions.json",
+      "method": "GET",
+      "path": "/api/v4/posts/yw64guysmpb79d9ptaaac5wioe",
+      "query": {},
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Etag": "11.7.14.yw64guysmpb79d9ptaaac5wioe.1792998015630",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/post_files_info.json",
+      "method": "GET",
+      "path": "/api/v4/posts/yw64guysmpb79d9ptaaac5wioe/files/info",
+      "query": {},
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Etag": "11.7.14.yw64guysmpb79d9ptaaac5wioe.1792998014475",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/post_reactions.json",
+      "method": "GET",
+      "path": "/api/v4/posts/x6b9h6tdipraby95rjs4wmg8nw/reactions",
+      "query": {},
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/pinned_posts_releases.json",
+      "method": "GET",
+      "path": "/api/v4/channels/fmmhkpzzytfr5f1mgp71xpcsmo/pinned",
+      "query": {},
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Etag": "11.7.14.3dfsnqf91idg3pd9te5x8mr4eo.74ta1rti8bn37qaayfdydwhq9a.1792998022509",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/flagged_posts.json",
+      "method": "GET",
+      "path": "/api/v4/users/me/posts/flagged",
+      "query": {
+        "per_page": 60
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/user_threads.json",
+      "method": "GET",
+      "path": "/api/v4/users/me/teams/x3wnh555offqbkfx9usn17xo1y/threads",
+      "query": {
+        "per_page": 25,
+        "extended": "false"
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/user_thread.json",
+      "method": "GET",
+      "path": "/api/v4/users/me/teams/x3wnh555offqbkfx9usn17xo1y/threads/x6b9h6tdipraby95rjs4wmg8nw",
+      "query": {},
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/custom_emoji.json",
+      "method": "GET",
+      "path": "/api/v4/emoji",
+      "query": {
+        "page": 0,
+        "per_page": 200,
+        "sort": "name"
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/preferences.json",
+      "method": "GET",
+      "path": "/api/v4/users/me/preferences",
+      "query": {},
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/client_config.json",
+      "method": "GET",
+      "path": "/api/v4/config/client",
+      "query": {
+        "format": "old"
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/client_license.json",
+      "method": "GET",
+      "path": "/api/v4/license/client",
+      "query": {
+        "format": "old"
+      },
+      "body": null,
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    },
+    {
+      "file": "rest/error_post_not_found.json",
+      "method": "GET",
+      "path": "/api/v4/posts/zzzzzzzzzzzzzzzzzzzzzzzzzz",
+      "query": {},
+      "body": null,
+      "status": 404,
+      "headers": {
+        "Content-Type": "application/json",
+        "X-Version-Id": "11.7.14.39757492507.2f3e0e118b90658a6c797fa1980916f5d97984913a7aa6355cf7687527ff40a1.false"
+      }
+    }
+  ],
+  "ws": [
+    {
+      "file": "ws/events.json",
+      "note": "full ordered recording"
+    },
+    {
+      "file": "ws/hello.json",
+      "event": "hello",
+      "seq": 0
+    },
+    {
+      "file": "ws/response_seq_1.json",
+      "event": null,
+      "seq": null
+    },
+    {
+      "file": "ws/typing.json",
+      "event": "typing",
+      "seq": 1
+    },
+    {
+      "file": "ws/posted.json",
+      "event": "posted",
+      "seq": 2
+    },
+    {
+      "file": "ws/reaction_added.json",
+      "event": "reaction_added",
+      "seq": 3
+    },
+    {
+      "file": "ws/post_edited.json",
+      "event": "post_edited",
+      "seq": 4
+    },
+    {
+      "file": "ws/reaction_removed.json",
+      "event": "reaction_removed",
+      "seq": 5
+    },
+    {
+      "file": "ws/posted_reply.json",
+      "event": "posted",
+      "seq": 6
+    },
+    {
+      "file": "ws/thread_updated.json",
+      "event": "thread_updated",
+      "seq": 7
+    },
+    {
+      "file": "ws/post_deleted.json",
+      "event": "post_deleted",
+      "seq": 10
+    },
+    {
+      "file": "ws/multiple_channels_viewed.json",
+      "event": "multiple_channels_viewed",
+      "seq": 11
+    }
+  ],
+  "ws_events_seen": [
+    "hello",
+    "multiple_channels_viewed",
+    "post_deleted",
+    "post_edited",
+    "posted",
+    "posted_reply",
+    "reaction_added",
+    "reaction_removed",
+    "response_seq_1",
+    "thread_updated",
+    "typing"
+  ]
+}

@@ -1,0 +1,37 @@
+[
+  {
+    "user_id": "9ik4bw7aybbqupuhs9fjsprsie",
+    "status": "away",
+    "manual": true,
+    "last_activity_at": 1792998022569,
+    "dnd_end_time": 0
+  },
+  {
+    "user_id": "dbqu13jbwpfo3rwphe3nzpzrer",
+    "status": "dnd",
+    "manual": true,
+    "last_activity_at": 1792998022587,
+    "dnd_end_time": 0
+  },
+  {
+    "user_id": "pq8g9zg3ipf7xehxhiptt3hi5h",
+    "status": "online",
+    "manual": false,
+    "last_activity_at": 1792998022424,
+    "dnd_end_time": 0
+  },
+  {
+    "user_id": "ss7wxdxkkpyrjy568rtzqy6nua",
+    "status": "offline",
+    "manual": true,
+    "last_activity_at": 1792998032089,
+    "dnd_end_time": 0
+  },
+  {
+    "user_id": "x6y9ko87wtrq7m9k3dbk3qt7me",
+    "status": "online",
+    "manual": false,
+    "last_activity_at": 1792998032292,
+    "dnd_end_time": 0
+  }
+]
