@@ -73,6 +73,16 @@ public final class MattermostAccountSync: @unchecked Sendable {
     private var readStatePusher: ReadStatePusher?
     let bootstrapped = ValuePromise<Bool>(false, ignoreRepeated: true)
 
+    // Write path (Phase 2A).
+    private(set) var sender: PostSender!
+    var operationRunners: [AnyObject] = []
+    /// Counts WebSocket connections; retries of offline requests wake up when it changes.
+    let connectionGeneration = MMLocked<Int>(0)
+    let isConnected = MMLocked<Bool>(false)
+    /// `user_typing` throttle per chat (the server's `TimeBetweenUserTypingUpdatesMilliseconds`).
+    let typingInterval = MMLocked<Double>(5.0)
+    let typingSent = MMLocked<[PeerActivitySpace: (time: Double, updateId: Int32)]>([:])
+
     init(account: Account, client: MattermostClient, store: MattermostSyncStore, server: MattermostServerInfo) {
         self.account = account
         self.client = client
@@ -103,6 +113,11 @@ public final class MattermostAccountSync: @unchecked Sendable {
         MattermostResourceClients.shared.register(postbox: self.postbox, client: self.client)
         self.account.network.mattermostSetConnectionState(isConnected: false, isNetworkAvailable: true)
 
+        // Write path: sending/editing through PendingMessageManager, then the operation consumers.
+        let sender = PostSender(sync: self)
+        self.sender = sender
+        self.account.mattermostSetMessageSender(sender)
+
         let holeFiller = HoleFiller(sync: self)
         self.holeFiller = holeFiller
         holeFiller.start()
@@ -119,6 +134,7 @@ public final class MattermostAccountSync: @unchecked Sendable {
     }
 
     private func run() async {
+        await self.writeSyntheticConfiguration()
         // Bootstrap until it succeeds (the server may be unreachable at launch).
         var attempt = 0
         while !Task.isCancelled {
@@ -136,11 +152,33 @@ public final class MattermostAccountSync: @unchecked Sendable {
             return
         }
         self.bootstrapped.set(true)
+        // The consumers need the channel map that the bootstrap wrote.
+        self.startOperationConsumers()
         self.startSocket()
+        await self.refreshSyntheticConfiguration()
     }
 
     func addTask(_ task: Task<Void, Never>) {
         self.tasks.with { $0.append(task) }
+    }
+
+    /// Waits until the bootstrap has written the chats (the sender needs the channel map).
+    func waitUntilBootstrapped() async {
+        while !self.state.with({ $0.isBootstrapped }) && !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+    }
+
+    func addDisposable(_ disposable: Disposable) {
+        self.disposables.add(disposable)
+    }
+
+    // MARK: Notices
+
+    /// A user-facing message about a failed write (shown as a toast by the app, see `MattermostSync.notices`).
+    func notice(_ text: String) {
+        MMLog.log("notice: \(text)")
+        MattermostSync.noticePipe(accountId: self.account.id).putNext(text)
     }
 
     // MARK: Updating state ("Updating…" in the title)
@@ -195,6 +233,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
         switch state {
         case let .connected(info):
             MMLog.log("websocket connected (connection \(info.connectionId), resumed: \(info.resumed))")
+            self.isConnected.with { $0 = true }
+            self.connectionGeneration.with { $0 += 1 }
             self.account.network.mattermostSetConnectionState(isConnected: true, isNetworkAvailable: true)
             if !info.resumed {
                 self.addTask(Task { [weak self] in
@@ -202,10 +242,13 @@ public final class MattermostAccountSync: @unchecked Sendable {
                 })
             }
         case .connecting, .waitingToReconnect:
+            self.isConnected.with { $0 = false }
             self.account.network.mattermostSetConnectionState(isConnected: false, isNetworkAvailable: true)
         case .disconnected:
+            self.isConnected.with { $0 = false }
             self.account.network.mattermostSetConnectionState(isConnected: false, isNetworkAvailable: true)
         case .unauthorized:
+            self.isConnected.with { $0 = false }
             MMLog.log("websocket: the server rejected the session token")
             self.account.network.mattermostSetConnectionState(isConnected: false, isNetworkAvailable: true)
         }

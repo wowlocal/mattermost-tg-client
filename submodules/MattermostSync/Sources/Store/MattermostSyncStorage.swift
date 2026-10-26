@@ -184,6 +184,21 @@ public final class MattermostSyncStore: MessageIdStore {
         self.attempt("setCursor(\(key))", ()) { try self.base.setCursor(key, value) }
     }
 
+    // MARK: Pending posts (outgoing deduplication)
+
+    @discardableResult
+    public func registerPendingPost(_ post: MattermostPendingPost) -> MattermostPendingPost? {
+        return self.attempt("registerPendingPost", nil) { try self.base.registerPendingPost(post) }
+    }
+
+    public func pendingPost(pendingPostId: String) -> MattermostPendingPost? {
+        return self.attempt("pendingPost(pendingPostId:)", nil) { try self.base.pendingPost(pendingPostId: pendingPostId) }
+    }
+
+    public func removePendingPost(pendingPostId: String) {
+        self.attempt("removePendingPost", ()) { try self.base.removePendingPost(pendingPostId: pendingPostId) }
+    }
+
     // MARK: Threads
 
     public func setThreadRootIds(_ rootIdByPostId: [String: String], channelId: String) {

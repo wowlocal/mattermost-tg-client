@@ -42,6 +42,25 @@ public enum MattermostSync {
     static func sync(accountId: AccountRecordId) -> MattermostAccountSync? {
         return self.accounts.with { $0[accountId] }
     }
+
+    private static let noticePipes = MMLocked<[AccountRecordId: ValuePipe<String>]>([:])
+
+    static func noticePipe(accountId: AccountRecordId) -> ValuePipe<String> {
+        return self.noticePipes.with { pipes in
+            if let pipe = pipes[accountId] {
+                return pipe
+            }
+            let pipe = ValuePipe<String>()
+            pipes[accountId] = pipe
+            return pipe
+        }
+    }
+
+    /// User-facing messages about failed writes (a delete the server refused, a message that could not be
+    /// sent, …) for the app to show as toasts.
+    public static func notices(accountId: AccountRecordId) -> Signal<String, NoError> {
+        return self.noticePipe(accountId: accountId).signal()
+    }
 }
 
 /// Debug-only login (Spike D, until the MattermostUI login exists): server URL and credentials come from the

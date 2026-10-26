@@ -162,6 +162,9 @@ final class MattermostResourceClients {
 /// Spike D downloads the whole file in one request and ignores the requested byte ranges (Range requests
 /// for streaming video come later).
 public func mattermostFetchResource(postbox: Postbox, resource: MediaResource) -> Signal<MediaResourceDataFetchResult, MediaResourceDataFetchError>? {
+    if let signal = MattermostReactionImages.fetch(postbox: postbox, resource: resource) {
+        return signal
+    }
     let request: MattermostResource
     if let resource = resource as? MattermostFileResource {
         request = resource.request

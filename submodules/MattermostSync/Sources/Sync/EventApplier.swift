@@ -49,6 +49,12 @@ extension MattermostAccountSync {
             if event.data["user_id"]?.stringValue == self.ownUserId, !event.broadcast.channelId.isEmpty {
                 await self.refreshChannel(event.broadcast.channelId)
             }
+        case .sidebarCategoryCreated, .sidebarCategoryUpdated, .sidebarCategoryDeleted, .sidebarCategoryOrderUpdated:
+            await self.refreshFavorites()
+        case .preferencesChanged, .preferenceChanged, .preferencesDeleted:
+            if event.data["preferences"]?.stringValue?.contains(PreferenceCategory.favoriteChannel) == true || event.data["preference"]?.stringValue?.contains(PreferenceCategory.favoriteChannel) == true {
+                await self.refreshFavorites()
+            }
         case .userUpdated:
             if let user = event.data["user"].flatMap({ try? $0.decode(User.self) }) {
                 await self.postbox.mmTransaction { transaction in
@@ -73,6 +79,17 @@ extension MattermostAccountSync {
         let received = CFAbsoluteTimeGetCurrent()
         let post = posted.post
         if post.type == "system_ephemeral" {
+            return
+        }
+        // Our own post (`pending_post_id`): the response of the request in flight rewrites the local message;
+        // without one (the app restarted meanwhile) the echo does it.
+        if post.userId == self.ownUserId, !post.pendingPostId.isEmpty, self.store.pendingPost(pendingPostId: post.pendingPostId) != nil {
+            if self.sender?.isInFlight(pendingPostId: post.pendingPostId) == true {
+                MMLog.log("live: echo of own post \(post.id) (pending \(post.pendingPostId)) left to its request")
+                return
+            }
+            await self.applyOwnPost(post, pendingPostId: post.pendingPostId, uploadedFiles: [], onRewritten: nil)
+            MMLog.log("live: own post \(post.id) (pending \(post.pendingPostId)) applied from its echo")
             return
         }
         if self.channelState(post.channelId) == nil {
@@ -108,6 +125,10 @@ extension MattermostAccountSync {
                 state.channels[post.channelId] = channelState
             }
             let result = self.write(PageWrite(channelId: post.channelId, kind: .singles, run: [post], extra: extra), transaction: transaction)
+            if result.insertedCount > 0 && extra.isEmpty {
+                // A fetched root already counts the reply.
+                self.bumpThreadRoot(of: post, transaction: transaction)
+            }
             if let channelState = self.channelState(post.channelId) {
                 if isOwn {
                     self.applyServerReadState(channelId: post.channelId, transaction: transaction)
@@ -148,17 +169,9 @@ extension MattermostAccountSync {
         guard let channelState = self.channelState(post.channelId) else {
             return
         }
+        let _ = channelState
         let deletedCount: Int = await self.postbox.mmTransaction { transaction in
-            var store = self.storeRef()
-            var newlyDeleted: [MessageIdEntry] = []
-            let _ = self.store.idMapTransaction {
-                newlyDeleted = self.allocator.markDeleted([post.id], channelId: post.channelId, store: &store)
-            }
-            let ids = newlyDeleted.map { MessageId(peerId: channelState.peerId, namespace: Namespaces.Message.Cloud, id: $0.localId) }
-            if !ids.isEmpty {
-                _internal_deleteMessagesIfPossible(transaction: transaction, ids: ids)
-            }
-            return ids.count
+            return self.removePostsLocally([post.id], channelId: post.channelId, transaction: transaction)
         }
         MMLog.log("live: deleted \(post.id) → \(deletedCount) message(s) removed \(Int((CFAbsoluteTimeGetCurrent() - received) * 1000)) ms after the event")
     }
@@ -243,7 +256,13 @@ extension MattermostAccountSync {
         guard typing.userId != self.ownUserId, let channelState = self.channelState(typing.channelId), let userPeerId = self.userPeerId(typing.userId) else {
             return
         }
-        self.account.mattermostAddRemoteInputActivity(chatPeerId: PeerActivitySpace(peerId: channelState.peerId, category: .global), peerId: userPeerId, activity: .typingText)
+        // Typing in a thread shows in that thread (Telegram's `.thread` activity space), like Mattermost's own
+        // clients show it in the thread view only.
+        var category: PeerActivitySpace.Category = .global
+        if !typing.parentId.isEmpty, channelState.kind == .channel, let root = self.store.entries(channelId: typing.channelId, postIds: [typing.parentId])[typing.parentId], !root.isDeleted {
+            category = .thread(Int64(root.localId))
+        }
+        self.account.mattermostAddRemoteInputActivity(chatPeerId: PeerActivitySpace(peerId: channelState.peerId, category: category), peerId: userPeerId, activity: .typingText)
     }
 
     func applyStatus(_ change: StatusChangeEvent) async {
@@ -283,7 +302,3 @@ extension MattermostAccountSync {
     }
 }
 
-/// Deletes messages and the media they reference, as Telegram's own delete path does.
-private func _internal_deleteMessagesIfPossible(transaction: Transaction, ids: [MessageId]) {
-    transaction.deleteMessages(ids, forEachMedia: nil)
-}

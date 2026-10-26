@@ -15,6 +15,7 @@ swift_library(
         "//submodules/TelegramCore:TelegramCore",
         "//submodules/MattermostKit:MattermostKit",
         "//submodules/MattermostSyncCore:MattermostSyncCore",
+        "//submodules/WebPBinding:WebPBinding",
     ],
     visibility = [
         "//visibility:public",
