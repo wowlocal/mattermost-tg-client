@@ -1,0 +1,58 @@
+# Progress log
+
+Working log for the Mattermost client fork. Each work session reads this first and updates it last. Plan: [PLAN.md](../PLAN.md).
+
+## Current state
+
+- **Phase:** 0 (Feasibility), started 2026‑10‑26.
+- **Upstream pin:** Telegram‑iOS `5c20d095d1ab` (app 13.0.1, tag `upstream-pin`), the newest commit built with Xcode 27.0 (installed). Master needs Xcode 27.1.
+- **Working name:** "Relay" (`org.relaychat.Relay`, URL scheme `relay`). Placeholder until D6 is decided.
+- **Build:** simulator build works; commands in [BUILD.md](BUILD.md). Stock app launches on the dedicated "Relay iPhone 17 Pro" simulator (iOS 26.5).
+
+## Decisions taken by default
+
+The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were not answered, so the plan's recommendations are in effect until the user says otherwise:
+
+| # | Default in effect |
+|---|---|
+| D1 | Internal distribution first |
+| D2 | Current Mattermost ESR and newer |
+| D3 | Teams as generated folders |
+| D4 | Core messaging + interactive bot messages; Calls later |
+| D6 | Working name "Relay" |
+| D7 | Inline replies in MVP; collapsed threads in Phase 3 |
+| D9 | Pinned to `5c20d095d1ab` (Xcode 27.0 compatible) |
+
+## Workstreams
+
+| Workstream | Location | Status |
+|---|---|---|
+| Upstream checkout | repo root | Done (shallow, submodules shallow) |
+| iOS 27 simulator runtime | `xcodebuild -downloadPlatform iOS` | Downloading (not blocking: iOS 26.5 works) |
+| First simulator build (stock code, our bundle ID) | [BUILD.md](BUILD.md) | Done: builds in ~9 min, launches |
+| MattermostKit (REST + WebSocket client) | `submodules/MattermostKit` | Agent working |
+| MattermostSyncCore (ID allocator, markdown, mapping helpers) | `submodules/MattermostSyncCore` | Agent working |
+| Local Mattermost server + seed + fixtures | `infra/dev-server` | Agent working |
+| Telegram internals map (Spike A prep, assumptions) | `docs/research/telegram-internals.md` | Agent working |
+
+## Phase 0 checklist
+
+- [x] Choose and record the pinned upstream commit; clone with submodules
+- [x] Simulator build with our bundle ID
+- [ ] Local Mattermost server seeded
+- [ ] Spike A: boot without MTProto, fake data renders
+- [ ] Spike B: MattermostKit skeleton with tests
+- [ ] Spike C: message ID allocator with tests
+- [ ] Spike D: real channel history in the chat screen
+- [ ] TelegramEngine inventory for kept screens
+- [ ] Assumptions in 09 verified
+
+## Log
+
+### 2026‑10‑26
+
+- Freed disk: internal now ~154 GB free.
+- Pinned upstream, checked out into this repo, committed plan docs.
+- Started: simulator runtime download, first build, four agents (MattermostKit, MattermostSyncCore, dev server, Telegram internals research).
+- Build fixes (commit `d5181136`): `Make.py build --disableProvisioningProfiles`; stubbed the one iOS 27.1‑SDK call (`Display/WindowContent.swift`, marked `MATTERMOST:`). Installed the Metal toolchain.
+- First simulator build succeeded; stock app launches under `org.relaychat.Relay`.
