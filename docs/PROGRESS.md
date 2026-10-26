@@ -60,7 +60,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 |---|---|---|
 | 2A | Write path: send (text, replies, files) via PendingMessageManager seam, edit, delete, reactions (+ reaction list), typing out, mute/favorite consumers, synthetic AppConfiguration (Phase 1 step 1) | Done (2026‑10‑26); screenshots `docs/research/phase2a-*.png` |
 | 2B | Login UI (server URL → password/SSO → MFA), root swap (Phase 1 step 13), Add server, logout, session expiry | Agent working (own worktree + simulator) |
-| 2C | Rendering gaps: multi-file posts (grouped messages), bot attachments bubble, webhook name/icon overrides, Mattermost service-message type, custom emoji, channel member counts | Later |
+| 2C | Rendering gaps: multi-file posts (grouped messages), Slack-style attachments + interactive buttons/menus, webhook name/icon overrides, Mattermost service messages, custom emoji, channel member counts | Agent working (main checkout) |
 | 2D | Media tabs via file search, notification extension encodables, skip Telegram special user ids, ATS local-networking only, DM mention-badge decision; Devices → Mattermost sessions; remove "Auto-Login via Telegram"; Notifications/Reactions subtitle; theme carousel | Later |
 
 ## Log
@@ -115,3 +115,4 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   - Findings: on 11.7 the server does not move a channel out of its previous sidebar category when it is added to Favorites (the client PUTs both); DM favorites are per team; `channel_member_updated` carries the member as a JSON string with an empty broadcast channel; Telegram's context-menu reaction bar reads the `CloudTopReactions` list (not `AvailableReactions`) when all reactions are allowed; the notifications prompt persists across app launches until answered (reboot the simulator).
   - Gaps: albums go out as one post per item (multi-file posts are 2C); no timed mute on Mattermost (any mute is indefinite); favorites order not pushed; upload file ids live in memory (restart between upload and post re-uploads); `pending_post_id` dedupe across restarts relies on the server's short pending-post cache; "delete for me" is local only; admins can't delete others' posts from the UI yet (no admin rights on peers); forwards are re-posted without attribution; only text typing is sent.
 
+- 2B asked to merge main (with 2A) into its branch before final checks. 2C started on main.
