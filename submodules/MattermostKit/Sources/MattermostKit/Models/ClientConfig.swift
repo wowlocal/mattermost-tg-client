@@ -47,6 +47,16 @@ extension ClientConfig {
 
     public var enableCustomEmoji: Bool { bool("EnableCustomEmoji") ?? false }
 
+    /// Link previews (OpenGraph and image embeds) on the server.
+    public var enableLinkPreviews: Bool { bool("EnableLinkPreviews") ?? false }
+    /// Previews of permalinks to other posts (`permalink` embeds).
+    public var enablePermalinkPreviews: Bool { bool("EnablePermalinkPreviews") ?? false }
+    /// External images go through `GET /image?url=` (`ImageProxySettings`); clients build those URLs.
+    public var hasImageProxy: Bool { bool("HasImageProxy") ?? false }
+    /// LaTeX code blocks and, with `EnableInlineLatex` too, `$inline$` LaTeX.
+    public var enableLatex: Bool { bool("EnableLatex") ?? false }
+    public var enableInlineLatex: Bool { bool("EnableInlineLatex") ?? false }
+
     /// Bytes. Only in the logged-in config.
     public var maxFileSize: Int64? { int64("MaxFileSize") }
 

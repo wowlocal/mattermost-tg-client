@@ -11,6 +11,52 @@ final class ModelDecodingTests: XCTestCase {
         }
     }
 
+    // MARK: Embeds (3E)
+
+    /// Shapes captured from the 11.7 dev server: an OpenGraph embed, a link to an image, a link without a
+    /// preview, and a permalink to another post.
+    func testPostEmbeds() throws {
+        let json = """
+        {"embeds": [
+          {"type": "opengraph", "url": "http://localhost:9093/article", "data": {"type": "article", "url": "http://localhost:9093/article", "title": "Relay 3E: link previews", "description": "Cards.", "determiner": "", "site_name": "Relay Test Site", "locale": "", "locales_alternate": null, "images": [{"url": "http://localhost:9093/og-large.png", "secure_url": "", "type": "", "width": 1200, "height": 630}], "audios": null, "videos": null}},
+          {"type": "image", "url": "http://localhost:9093/photo.png"},
+          {"type": "link", "url": "http://localhost:9093/plain"},
+          {"type": "permalink", "data": {"post_id": "3887mtmf4pdq7p9b84wazfi4ke", "post": {"id": "3887mtmf4pdq7p9b84wazfi4ke", "create_at": 1793023987790, "user_id": "y3cc5wou3inxddiqj6b3fow4ic", "channel_id": "oh1tp4kiytnpmcwfpexgho7xqr", "message": "Probe", "props": {}}, "team_name": "engineering", "channel_display_name": "3E Links", "channel_type": "O", "channel_id": "oh1tp4kiytnpmcwfpexgho7xqr"}},
+          {"type": "permalink", "data": {"post_id": "abc", "team_name": "engineering", "channel_display_name": "", "channel_type": "P", "channel_id": "c"}}
+        ], "images": {"http://localhost:9093/og-large.png": {"width": 1200, "height": 630, "format": "png", "frame_count": 0}}}
+        """
+        let metadata = try decode(PostMetadata.self, json)
+        XCTAssertEqual(metadata.embeds.map { $0.type }, ["opengraph", "image", "link", "permalink", "permalink"])
+        let og = try XCTUnwrap(metadata.embeds[0].openGraph)
+        XCTAssertEqual(og.title, "Relay 3E: link previews")
+        XCTAssertEqual(og.siteName, "Relay Test Site")
+        XCTAssertEqual(og.images.first?.bestURL, "http://localhost:9093/og-large.png")
+        XCTAssertEqual(og.images.first?.width, 1200)
+        XCTAssertNil(metadata.embeds[1].openGraph)
+        XCTAssertEqual(metadata.embeds[1].url, "http://localhost:9093/photo.png")
+        XCTAssertEqual(metadata.images["http://localhost:9093/og-large.png"]?.height, 630)
+        let permalink = try XCTUnwrap(metadata.embeds[3].permalink)
+        XCTAssertEqual(permalink.postId, "3887mtmf4pdq7p9b84wazfi4ke")
+        XCTAssertEqual(permalink.teamName, "engineering")
+        XCTAssertEqual(permalink.channelDisplayName, "3E Links")
+        XCTAssertEqual(permalink.post?.message, "Probe")
+        XCTAssertEqual(permalink.post?.userId, "y3cc5wou3inxddiqj6b3fow4ic")
+        XCTAssertNil(try XCTUnwrap(metadata.embeds[4].permalink).post)
+        XCTAssertNil(metadata.embeds[0].permalink)
+    }
+
+    func testLinkPreviewConfig() throws {
+        let config = try decode(ClientConfig.self, #"{"EnableLinkPreviews": "true", "EnablePermalinkPreviews": "false", "HasImageProxy": "true", "EnableLatex": "true", "EnableInlineLatex": "false"}"#)
+        XCTAssertTrue(config.enableLinkPreviews)
+        XCTAssertFalse(config.enablePermalinkPreviews)
+        XCTAssertTrue(config.hasImageProxy)
+        XCTAssertTrue(config.enableLatex)
+        XCTAssertFalse(config.enableInlineLatex)
+        let empty = try decode(ClientConfig.self, "{}")
+        XCTAssertFalse(empty.enableLinkPreviews)
+        XCTAssertFalse(empty.hasImageProxy)
+    }
+
     // MARK: Users
 
     func testUser() throws {
