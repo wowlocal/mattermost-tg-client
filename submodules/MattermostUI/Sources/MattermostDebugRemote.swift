@@ -115,6 +115,34 @@ final class MattermostDebugRemote {
         case "relogin":
             let ok = MattermostSessionExpiryPresenter.shared.debugOpenLogin()
             self.writeResult(id: id, ok: ok, error: ok ? nil : "no expired session")
+        case "not-now":
+            // "Not Now" on the "Session Expired" alert.
+            let ok = MattermostSessionExpiryPresenter.shared.debugDismissAlert()
+            self.writeResult(id: id, ok: ok, error: ok ? nil : "no alert")
+        case "title-relogin":
+            // A tap on the chat list title "Session Expired".
+            MattermostBackend.requestRelogin?()
+            Queue.mainQueue().after(1.5) {
+                self.writeResult(id: id, ok: true, error: nil)
+            }
+        case "send-saved":
+            // A message to the current account's Saved Messages, as the composer sends it (works while the
+            // session is expired: the message waits, pending, for a new login).
+            guard let text = command["text"] as? String, let sharedContext = self.sharedContext else {
+                self.writeResult(id: id, ok: false, error: "missing text")
+                return
+            }
+            let _ = (sharedContext.activeAccountContexts
+            |> take(1)
+            |> mapToSignal { primary, _, _ -> Signal<[MessageId?], NoError> in
+                guard let account = primary?.account else {
+                    return .single([])
+                }
+                return enqueueMessages(account: account, peerId: account.peerId, messages: [.message(text: text, attributes: [], inlineStickers: [:], mediaReference: nil, threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])])
+            }
+            |> deliverOnMainQueue).start(next: { [weak self] ids in
+                self?.writeResult(id: id, ok: !ids.isEmpty, error: ids.isEmpty ? "no account" : nil)
+            })
         case "dismiss-alerts":
             // "OK" on the login screens' error alerts (each screen in the flow, top first).
             var dismissed = false

@@ -7,6 +7,7 @@ import TelegramCore
 import AccountContext
 import PeerInfoScreen
 import SettingsUI
+import MattermostUI
 import ChatMessageItemView
 
 // MATTERMOST: debug only. Opens a screen at launch so screenshots can be taken without UI automation:
@@ -14,10 +15,13 @@ import ChatMessageItemView
 //   SIMCTL_CHILD_RELAY_DEBUG_OPEN_SCREEN=<screen> xcrun simctl launch <udid> org.relaychat.Relay
 //
 // - `settings`: the Settings tab;
-// - `privacy`, `data`, `notifications`, `appearance`, `about`: Settings sub-screens;
+// - `privacy`, `data`, `notifications`, `appearance`, `about`, `devices`, `openlinks` (Open Links In),
+//   `reaction-notifications`: Settings sub-screens;
 // - `compose`: the New Message screen;
 // - `peerinfo`, `attach`: the profile of / the attach menu in the chat that the Spike A hook opened
 //   (combine with `SIMCTL_CHILD_RELAY_DEBUG_OPEN_CHAT=dm|ios-team|…`);
+// - `authorinfo`: the profile of the newest message's author in that chat;
+// - `settings:add-account`: Settings → Add Account through the Settings handler;
 // - `reactions`: the context menu with the reaction picker of the newest message in that chat;
 // - `button:<title>`: taps the inline button with that title on the newest message that has it, through the
 //   chat's `requestMessageActionCallback` as a tap does (a menu's option: `RELAY_DEBUG_SELECT_OPTION`).
@@ -43,7 +47,7 @@ extension TelegramRootController {
             }
         case "compose":
             self.openRootCompose()
-        case "privacy", "data", "notifications", "appearance", "about":
+        case "privacy", "data", "notifications", "appearance", "about", "devices", "openlinks", "reaction-notifications":
             guard let context = self.chatListController?.context else {
                 return
             }
@@ -60,6 +64,12 @@ extension TelegramRootController {
                 controller = notificationsAndSoundsController(context: context, exceptionsList: nil, focusOnItemTag: nil)
             case "about":
                 controller = relayAboutController(context: context)
+            case "devices":
+                controller = mattermostDevicesController(context: context)
+            case "openlinks":
+                controller = webBrowserSettingsController(context: context)
+            case "reaction-notifications":
+                controller = reactionNotificationSettingsController(context: context)
             default:
                 controller = themeSettingsController(context: context)
             }
@@ -86,6 +96,34 @@ extension TelegramRootController {
                     self.pushViewController(controller)
                 })
             })
+        case "authorinfo":
+            // The profile of the newest message's author in the chat that `RELAY_DEBUG_OPEN_CHAT` opened, as a
+            // tap on the author's avatar opens it (e.g. a webhook's name override).
+            Queue.mainQueue().after(2.5, { [weak self] in
+                guard let self, let chatController = self.viewControllers.last as? ChatControllerImpl else {
+                    return
+                }
+                var newest: Message?
+                chatController.chatDisplayNode.historyNode.forEachItemNode { node in
+                    guard let itemNode = node as? ChatMessageItemView, let item = itemNode.item, item.message.author != nil else {
+                        return
+                    }
+                    if let current = newest, current.index > item.message.index {
+                        return
+                    }
+                    newest = item.message
+                }
+                guard let author = newest?.author, let controller = chatController.context.sharedContext.makePeerInfoController(context: chatController.context, updatedPresentationData: nil, peer: EnginePeer(author), mode: .generic, avatarInitiallyExpanded: false, fromChat: false, requestsContext: nil) else {
+                    return
+                }
+                self.pushViewController(controller)
+            })
+        case "settings:add-account":
+            // Settings → Add Account, through the Settings screen's own handler (account limit included).
+            if let rootTabController = self.rootTabController, let index = rootTabController.controllers.firstIndex(where: { $0 is PeerInfoScreenImpl }) {
+                rootTabController.selectedIndex = index
+                (rootTabController.controllers[index] as? PeerInfoScreenImpl)?.relayDebugOpenAddAccount()
+            }
         case "reactions":
             // MATTERMOST: the message context menu (reaction picker) of the newest message in the chat that
             // `RELAY_DEBUG_OPEN_CHAT` opened, as a long press would open it.
