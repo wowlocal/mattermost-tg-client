@@ -137,6 +137,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
     let directoryScope = MMLocked<String?>(nil)
     /// What the `AvailableReactions` list holds (`SyntheticConfiguration`).
     let reactionList = MMLocked<(customNames: [String], usedEmoji: [String], listed: Set<String>)>(([], [], []))
+    /// Phase 3F: the own status and the client config values the profile screens need.
+    let ownProfile = MattermostOwnProfileState()
 
     init(account: Account, client: MattermostClient, store: MattermostSyncStore, server: MattermostServerInfo) {
         self.account = account
@@ -221,6 +223,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
         self.startOperationConsumers()
         self.startSocket()
         await self.refreshSyntheticConfiguration()
+        // Phase 3F: own status, profile fields and notification preferences for Settings.
+        await self.refreshOwnProfile()
     }
 
     func addTask(_ task: Task<Void, Never>) {
@@ -306,6 +310,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
                     await self?.catchUp()
                     // Phase 3C: saved posts may have changed while the socket was away.
                     await self?.loadSavedPostIds()
+                    // Phase 3F: so may the own status (auto away, a DND that ended, another device).
+                    await self?.refreshOwnProfile()
                 })
             }
         case .connecting, .waitingToReconnect:
@@ -421,6 +427,10 @@ public final class MattermostAccountSync: @unchecked Sendable {
             }
             peers.append(PeerConverter.user(user, peerId: peerId))
             usersByPeerId[peerId] = user
+            // Phase 3F: the custom status emoji (the name's emoji status) needs its file stored to render.
+            if let file = PeerConverter.customStatusEmojiFile(user) {
+                transaction.storeMediaIfNotPresent(media: file)
+            }
         }
         updatePeersCustom(transaction: transaction, peers: peers, update: { _, updated in
             return updated
@@ -445,6 +455,9 @@ public final class MattermostAccountSync: @unchecked Sendable {
                 state.userIdByUsername[user.username.lowercased()] = user.id
             }
         }
+        if users.contains(where: { $0.customStatus?.expiryDate != nil }) {
+            self.scheduleCustomStatusExpiry()
+        }
     }
 
     func writePresences(_ statuses: [UserStatus], transaction: Transaction) {
@@ -455,6 +468,11 @@ public final class MattermostAccountSync: @unchecked Sendable {
                 continue
             }
             presences[peerId] = PeerConverter.presence(status: status.status, lastActivityAt: status.lastActivityAt, dndEndTime: status.dndEndTime, now: now)
+        }
+        // Phase 3F: the own status (Settings), from the same request.
+        if let own = statuses.first(where: { $0.userId == self.ownUserId }) {
+            self.ownProfile.values.with { $0.status = own }
+            presences[self.ownPeerId] = PeerConverter.presence(status: own.status, lastActivityAt: own.lastActivityAt, dndEndTime: own.dndEndTime, now: now)
         }
         if !presences.isEmpty {
             transaction.updatePeerPresencesInternal(presences: presences, merge: { _, updated in

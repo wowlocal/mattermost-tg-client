@@ -16,6 +16,8 @@ swift_library(
         "//submodules/MattermostKit:MattermostKit",
         "//submodules/MattermostSyncCore:MattermostSyncCore",
         "//submodules/MattermostPush:MattermostPush",
+        # Phase 3F: the share extension's posting (accounts, chats, planning, upload).
+        "//submodules/MattermostShare:MattermostShare",
         "//submodules/WebPBinding:WebPBinding",
     ],
     visibility = [

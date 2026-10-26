@@ -115,6 +115,10 @@ extension MattermostAccountSync {
                 if user.id == self.ownUserId, user.roles != self.state.with({ $0.me?.roles }) {
                     await self.refreshChannelAccess(reason: "own roles changed")
                 }
+                // Phase 3F: own profile, custom status, picture or notify props changed (here or elsewhere).
+                if user.id == self.ownUserId {
+                    await self.applyOwnUserUpdated()
+                }
             }
         case .roleUpdated, .memberRoleUpdated:
             await self.refreshChannelAccess(reason: event.type.rawValue)
@@ -346,10 +350,20 @@ extension MattermostAccountSync {
     }
 
     func applyStatus(_ change: StatusChangeEvent) async {
-        guard change.userId != self.ownUserId, let peerId = self.userPeerId(change.userId) else {
+        if change.userId == self.ownUserId {
+            // Phase 3F: Settings shows the own status.
+            await self.applyOwnStatusChange(change)
             return
         }
-        let presence = PeerConverter.presence(status: change.status, lastActivityAt: Int64(Date().timeIntervalSince1970 * 1000), dndEndTime: nil, now: Date())
+        guard let peerId = self.userPeerId(change.userId) else {
+            return
+        }
+        // Phase 3F: the event has no DND end; the status request has it.
+        var dndEndTime: Int64?
+        if change.status == .dnd, let status = try? await self.client.userStatuses(ids: [change.userId]).first {
+            dndEndTime = status.dndEndTime
+        }
+        let presence = PeerConverter.presence(status: change.status, lastActivityAt: Int64(Date().timeIntervalSince1970 * 1000), dndEndTime: dndEndTime, now: Date())
         await self.postbox.mmTransaction { transaction in
             transaction.updatePeerPresencesInternal(presences: [peerId: presence], merge: { _, updated in
                 return updated
