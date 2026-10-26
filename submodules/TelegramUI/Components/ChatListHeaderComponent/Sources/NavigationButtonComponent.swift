@@ -29,6 +29,8 @@ public final class NavigationButtonComponent: Component {
         case more
         case icon(imageName: String)
         case proxy(status: ChatTitleProxyStatus)
+        // MATTERMOST: an icon with a count badge (the chat list's threads button).
+        case iconWithBadge(imageName: String, badge: String?)
     }
     
     public let content: Content
@@ -57,6 +59,7 @@ public final class NavigationButtonComponent: Component {
         
         private var iconView: UIImageView?
         private var iconImageName: String?
+        private var badgeView: UILabel?
         
         private var proxyNode: ChatTitleProxyNode?
         
@@ -111,6 +114,7 @@ public final class NavigationButtonComponent: Component {
             
             var textString: NSAttributedString?
             var imageName: String?
+            var badgeText: String?
             var proxyStatus: ChatTitleProxyStatus?
             var isMore: Bool = false
             
@@ -125,6 +129,9 @@ public final class NavigationButtonComponent: Component {
                 isMore = true
             case let .icon(imageNameValue):
                 imageName = imageNameValue
+            case let .iconWithBadge(imageNameValue, badgeValue):
+                imageName = imageNameValue
+                badgeText = badgeValue
             case let .proxy(status):
                 proxyStatus = status
             }
@@ -177,6 +184,31 @@ public final class NavigationButtonComponent: Component {
                 self.iconView = nil
                 iconView.removeFromSuperview()
                 self.iconImageName = nil
+            }
+
+            if let badgeText = badgeText, let iconFrame = self.iconView?.frame {
+                let badgeView: UILabel
+                if let current = self.badgeView {
+                    badgeView = current
+                } else {
+                    badgeView = UILabel()
+                    badgeView.isUserInteractionEnabled = false
+                    badgeView.textAlignment = .center
+                    badgeView.clipsToBounds = true
+                    badgeView.font = Font.semibold(12.0)
+                    self.badgeView = badgeView
+                    self.addSubview(badgeView)
+                }
+                badgeView.text = badgeText
+                badgeView.textColor = theme.chatList.unreadBadgeActiveTextColor
+                badgeView.backgroundColor = theme.chatList.unreadBadgeActiveBackgroundColor
+                let textSize = badgeView.sizeThatFits(CGSize(width: 100.0, height: 18.0))
+                let badgeSize = CGSize(width: max(18.0, ceil(textSize.width) + 10.0), height: 18.0)
+                badgeView.layer.cornerRadius = badgeSize.height / 2.0
+                badgeView.frame = CGRect(origin: CGPoint(x: iconFrame.maxX - 9.0, y: iconFrame.minY - 7.0), size: badgeSize)
+            } else if let badgeView = self.badgeView {
+                self.badgeView = nil
+                badgeView.removeFromSuperview()
             }
             
             if let proxyStatus = proxyStatus {

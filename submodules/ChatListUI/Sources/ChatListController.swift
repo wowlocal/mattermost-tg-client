@@ -6842,6 +6842,9 @@ private final class ChatListLocationContext {
     private var titleDisposable: Disposable?
     // MATTERMOST: `Account.mattermostSessionExpired` of this list's account (see `updateChatList`).
     private var mattermostSessionExpired = false
+    // MATTERMOST: the threads button (collapsed reply threads, `MattermostThreadsButton.swift`).
+    private var mattermostThreads: MattermostThreadsButtonState?
+    private var mattermostThreadsFilterId: Int32?
     
     private(set) var title: String = ""
     private(set) var chatTitleComponent: ChatTitleComponent?
@@ -7339,7 +7342,11 @@ private final class ChatListLocationContext {
                     }
                 }
                 
-                if storyPostingAvailable {
+                // MATTERMOST: the threads button in the stories button's place.
+                if MattermostBackend.isEnabled {
+                    self.mattermostThreadsFilterId = stateAndFilterId.filterId
+                    self.storyButton = self.mattermostThreadsButton(filterId: stateAndFilterId.filterId)
+                } else if storyPostingAvailable {
                     self.storyButton = AnyComponentWithIdentity(id: "story", component: AnyComponent(NavigationButtonComponent(
                         content: .icon(imageName: "Chat List/AddStoryIcon"),
                         pressed: { [weak self] sourceView in
@@ -7465,6 +7472,31 @@ private final class ChatListLocationContext {
         })
     }
     
+    // MATTERMOST: see `MattermostThreadsButtonState`.
+    private func mattermostThreadsButton(filterId: Int32?) -> AnyComponentWithIdentity<NavigationButtonComponentEnvironment>? {
+        let state: MattermostThreadsButtonState
+        if let current = self.mattermostThreads {
+            state = current
+        } else {
+            state = MattermostThreadsButtonState(context: self.context)
+            state.updated = { [weak self] in
+                guard let self, self.leftButton?.id == AnyHashable("edit") else {
+                    #if DEBUG
+                    NSLog("[Relay] threads button: not in the normal header (left button %@)", "\(String(describing: self?.leftButton?.id))")
+                    #endif
+                    return
+                }
+                self.storyButton = self.mattermostThreadsButton(filterId: self.mattermostThreadsFilterId)
+                self.parentController?.requestLayout(transition: .immediate)
+            }
+            state.open = { [weak self] controller in
+                (self?.parentController?.navigationController as? NavigationController)?.pushViewController(controller)
+            }
+            self.mattermostThreads = state
+        }
+        return state.button(filterId: filterId)
+    }
+
     private func updateForum(
         peerId: EnginePeer.Id,
         peerView: PeerView,

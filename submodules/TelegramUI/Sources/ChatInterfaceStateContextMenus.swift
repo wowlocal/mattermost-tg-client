@@ -1602,6 +1602,10 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             }
         }
         
+        // MATTERMOST: View Thread (replies), Follow / Unfollow Thread (`MattermostThreads.swift`).
+        if !isPinnedMessages {
+            actions.append(contentsOf: mattermostThreadContextMenuItems(context: context, chatLocation: chatPresentationInterfaceState.chatLocation, message: messages[0], controllerInteraction: controllerInteraction, strings: chatPresentationInterfaceState.strings))
+        }
         if let _ = threadId, !isPinnedMessages {
             let text: String
             if threadMessageCount != 0 {

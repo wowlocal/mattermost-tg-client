@@ -40,12 +40,17 @@ public final class MattermostAccountSync: @unchecked Sendable {
             return self.kind == .channel && self.channel.type != .groupMessage
         }
 
-        var counters: ChannelReadCounters {
+        /// The server counters; with collapsed reply threads the `_root` ones (replies count in their threads).
+        func counters(collapsedThreads: Bool) -> ChannelReadCounters {
             return ChannelReadCounters(
                 lastViewedAt: self.member.lastViewedAt,
                 totalMessageCount: self.channel.totalMsgCount,
+                totalMessageCountRoot: self.channel.totalMsgCountRoot,
                 memberMessageCount: self.member.msgCount,
-                mentionCount: Int64(self.mentionCount)
+                memberMessageCountRoot: self.member.msgCountRoot,
+                mentionCount: Int64(self.mentionCount),
+                mentionCountRoot: Int64(self.mentionCount),
+                collapsedThreads: collapsedThreads
             )
         }
     }
@@ -73,6 +78,12 @@ public final class MattermostAccountSync: @unchecked Sendable {
         /// The pinned peers last written to (or pushed from) each team folder, to tell the user's pin changes
         /// in a folder from our own writes.
         var folderPins: [String: [PeerId]] = [:]
+        /// Collapsed reply threads (3B, `CollapsedThreads.swift`): the server's setting and whether they are on
+        /// for this user.
+        var collapsedThreadsSetting: CollapsedThreadsSetting = .disabled
+        var collapsedThreads = false
+        /// Followed threads per team (`Threads.swift`).
+        var threads: [String: MattermostTeamThreads] = [:]
     }
 
     let state = MMLocked(SyncState())
@@ -102,6 +113,11 @@ public final class MattermostAccountSync: @unchecked Sendable {
     let typingSent = MMLocked<[PeerActivitySpace: (time: Double, updateId: Int32)]>([:])
     /// File searches for the media tabs, per channel (`loadChannelFiles`); kept once done.
     let fileSearches = MMLocked<[String: Task<Void, Error>]>([:])
+    /// Changes of the followed threads (`Threads.swift`), for the threads list and its badge.
+    let threadsVersion = MMLocked<Int>(0)
+    let threadsVersionPromise = ValuePromise<Int>(0, ignoreRepeated: true)
+    /// Threads whose read state is being pushed.
+    let threadReadsInFlight = MMLocked<Set<String>>([])
     /// What the `AvailableReactions` list holds (`SyntheticConfiguration`).
     let reactionList = MMLocked<(customNames: [String], usedEmoji: [String], listed: Set<String>)>(([], [], []))
 
@@ -133,6 +149,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
     func start() {
         MMLog.log("account \(self.account.id.int64): starting sync for \(self.server.url) as \(self.server.userId)")
         MattermostResourceClients.shared.register(postbox: self.postbox, client: self.client)
+        // Collapsed reply threads as last known, before any chat opens (the bootstrap checks the server).
+        self.restoreCollapsedThreads()
         self.account.network.mattermostSetConnectionState(isConnected: false, isNetworkAvailable: true)
 
         // Write path: sending/editing through PendingMessageManager, then the operation consumers.
@@ -474,7 +492,7 @@ public final class MattermostAccountSync: @unchecked Sendable {
         let notificationSettings = TelegramPeerNotificationSettings.defaultSettings.withUpdatedMuteState(muted ? .muted(until: Int32.max) : .unmuted)
         transaction.updateCurrentPeerNotificationSettings([peerId: notificationSettings])
 
-        let channelState = ChannelState(channel: channel, member: member, kind: kind, peerId: peerId, teamId: teamId, mentionCount: Int32(clamping: member.mentionCount))
+        let channelState = ChannelState(channel: channel, member: member, kind: kind, peerId: peerId, teamId: teamId, mentionCount: self.memberMentionCount(member))
         self.state.with { state in
             state.channels[channel.id] = channelState
             state.channelIdByPeerId[peerId] = channel.id
@@ -489,7 +507,7 @@ public final class MattermostAccountSync: @unchecked Sendable {
         guard let channelState = self.channelState(channelId) else {
             return
         }
-        let readState = ReadStateMapper.readState(channelId: channelId, store: self.storeRef(), counters: channelState.counters)
+        let readState = ReadStateMapper.readState(channelId: channelId, store: self.storeRef(), counters: channelState.counters(collapsedThreads: self.isCollapsedThreads))
         transaction.resetIncomingReadStates([channelState.peerId: [Namespaces.Message.Cloud: .idBased(
             maxIncomingReadId: readState.maxIncomingReadId,
             maxOutgoingReadId: 0,
@@ -550,7 +568,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
             },
             mediaId: { fileId in
                 return store.allocateMediaId(fileId: fileId)
-            }
+            },
+            collapsedThreads: self.isCollapsedThreads
         )
     }
 }

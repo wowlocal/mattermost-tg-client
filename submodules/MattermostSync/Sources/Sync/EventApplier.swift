@@ -87,6 +87,23 @@ extension MattermostAccountSync {
             if event.data["preferences"]?.stringValue?.contains(PreferenceCategory.favoriteChannel) == true || event.data["preference"]?.stringValue?.contains(PreferenceCategory.favoriteChannel) == true {
                 await self.refreshFavorites()
             }
+            // Collapsed reply threads switched on another client (3B). A deleted preference falls back to the
+            // server default, so reload them all then.
+            if event.type == .preferencesDeleted {
+                if event.data["preferences"]?.stringValue?.contains("collapsed_reply_threads") == true {
+                    await self.refreshCollapsedThreadsConfig()
+                }
+            } else {
+                var changed = event.decodeEmbedded([Preference].self, key: "preferences") ?? []
+                if let single = event.decodeEmbedded(Preference.self, key: "preference") {
+                    changed.append(single)
+                }
+                await self.applyPreferencesChanged(changed)
+            }
+        case .configChanged:
+            await self.refreshCollapsedThreadsConfig()
+        case .threadUpdated, .threadReadChanged, .threadFollowChanged:
+            await self.applyThreadEvent(event)
         case .userUpdated:
             if let user = event.data["user"].flatMap({ try? $0.decode(User.self) }) {
                 await self.postbox.mmTransaction { transaction in
@@ -138,7 +155,10 @@ extension MattermostAccountSync {
         }
         await self.ensureUsers(referencedUserIds([post] + extra))
         let isOwn = post.userId == self.ownUserId
-        let mentionsMe = !isOwn && (posted.mentions.contains(self.ownUserId) || self.channelState(post.channelId)?.kind == .direct)
+        // With collapsed reply threads a reply counts in its thread (threads list), not in its chat.
+        let countsInChat = post.rootId.isEmpty || !self.isCollapsedThreads
+        let mentionsMe = !isOwn && countsInChat && (posted.mentions.contains(self.ownUserId) || self.channelState(post.channelId)?.kind == .direct)
+        let marksRead = isOwn && countsInChat
         let result: PageWriteResult = await self.postbox.mmTransaction { transaction in
             self.state.with { state in
                 guard var channelState = state.channels[post.channelId] else {
@@ -146,9 +166,14 @@ extension MattermostAccountSync {
                 }
                 channelState.channel.totalMsgCount += 1
                 channelState.channel.lastPostAt = max(channelState.channel.lastPostAt, post.createAt)
-                if isOwn {
+                if post.rootId.isEmpty {
+                    channelState.channel.totalMsgCountRoot += 1
+                    channelState.channel.lastRootPostAt = max(channelState.channel.lastRootPostAt, post.createAt)
+                }
+                if marksRead {
                     // Posting marks the channel read in Mattermost.
                     channelState.member.msgCount = channelState.channel.totalMsgCount
+                    channelState.member.msgCountRoot = channelState.channel.totalMsgCountRoot
                     channelState.member.lastViewedAt = max(channelState.member.lastViewedAt, post.createAt)
                     channelState.mentionCount = 0
                 } else if mentionsMe {
@@ -162,7 +187,7 @@ extension MattermostAccountSync {
                 self.bumpThreadRoot(of: post, transaction: transaction)
             }
             if let channelState = self.channelState(post.channelId) {
-                if isOwn {
+                if marksRead {
                     self.applyServerReadState(channelId: post.channelId, transaction: transaction)
                 } else if mentionsMe {
                     self.applyMentionCount(channelState.mentionCount, peerId: channelState.peerId, transaction: transaction)
@@ -268,6 +293,7 @@ extension MattermostAccountSync {
             }
             do {
                 let member = try await self.client.channelMember(channelId: channelId)
+                let mentionCount = self.memberMentionCount(member)
                 await self.postbox.mmTransaction { transaction in
                     self.state.with { state in
                         guard var channelState = state.channels[channelId] else {
@@ -275,7 +301,7 @@ extension MattermostAccountSync {
                         }
                         channelState.member = member
                         channelState.channel.totalMsgCount = max(channelState.channel.totalMsgCount, member.msgCount)
-                        channelState.mentionCount = Int32(clamping: member.mentionCount)
+                        channelState.mentionCount = mentionCount
                         state.channels[channelId] = channelState
                     }
                     self.applyServerReadState(channelId: channelId, transaction: transaction)
@@ -294,7 +320,7 @@ extension MattermostAccountSync {
         // Typing in a thread shows in that thread (Telegram's `.thread` activity space), like Mattermost's own
         // clients show it in the thread view only.
         var category: PeerActivitySpace.Category = .global
-        if !typing.parentId.isEmpty, channelState.kind == .channel, let root = self.store.entries(channelId: typing.channelId, postIds: [typing.parentId])[typing.parentId], !root.isDeleted {
+        if !typing.parentId.isEmpty, channelState.kind != .saved, let root = self.store.entries(channelId: typing.channelId, postIds: [typing.parentId])[typing.parentId], !root.isDeleted {
             category = .thread(Int64(root.localId))
         }
         self.account.mattermostAddRemoteInputActivity(chatPeerId: PeerActivitySpace(peerId: channelState.peerId, category: category), peerId: userPeerId, activity: .typingText)

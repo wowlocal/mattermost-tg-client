@@ -109,6 +109,11 @@ extension ChatControllerImpl {
             completion?()
             return
         }
+        // MATTERMOST: collapsed reply threads (`MattermostThreads.swift`).
+        if !forceNew, let messageId = messageLocation.messageId, self.mattermostNavigateToReplyInThread(messageId: messageId) {
+            completion?()
+            return
+        }
         var fromIndex: EngineMessage.Index?
         
         var fromMessage: EngineMessage?

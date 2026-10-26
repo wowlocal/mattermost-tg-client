@@ -198,8 +198,12 @@ public extension MessageTags {
     static let roundVideo = MessageTags(rawValue: 1 << 13)
     static let polls = MessageTags(rawValue: 1 << 14)
     static let unseenPollVote = MessageTags(rawValue: 1 << 15)
-    
-    static let all: MessageTags = [.photoOrVideo, .file, .music, .webPage, .voiceOrInstantVideo, .unseenPersonalMessage, .liveLocation, .gif, .photo, .video, .pinned, .unseenReaction, .voice, .roundVideo, .polls, .unseenPollVote]
+    // MATTERMOST: a Mattermost root post (no reply). With collapsed reply threads on, a chat's main history is
+    // the view of this tag (see `AccountViewTracker`), so replies show in their threads only. In `all`, so the
+    // tag space has holes like the media tags (and `upgradedMessageHoles` adds them to existing chats).
+    static let mattermostRootPost = MessageTags(rawValue: 1 << 16)
+
+    static let all: MessageTags = [.photoOrVideo, .file, .music, .webPage, .voiceOrInstantVideo, .unseenPersonalMessage, .liveLocation, .gif, .photo, .video, .pinned, .unseenReaction, .voice, .roundVideo, .polls, .unseenPollVote, .mattermostRootPost]
 }
 
 public extension GlobalMessageTags {

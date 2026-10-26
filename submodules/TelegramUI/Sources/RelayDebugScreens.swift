@@ -31,6 +31,7 @@ extension TelegramRootController {
         #if DEBUG
         // Phase 3D: the composer driver of the debug remote (RelayDebugComposer.swift).
         RelayDebugComposer.install(rootController: self)
+        self.relayDebugInstallChatCommands()
         guard let screen = ProcessInfo.processInfo.environment["RELAY_DEBUG_OPEN_SCREEN"], !screen.isEmpty else {
             return
         }

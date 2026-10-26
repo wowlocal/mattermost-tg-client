@@ -185,6 +185,10 @@ extension MattermostAccountSync {
         context.authorOverride = { post in
             return overrides[post.id]
         }
+        let chatPeerId = context.chatPeerId
+        context.existingReplyThread = { localId in
+            return transaction.getMessage(MessageId(peerId: chatPeerId, namespace: Namespaces.Message.Cloud, id: localId))?.attributes.first(where: { $0 is ReplyThreadMessageAttribute }) as? ReplyThreadMessageAttribute
+        }
         var messages: [StoreMessage] = []
         var customEmojiFiles: [Int64: TelegramMediaFile] = [:]
         var threadRoots: [String: String] = [:]
@@ -350,7 +354,7 @@ extension MattermostAccountSync {
             return newIdByOldId[id] ?? id
         }
         func remapThreadId(_ threadId: Int64?) -> Int64? {
-            guard let threadId = threadId, channelState.kind == .channel, threadId != 1, let id = Int32(exactly: threadId) else {
+            guard let threadId = threadId, channelState.kind != .saved, threadId != 1, let id = Int32(exactly: threadId) else {
                 return threadId
             }
             return Int64(remap(id))

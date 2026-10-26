@@ -26,6 +26,8 @@ swift_library(
         "//submodules/ItemListUI:ItemListUI",
         # Phase 3D: live updates of the open member lists.
         "//submodules/TemporaryCachedPeerDataManager:TemporaryCachedPeerDataManager",
+        # Phase 3B: the threads screen's avatars.
+        "//submodules/AvatarNode:AvatarNode",
         "//submodules/MattermostKit:MattermostKit",
         "//submodules/MattermostSync:MattermostSync",
         # Phase 3A: the debug remote's simulated push delivery.

@@ -174,3 +174,25 @@
 "Relay.Dialog.InvalidEmail" = "Must be a valid email address.";
 "Relay.Dialog.InvalidNumber" = "Must be a number.";
 "Relay.Dialog.InvalidURL" = "Must start with http:// or https://.";
+
+/* Collapsed reply threads (Phase 3B): the thread view's divider under the root post (Telegram's comment threads,
+   hidden in Relay, are the only other users of these two), the threads list (MattermostUI) and thread actions. */
+"Conversation.DiscussionStarted" = "Replies";
+"Conversation.DiscussionNotStarted" = "No replies yet";
+"Relay.Threads.Title" = "Threads";
+"Relay.Threads.Follow" = "Follow Thread";
+"Relay.Threads.Unfollow" = "Unfollow Thread";
+"Relay.Threads.Followed" = "You're following this thread.";
+"Relay.Threads.Unfollowed" = "You're no longer following this thread.";
+"Relay.Threads.EmptyTitle" = "No Followed Threads";
+"Relay.Threads.EmptyText" = "Threads you start, reply to or follow show up here.";
+"Relay.Threads.Off" = "Replies show in their channels because collapsed reply threads are off for your account.";
+"Relay.Threads.Loading" = "Loading threads…";
+"Relay.Threads.Replies_1" = "%@ reply";
+"Relay.Threads.Replies_any" = "%@ replies";
+"Relay.Threads.NewReplies_1" = "%@ new reply";
+"Relay.Threads.NewReplies_any" = "%@ new replies";
+"Relay.Threads.Mentions_1" = "%@ mention";
+"Relay.Threads.Mentions_any" = "%@ mentions";
+"Relay.Threads.Unread" = "%@ unread";
+"Relay.Threads.AllRead" = "All threads read";

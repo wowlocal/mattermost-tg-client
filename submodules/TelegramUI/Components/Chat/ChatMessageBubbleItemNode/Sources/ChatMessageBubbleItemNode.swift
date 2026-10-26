@@ -2165,6 +2165,8 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                 }
             } else if let attribute = attribute as? ReplyMessageAttribute {
                 if let threadId = firstMessage.threadId, Int32(clamping: threadId) == attribute.messageId.id, let peer = firstMessage.peers[firstMessage.id.peerId], peer.isForumOrMonoForum {
+                } else if MattermostBackend.isEnabled, let threadId = firstMessage.threadId, Int32(clamping: threadId) == attribute.messageId.id, item.chatLocation.threadId == threadId {
+                    // MATTERMOST: in its thread view, a reply's reference to the thread's root (shown on top) is implied.
                 } else {
                     replyMessage = firstMessage.associatedMessages[attribute.messageId]
                 }
@@ -2653,7 +2655,8 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                     } else if let attribute = attribute as? ViewCountMessageAttribute {
                         viewCount = attribute.count
                     } else if let attribute = attribute as? ReplyThreadMessageAttribute, case .peer = item.chatLocation {
-                        if let channel = message.peers[message.id.peerId] as? TelegramChannel, case .group = channel.info {
+                        // MATTERMOST: not next to the time when the replies show as a button (`hasCommentButton`).
+                        if let channel = message.peers[message.id.peerId] as? TelegramChannel, case .group = channel.info, !(MattermostBackend.isEnabled && attribute.commentsPeerId == message.id.peerId) {
                             dateReplies = Int(attribute.count)
                         }
                     } else if let attribute = attribute as? PaidStarsMessageAttribute, item.message.id.peerId.namespace == Namespaces.Peer.CloudChannel {

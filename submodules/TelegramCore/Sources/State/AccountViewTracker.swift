@@ -2208,7 +2208,18 @@ public final class AccountViewTracker {
         return account.postbox.aroundMessageHistoryViewForLocation(chatLocation, anchor: .upperBound, ignoreMessagesInTimestampRange: nil, ignoreMessageIds: Set(), count: 20, fixedCombinedReadStates: nil, topTaggedMessageIdNamespaces: [], tag: nil, appendMessagesFromTheSameGroup: false, namespaces: .just(Namespaces.Message.allWelcomeMessages), orderStatistics: [], additionalData: [])
     }
     
+    // MATTERMOST: collapsed reply threads. A chat's main history (no thread, no tag) shows root posts only while
+    // they are on (`MattermostBackend.mainHistoryTag`); callers keep passing no tag, so their own logic (scroll to
+    // the first unread, unread separator, read marking) stays the main history's.
+    private func mattermostEffectiveTag(_ chatLocation: ChatLocationInput, _ tag: HistoryViewInputTag?) -> HistoryViewInputTag? {
+        guard tag == nil, MattermostBackend.isEnabled, let account = self.account, case let .peer(peerId, threadId) = chatLocation, threadId == nil else {
+            return tag
+        }
+        return MattermostBackend.mainHistoryTag(accountPeerId: account.peerId, peerId: peerId).flatMap { .tag($0) }
+    }
+    
     public func aroundMessageOfInterestHistoryViewForLocation(_ chatLocation: ChatLocationInput, ignoreMessagesInTimestampRange: ClosedRange<Int32>? = nil, ignoreMessageIds: Set<MessageId> = Set(), count: Int, trackHoles: Bool = true, tag: HistoryViewInputTag? = nil, appendMessagesFromTheSameGroup: Bool = false, orderStatistics: MessageHistoryViewOrderStatistics = [], additionalData: [AdditionalMessageHistoryViewData] = [], useRootInterfaceStateForThread: Bool = false) -> Signal<(MessageHistoryView, ViewUpdateType, InitialMessageHistoryData?), NoError> {
+        let tag = self.mattermostEffectiveTag(chatLocation, tag) // MATTERMOST
         if let account = self.account {
             let signal: Signal<(MessageHistoryView, ViewUpdateType, InitialMessageHistoryData?), NoError>
             if let peerId = chatLocation.peerId, let threadId = chatLocation.threadId, tag == nil {
@@ -2296,6 +2307,7 @@ public final class AccountViewTracker {
     }
     
     public func aroundIdMessageHistoryViewForLocation(_ chatLocation: ChatLocationInput, ignoreMessagesInTimestampRange: ClosedRange<Int32>? = nil, ignoreMessageIds: Set<MessageId> = Set(), count: Int, trackHoles: Bool = true, ignoreRelatedChats: Bool, messageId: MessageId, tag: HistoryViewInputTag? = nil, appendMessagesFromTheSameGroup: Bool = false, orderStatistics: MessageHistoryViewOrderStatistics = [], additionalData: [AdditionalMessageHistoryViewData] = [], useRootInterfaceStateForThread: Bool = false) -> Signal<(MessageHistoryView, ViewUpdateType, InitialMessageHistoryData?), NoError> {
+        let tag = self.mattermostEffectiveTag(chatLocation, tag) // MATTERMOST
         if let account = self.account {
             let signal = account.postbox.aroundIdMessageHistoryViewForLocation(chatLocation, ignoreMessagesInTimestampRange: ignoreMessagesInTimestampRange, ignoreMessageIds: ignoreMessageIds, count: count, trackHoles: trackHoles, ignoreRelatedChats: ignoreRelatedChats, messageId: messageId, topTaggedMessageIdNamespaces: [Namespaces.Message.Cloud], tag: tag, appendMessagesFromTheSameGroup: appendMessagesFromTheSameGroup, namespaces: .not(Namespaces.Message.allNonRegular), orderStatistics: orderStatistics, additionalData: wrappedHistoryViewAdditionalData(chatLocation: chatLocation, additionalData: additionalData), useRootInterfaceStateForThread: useRootInterfaceStateForThread)
             return wrappedMessageHistorySignal(chatLocation: chatLocation, signal: signal, fixedCombinedReadStates: nil, addHoleIfNeeded: false)
@@ -2305,6 +2317,7 @@ public final class AccountViewTracker {
     }
     
     public func aroundMessageHistoryViewForLocation(_ chatLocation: ChatLocationInput, ignoreMessagesInTimestampRange: ClosedRange<Int32>? = nil, ignoreMessageIds: Set<MessageId> = Set(), index: MessageHistoryAnchorIndex, anchorIndex: MessageHistoryAnchorIndex, count: Int, trackHoles: Bool = true, clipHoles: Bool = true, ignoreRelatedChats: Bool = false, fixedCombinedReadStates: MessageHistoryViewReadState?, tag: HistoryViewInputTag? = nil, appendMessagesFromTheSameGroup: Bool = false, orderStatistics: MessageHistoryViewOrderStatistics = [], additionalData: [AdditionalMessageHistoryViewData] = [], useRootInterfaceStateForThread: Bool = false) -> Signal<(MessageHistoryView, ViewUpdateType, InitialMessageHistoryData?), NoError> {
+        let tag = self.mattermostEffectiveTag(chatLocation, tag) // MATTERMOST
         if let account = self.account {
             let inputAnchor: HistoryViewInputAnchor
             switch index {

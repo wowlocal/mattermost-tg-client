@@ -80,6 +80,24 @@ tools/relay-remote.py "$UDID" send-saved text="hello"                      # sen
 
 Launch with `SIMCTL_CHILD_RELAY_DEBUG_NO_PERMISSION_PROMPTS=1` from the first launch on: an unanswered notifications prompt is SpringBoard's and survives app restarts and reinstalls until the simulator reboots. Passwords filled by the remote are cleared once they are submitted, so iOS doesn't cover the screen with "Save Password?".
 
+Chat-screen commands (Phase 3B, collapsed reply threads; TelegramUI `RelayDebugThreads.swift`, output in the result's `extra`), each through the code path of the tap it stands for:
+
+```sh
+tools/relay-remote.py "$UDID" chat query=architecture             # open a chat (as RELAY_DEBUG_OPEN_CHAT names it)
+tools/relay-remote.py "$UDID" visible                             # visible messages: post ids, thread ids, root tags, replies buttons
+tools/relay-remote.py "$UDID" replies index=0                     # the newest visible "N replies" button (or post=<root id>)
+tools/relay-remote.py "$UDID" scroll to=top                       # scroll the visible chat (top/bottom)
+tools/relay-remote.py "$UDID" post post=<post id>                 # permalink: a reply opens its thread at it (CRT on)
+tools/relay-remote.py "$UDID" follow                              # Follow / Unfollow Thread in the visible thread
+tools/relay-remote.py "$UDID" menu post=<post id>                 # the message's context menu
+tools/relay-remote.py "$UDID" threads                             # the chat list's threads button (team=<id>)
+tools/relay-remote.py "$UDID" threads-list                        # what the threads screen lists (team=<id>)
+tools/relay-remote.py "$UDID" threads-row index=0                 # open a row of the threads screen
+tools/relay-remote.py "$UDID" check-thread post=<root id>         # load a thread and compare it with the server's
+tools/relay-remote.py "$UDID" dump-chatlist                       # Documents/relay-debug/chatlist.json now
+tools/relay-remote.py "$UDID" back                                # pop the top screen
+```
+
 ### Login and account lifecycle checks
 
 `tools/mm-dev-auth.py` (standard library only; reads `infra/dev-server/.env`, keeps TOTP secrets in `build-input/dev-mfa-secrets.json`):

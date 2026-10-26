@@ -66,6 +66,10 @@ extension ChatControllerImpl {
     // spinner over the whole chat; `displayModalProgress` is then ignored. Callers without a link to shimmer
     // (peer info, instant view) keep passing nil and get the modal as before.
     static func openMessageReplies(context: AccountContext, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)? = nil, navigationController: NavigationController, present: @escaping (ViewController, Any?) -> Void, messageId: EngineMessage.Id, isChannelPost: Bool, atMessage atMessageId: EngineMessage.Id?, displayModalProgress: Bool, progress: Promise<Bool>? = nil) -> Signal<Never, NoError> {
+        // MATTERMOST: Mattermost threads are local (see `MattermostThreads.swift`).
+        if MattermostBackend.isEnabled {
+            return ChatControllerImpl.mattermostOpenMessageReplies(context: context, navigationController: navigationController, messageId: messageId, atMessage: atMessageId)
+        }
         return Signal { subscriber in
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
 

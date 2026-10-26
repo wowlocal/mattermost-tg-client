@@ -137,6 +137,9 @@ swift_library(
         "//submodules/TelegramUI/Components/AvatarComponent",
         "//submodules/TelegramUI/Components/PeerManagement/OwnershipTransferController",
         "//submodules/TelegramUI/Components/GlassControls",
+        # MATTERMOST: the threads button (collapsed reply threads, MattermostThreadsButton.swift).
+        "//submodules/MattermostSync:MattermostSync",
+        "//submodules/MattermostUI:MattermostUI",
     ],
     visibility = [
         "//visibility:public",

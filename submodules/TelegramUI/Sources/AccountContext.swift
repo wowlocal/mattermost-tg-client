@@ -32,6 +32,7 @@ import WalletContext
 import WalletConnectScreen
 import AlertUI
 import MetalEngine
+import MattermostSync
 
 private final class DeviceSpecificContactImportContext {
     let disposable = MetaDisposable()
@@ -808,6 +809,12 @@ public final class AccountContextImpl: AccountContext {
         case .peer:
             let _ = self.engine.messages.applyMaxReadIndexInteractively(index: messageIndex).start()
         case let .replyThread(data):
+            // MATTERMOST: a thread view marks its Mattermost thread read (`ReplyThreadHistoryContext` would ask
+            // Telegram's server).
+            if MattermostBackend.isEnabled {
+                MattermostSync.markThreadViewed(accountId: self.account.id, peerId: data.peerId, threadId: data.threadId, messageIndex: messageIndex)
+                return
+            }
             let context = chatLocationContext(holder: contextHolder, account: self.account, data: data)
             context.applyMaxReadIndex(messageIndex: messageIndex)
         case .customChatContents:

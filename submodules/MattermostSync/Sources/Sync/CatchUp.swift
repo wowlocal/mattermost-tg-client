@@ -34,10 +34,11 @@ extension MattermostAccountSync {
                 if self.channelState(channelId) == nil {
                     await self.refreshChannel(channelId)
                 } else {
+                    let mentionCount = self.memberMentionCount(member)
                     self.state.with { state in
                         state.channels[channelId]?.channel = item.channel
                         state.channels[channelId]?.member = member
-                        state.channels[channelId]?.mentionCount = Int32(clamping: member.mentionCount)
+                        state.channels[channelId]?.mentionCount = mentionCount
                     }
                 }
                 if self.channelState(channelId) != nil {
@@ -115,6 +116,8 @@ extension MattermostAccountSync {
             self.applyServerReadState(channelId: channelId, transaction: transaction)
             return deleted.count + edited.count + fresh.count
         }
+        // Roots of new replies: their reply counts (the `since=` list says 0 for every root).
+        await self.refreshThreadRoots(channelId: channelId, posts: posts.filter { $0.createAt > since })
         if needsLatestPage.current {
             do {
                 try await self.loadPage(channelId: channelId, cursor: .latest, requestedRange: nil, resetReadState: true)

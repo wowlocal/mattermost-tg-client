@@ -168,6 +168,13 @@ final class RequestBuildingTests: StubbedClientTestCase {
             path: "/api/v4/users/me/teams/t1/threads",
             query: ["since": "5", "before": "th1", "per_page": "25", "extended": "true", "unread": "true"]
         )
+        await check(
+            { _ = try await $0.userThread(teamId: "t1", threadId: "th1", extended: true) },
+            response: #"{"id":"th1","reply_count":3,"unread_replies":1}"#,
+            method: "GET",
+            path: "/api/v4/users/me/teams/t1/threads/th1",
+            query: ["extended": "true"]
+        )
         await check({ try await $0.markThreadRead(teamId: "t1", threadId: "th1", timestamp: 1_700_000_000_000) }, method: "PUT", path: "/api/v4/users/me/teams/t1/threads/th1/read/1700000000000")
         await check({ try await $0.followThread(teamId: "t1", threadId: "th1") }, method: "PUT", path: "/api/v4/users/me/teams/t1/threads/th1/following")
         await check({ try await $0.unfollowThread(teamId: "t1", threadId: "th1") }, method: "DELETE", path: "/api/v4/users/me/teams/t1/threads/th1/following")

@@ -941,6 +941,11 @@ final class AuthorizedApplicationContext {
                     }
                     
                     let chatLocation: NavigateToChatControllerParams.Location
+                    // MATTERMOST: a Mattermost thread opens over its channel, at the tapped reply.
+                    if let threadId = threadId, MattermostBackend.isEnabled {
+                        mattermostOpenThread(context: self.context, navigationController: self.rootController, peerId: peerId, threadId: threadId, messageId: messageId, activateInput: activateInput)
+                        return
+                    }
                     if let threadId = threadId {
                         chatLocation = .replyThread(ChatReplyThreadMessage(
                             peerId: peerId, threadId: threadId, channelMessageId: nil, isChannelPost: false, isForumPost: true, isMonoforumPost: false, maxMessage: nil, maxReadIncomingMessageId: nil, maxReadOutgoingMessageId: nil, unreadCount: 0, initialFilledHoles: IndexSet(), initialAnchor: .automatic, isNotAvailable: false

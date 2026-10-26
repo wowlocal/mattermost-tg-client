@@ -913,7 +913,7 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
                         } else if let attribute = attribute as? ViewCountMessageAttribute {
                             viewCount = attribute.count
                         } else if let attribute = attribute as? ReplyThreadMessageAttribute, case .peer = arguments.chatLocation {
-                            if let channel = arguments.message.peers[arguments.message.id.peerId] as? TelegramChannel, case .group = channel.info {
+                            if let channel = arguments.message.peers[arguments.message.id.peerId] as? TelegramChannel, case .group = channel.info, !(MattermostBackend.isEnabled && attribute.commentsPeerId == arguments.message.id.peerId) { // MATTERMOST: not with the "N replies" button
                                 dateReplies = Int(attribute.count)
                             }
                         } else if let attribute = attribute as? PaidStarsMessageAttribute, arguments.message.id.peerId.namespace == Namespaces.Peer.CloudChannel {

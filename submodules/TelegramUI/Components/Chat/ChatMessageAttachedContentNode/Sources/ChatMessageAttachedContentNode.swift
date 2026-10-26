@@ -712,7 +712,7 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                     } else if let attribute = attribute as? ViewCountMessageAttribute {
                         viewCount = attribute.count
                     } else if let attribute = attribute as? ReplyThreadMessageAttribute, case .peer = chatLocation {
-                        if let channel = message.peers[message.id.peerId] as? TelegramChannel, case .group = channel.info {
+                        if let channel = message.peers[message.id.peerId] as? TelegramChannel, case .group = channel.info, !(MattermostBackend.isEnabled && attribute.commentsPeerId == message.id.peerId) { // MATTERMOST: not with the "N replies" button
                             dateReplies = Int(attribute.count)
                         }
                     } else if let attribute = attribute as? PaidStarsMessageAttribute, message.id.peerId.namespace == Namespaces.Peer.CloudChannel {
