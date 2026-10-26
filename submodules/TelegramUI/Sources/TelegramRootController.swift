@@ -251,6 +251,8 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         self.accountSettingsController = accountSettingsController
         self.rootTabController = tabBarController
         self.pushViewController(tabBarController, animated: false)
+        
+        self.relayDebugOpenScreenIfRequested() // MATTERMOST: debug only (RelayDebugScreens.swift)
     }
         
     public func updateRootControllers(showCallsTab: Bool) {
