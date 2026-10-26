@@ -24,6 +24,10 @@ final class ChatObserver: MattermostChatObserver {
     func chatHistoryOpened(peerId: PeerId) {
         self.sync?.chatOpened(peerId: peerId)
     }
+
+    func threadReadState(peerId: PeerId, threadId: Int64, transaction: Transaction) -> MattermostThreadReadState? {
+        return self.sync?.threadReadState(peerId: peerId, threadId: threadId, transaction: transaction)
+    }
 }
 
 /// Channels whose posts weren't asked for since a given time (`staleChannels` cursor): edits, deletions and

@@ -64,6 +64,19 @@ extension ChatControllerImpl {
 }
 
 extension ChatControllerImpl {
+    /// In-chat search (4F): the newest result, shown as soon as results arrive while the query is typed, is shown
+    /// as its root when collapsed reply threads hide it, rather than pushing its thread; stepping to it or picking
+    /// it from the list opens the thread. True when it navigated (to the root).
+    func mattermostShowSearchResultRoot(messageId: EngineMessage.Id) -> Bool {
+        guard MattermostBackend.isEnabled, case .peer = self.chatLocation, let root = MattermostSync.collapsedThreadRoot(accountId: self.context.account.id, messageId: messageId) else {
+            return false
+        }
+        self.navigateToMessage(from: nil, to: .id(root, NavigateToMessageParams(timestamp: nil, quote: nil)), forceInCurrentChat: true)
+        return true
+    }
+}
+
+extension ChatControllerImpl {
     /// Reply (menu, swipe) in a chat whose history shows root posts only: the reply would vanish from it, so the
     /// message's thread opens with the composer instead, as Mattermost does. False otherwise.
     func mattermostReplyInThread(messageId: EngineMessage.Id) -> Bool {

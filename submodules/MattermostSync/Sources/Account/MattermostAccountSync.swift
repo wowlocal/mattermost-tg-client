@@ -225,6 +225,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
     }
 
     private func run() async {
+        // Ephemeral answers last until a reload in Mattermost (4F).
+        await self.removeEphemeralMessages()
         await self.writeSyntheticConfiguration()
         // Bootstrap until it succeeds (the server may be unreachable at launch).
         var attempt = 0

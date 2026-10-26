@@ -6,8 +6,16 @@ import MattermostSyncCore
 
 /// Plain text plus `TextEntity`s, built piece by piece (ranges are UTF-16 offsets).
 struct FormattedTextBuilder {
+    /// A picture shown inline in the text (4F: attachment icons), over `range` (its placeholder character).
+    struct Icon {
+        var range: Range<Int>
+        var url: String
+        var round: Bool
+    }
+
     private(set) var text = ""
     private(set) var entities: [TextEntity] = []
+    private(set) var icons: [Icon] = []
     private var length = 0
     /// How `appendMarkdown` parses (emoticons, inline LaTeX; 3E).
     var markdownOptions: MattermostMarkdown.Options = .default
@@ -44,6 +52,13 @@ struct FormattedTextBuilder {
                 self.entities.append(TextEntity(range: start ..< self.length, type: type))
             }
         }
+    }
+
+    /// An inline picture: a placeholder character (`alt`, what plain-text renderers show) the picture replaces.
+    mutating func appendIcon(url: String, round: Bool, alt: String) {
+        let start = self.length
+        self.append(alt)
+        self.icons.append(Icon(range: start ..< self.length, url: url, round: round))
     }
 
     mutating func addEntity(_ type: TextEntityType, from start: Int) {
@@ -120,10 +135,13 @@ public struct MattermostPostActionData: Codable, Equatable {
 /// and an image (design: rendering gaps, 2C).
 ///
 /// Each attachment becomes a block of text: the pretext, then a quote (Telegram's block quote stands in
-/// for the attachment's colour bar) with the author, the title (a link when `title_link` is set), the text,
-/// the fields (`Title: value`) and the footer. Telegram has no per-message colour, so `color` is not shown.
+/// for the attachment's colour bar, drawn in the attachment's `color`: a custom entity TextFormat applies, 4F) with
+/// the author (`author_icon` before it), the title (a link when `title_link` is set; `thumb_url` after it), the
+/// text, the fields (`Title: value`) and the footer (`footer_icon` before it). The icons are inline pictures at
+/// text size (custom emoji images, `MattermostIconResource`): Telegram has no small picture beside a message's
+/// text, and as the message's photo a 75 px thumbnail would be stretched to the bubble's width.
 /// Buttons and menus become an inline keyboard; the first `image_url` on the server becomes the message's
-/// photo when the post has no files (`thumb_url` and `author_icon` are not shown).
+/// photo when the post has no files.
 enum AttachmentConverter {
     struct Result {
         var replyMarkup: ReplyMarkupMessageAttribute?
@@ -149,8 +167,20 @@ enum AttachmentConverter {
             }
             builder.paragraph()
             let quoteStart = builder.position
+            // Icons only when they can load: on the server itself, or through its image proxy (3E).
+            func loadableIcon(_ key: String) -> String? {
+                let url = string(key)
+                guard !url.isEmpty, let serverURL = URL(string: serverURL), imageProxy || MattermostURLImageResource.sameOriginURL(url, serverURL: serverURL) != nil else {
+                    return nil
+                }
+                return url
+            }
             let author = string("author_name")
             if !author.isEmpty {
+                if let icon = loadableIcon("author_icon") {
+                    builder.appendIcon(url: icon, round: true, alt: "👤")
+                    builder.append(" ")
+                }
                 let link = string("author_link")
                 builder.append(author, link.isEmpty ? [.bold] : [.bold, .textUrl(url: link)])
             }
@@ -159,6 +189,11 @@ enum AttachmentConverter {
                 builder.line()
                 let link = string("title_link")
                 builder.append(title, link.isEmpty ? [.bold] : [.bold, .textUrl(url: link)])
+            }
+            // The thumbnail Mattermost shows beside the attachment: at the end of its title (or author) line.
+            if !title.isEmpty || !author.isEmpty, let thumb = loadableIcon("thumb_url") {
+                builder.append(" ")
+                builder.appendIcon(url: thumb, round: false, alt: "🖼")
             }
             let text = string("text")
             if !text.isEmpty {
@@ -193,6 +228,10 @@ enum AttachmentConverter {
             }
             if !footer.isEmpty {
                 builder.line()
+                if !string("footer").isEmpty, let icon = loadableIcon("footer_icon") {
+                    builder.appendIcon(url: icon, round: false, alt: "🔹")
+                    builder.append(" ")
+                }
                 builder.append(footer, [.italic])
             }
             if builder.position == quoteStart {
@@ -203,6 +242,9 @@ enum AttachmentConverter {
                 }
             }
             builder.addEntity(.blockQuote, from: quoteStart)
+            if let rgb = MattermostCustomEntity.attachmentColor(string("color")) {
+                builder.addEntity(.quoteColor(rgb: rgb), from: quoteStart)
+            }
 
             // `image_url` only: `thumb_url` is a small decorative icon that Telegram would blow up to a photo.
             if result.image == nil {

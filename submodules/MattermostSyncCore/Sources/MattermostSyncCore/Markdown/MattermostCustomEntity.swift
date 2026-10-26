@@ -34,4 +34,54 @@ public enum MattermostCustomEntity {
             return 1.0
         }
     }
+
+    // MARK: Attachment colours (4F)
+
+    /// Colours sit in a range of their own: `0x6D` ("m") in the top byte, the RGB value below.
+    private static let quoteColorBase: Int32 = 0x6D00_0000
+
+    /// The custom entity type that colours a block quote over the same range: a Slack-style attachment's `color`,
+    /// drawn as the quote's bar (Mattermost's colour bar).
+    public static func quoteColor(rgb: UInt32) -> Int32 {
+        return quoteColorBase | Int32(bitPattern: rgb & 0xFF_FFFF)
+    }
+
+    /// The RGB value of a quote colour entity type, nil for other types.
+    public static func quoteColorRGB(_ type: Int32) -> UInt32? {
+        guard type & ~0xFF_FFFF == quoteColorBase else {
+            return nil
+        }
+        return UInt32(bitPattern: type & 0xFF_FFFF)
+    }
+
+    /// An attachment's `color`: `#rrggbb`, `#rgb` (with or without `#`), or the names Mattermost's mobile app knows
+    /// (`good`, `warning`, `danger`, `primary`, `success`). Nil for anything else (no colour: the theme's quote).
+    public static func attachmentColor(_ value: String) -> UInt32? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch trimmed {
+        case "good":
+            return 0x00C100
+        case "warning":
+            return 0xDEDE01
+        case "danger":
+            return 0xE40303
+        case "primary":
+            return 0x166DE0
+        case "success":
+            return 0x339970
+        default:
+            break
+        }
+        var hex = Substring(trimmed)
+        if hex.hasPrefix("#") {
+            hex = hex.dropFirst()
+        }
+        guard hex.count == 3 || hex.count == 6, hex.allSatisfy({ $0.isHexDigit }) else {
+            return nil
+        }
+        if hex.count == 3 {
+            hex = Substring(hex.map { "\($0)\($0)" }.joined())
+        }
+        return UInt32(hex, radix: 16)
+    }
 }

@@ -59,6 +59,53 @@ public struct MattermostThreadsBadge: Equatable {
 }
 
 extension MattermostAccountSync {
+    // MARK: Read position (4F)
+
+    /// Where the thread view of `threadId` (the root's local id) opens: the first reply the user hasn't seen
+    /// (incoming, created after the thread's `last_viewed_at`), when the thread is followed and has unread
+    /// replies, as Mattermost's thread view shows its "new messages" line. Replies not stored yet can't be
+    /// placed (the view then opens at the newest reply). Inside a Postbox transaction (TelegramCore
+    /// `MattermostChatObserver.threadReadState`).
+    func threadReadState(peerId: PeerId, threadId: Int64, transaction: Transaction) -> MattermostThreadReadState? {
+        guard self.isCollapsedThreads, let channelId = self.channelId(forPeerId: peerId), let rootLocalId = Int32(exactly: threadId) else {
+            return nil
+        }
+        guard let rootEntry = self.store.entries(channelId: channelId, fromLocalId: rootLocalId, ascending: true, limit: 1).first, rootEntry.localId == rootLocalId else {
+            return nil
+        }
+        let rootPostId = rootEntry.serverPostId
+        let thread = self.state.with { state -> UserThread? in
+            for teamThreads in state.threads.values {
+                if let thread = teamThreads.threads[rootPostId] {
+                    return thread
+                }
+            }
+            return nil
+        }
+        guard let thread = thread, thread.unreadReplies > 0 else {
+            return nil
+        }
+        var firstUnread: MessageId?
+        var unreadCount: Int32 = 0
+        for entry in self.store.threadReplies(rootPostIds: [rootPostId], channelId: channelId)[rootPostId] ?? [] where !entry.isDeleted && entry.createAt > thread.lastViewedAt {
+            let messageId = MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: entry.localId)
+            guard let message = transaction.getMessage(messageId), message.flags.contains(.Incoming) else {
+                continue
+            }
+            if firstUnread == nil {
+                firstUnread = messageId
+            }
+            if !entry.postId.contains("#") {
+                unreadCount += 1
+            }
+        }
+        guard let firstUnreadMessageId = firstUnread, unreadCount > 0 else {
+            return nil
+        }
+        MMLog.log("threads: \(rootPostId) opens at its first unread reply \(firstUnreadMessageId.id) (\(unreadCount) unread)")
+        return MattermostThreadReadState(firstUnreadMessageId: firstUnreadMessageId, unreadCount: unreadCount)
+    }
+
     // MARK: Loading
 
     /// Every team's followed threads, e.g. after the bootstrap or switching collapsed threads on.
