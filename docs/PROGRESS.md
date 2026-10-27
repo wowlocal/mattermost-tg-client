@@ -696,3 +696,21 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
     alice/bob/dave (the `127.0.0.1` account logged out, its data deleted); stored users rewritten once (user names
     format cursor `username/2`). The push proxy untouched. Scratch: the web app bundle and server binary copies in the
     session's scratchpad.
+- **Tab bar: Chats · Threads · Mentions · Settings** (main checkout, `bbf87df2`, user request). The tab bar had only
+  Chats and Settings, a lot of room for two buttons; Threads and Recent Mentions became root tabs, as in Mattermost's
+  mobile app (`TelegramRootController.makeRelayTabControllers`).
+  - **Threads tab** (`mattermostThreadsTabController`, MattermostUI): the threads screen, made at launch; picks the
+    first team once the account has synced (`MattermostSync.teamsWhenReady`), opens on the team of the chat list's
+    selected team folder (`ChatListController.selectedFolderId`; "All" keeps the team), team tabs on top as before;
+    badge = unread followed threads of all teams, "@" in front with mentions (`MattermostSync.totalThreadsBadge`).
+    The chat list's threads header button and `NavigationButtonComponent.iconWithBadge` are gone.
+  - **Mentions tab** (`MattermostPostListController(isTab:)`): Recent Mentions, live; reloads on opening only after a
+    failed first page (`reloadIfFailed`). The Settings row is gone; Saved Posts stays in Settings.
+  - Tab icons: SF Symbols pre-tinted in the tab bar's title colours (`RelayTabBarIcons.swift`); the glass tab bar draws
+    static images untinted. Telegram's own tabs keep their Lottie icons.
+  - **Checks:** simulator build; Threads (Engineering/Design tabs, follows the Design folder), Mentions, Settings
+    without Recent Mentions — screenshots in the session only. Device build `0.1.0 (31860)` signed with the user's
+    team (`tools/relay-device-build.sh` through the GUI Terminal) and installed on the user's iPhone with
+    ideviceinstaller.
+  - **Gaps:** with collapsed reply threads off the Threads tab stays and says so (no dynamic tab list); the Settings
+    tab's badge counts the other accounts' unread chats (Telegram's behaviour, e.g. "22.5K" on the dev accounts).
