@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relay Support</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+<nav><a href="index.html">Relay</a><a href="support.html">Support</a><a href="privacy.html">Privacy</a></nav>
+<h1>Support</h1>
+<p class="meta">Relay: Team Chat for iPhone and iPad</p>
+
+<h2>Getting started</h2>
+<p>Relay connects to your organization's Mattermost server. Open the app, enter your server's address (for example
+<code>chat.example.com</code>) and sign in with the same account you use on the web: username or email and
+password, multi-factor authentication or single sign-on, as your server allows. You can add more servers and
+accounts in Settings.</p>
+
+<h2>Requirements</h2>
+<ul>
+  <li>iOS or iPadOS 15 or later.</li>
+  <li>A Mattermost server reachable over HTTPS. Relay is tested with Mattermost Server 11 (ESR) and 12.</li>
+</ul>
+
+<h2>Push notifications</h2>
+<p>Notifications are sent by your Mattermost server. For Relay to receive them, your server's administrator has to
+point the server's push notification setting at a push proxy that serves Relay. If you don't get notifications,
+ask your administrator; the app works without them and shows new messages whenever it is open.</p>
+
+<h2>Common questions</h2>
+<ul>
+  <li><strong>I can't sign in.</strong> Check that the server address opens in Safari and that it starts with
+      <code>https://</code>. If your organization uses single sign-on, choose it on the sign-in screen.</li>
+  <li><strong>A message didn't send.</strong> Messages sent while offline are kept and sent when the connection
+      returns; a failed message can be resent from its menu.</li>
+  <li><strong>How do I remove my data?</strong> Log out of the account in Settings, or delete the app. Data on the
+      server is managed by your server's administrator.</li>
+</ul>
+
+<h2>Contact</h2>
+<p>Report a problem or ask a question at
+<a href="https://github.com/wowlocal/mattermost-tg-client/issues">github.com/wowlocal/mattermost-tg-client/issues</a>.
+Please don't post passwords, server addresses you want to keep private, or message contents.</p>
+
+<h2>Source code</h2>
+<p>Relay is open source, built from the Telegram for iOS source code and published under the GNU General Public
+License: <a href="https://github.com/wowlocal/mattermost-tg-client">github.com/wowlocal/mattermost-tg-client</a>.
+Third-party licenses are listed in the app under Settings → About Relay → Open Source Licenses.</p>
+
+<footer>Relay is not affiliated with Mattermost, Inc. or with Telegram. Mattermost is a trademark of Mattermost,
+Inc. · <a href="privacy.html">Privacy Policy</a></footer>
+</main>
+</body>
+</html>

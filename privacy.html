@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relay Privacy Policy</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+<nav><a href="index.html">Relay</a><a href="support.html">Support</a><a href="privacy.html">Privacy</a></nav>
+<h1>Privacy Policy</h1>
+<p class="meta">Relay: Team Chat for iPhone and iPad · Effective October 27, 2026</p>
+
+<p>Relay is a client for Mattermost servers. It has no servers or accounts of its own, and the developer of Relay
+does not collect any data about you or your use of the app.</p>
+
+<h2>What the app does not do</h2>
+<ul>
+  <li>No analytics, advertising, tracking or crash-reporting services are built into the app.</li>
+  <li>Nothing you do in the app is sent to the developer of Relay.</li>
+  <li>Your data is not sold, shared with data brokers or used to track you across apps and websites.</li>
+</ul>
+
+<h2>Where your data goes</h2>
+<p>Everything the app sends — your sign-in, messages, files, voice messages, reactions and profile changes — goes
+only to the Mattermost server you sign in to. That server is run by you or by your organization, and its
+operator's privacy policy applies to the data stored there. Link previews and images are loaded through your
+server, not directly from the linked websites.</p>
+
+<h2>Push notifications</h2>
+<p>If your server's administrator turns on push notifications for Relay, your server sends each notification
+through the push notification proxy configured on the server, which passes it to the Apple Push Notification
+service. Depending on the server's settings, a notification can contain the sender, the channel name and the
+message text, or only identifiers that the app then uses to load the message from your server. A push proxy
+operated by the developer of Relay only forwards notifications: it does not store their contents or your device
+token.</p>
+
+<h2>Data on your device</h2>
+<ul>
+  <li>Messages and media are cached on your device in an encrypted database so the app can open quickly and work
+      offline. Your sign-in session is stored in the iOS Keychain.</li>
+  <li>Logging out of an account removes its data from the device; deleting the app removes everything.</li>
+  <li>You can protect the app with a passcode or Face ID in Settings → Privacy and Security.</li>
+</ul>
+
+<h2>Permissions</h2>
+<p>The app asks for the camera, photo library, microphone and Face ID only when you use a feature that needs
+them: taking or attaching photos and videos, recording voice messages, or unlocking the app. Photos, videos and
+recordings leave your device only when you send them, and only to your Mattermost server.</p>
+
+<h2>Diagnostics</h2>
+<p>The app can keep crash and performance reports that iOS provides, and an optional diagnostic log that you turn on
+yourself. They stay on your device. They leave it only if you export them (Settings → About Relay → Diagnostics)
+and choose where to send them; message text, passwords and tokens are never written to them. If you opted in to
+sharing analytics with app developers in iOS Settings, Apple may share crash reports with the developer; that is
+governed by Apple's privacy policy.</p>
+
+<h2>Children</h2>
+<p>Relay is a workplace communication tool and is not directed at children.</p>
+
+<h2>Changes</h2>
+<p>If this policy changes, the new version will be published on this page with a new effective date.</p>
+
+<h2>Contact</h2>
+<p>Questions about this policy: open an issue at
+<a href="https://github.com/wowlocal/mattermost-tg-client/issues">github.com/wowlocal/mattermost-tg-client/issues</a>.</p>
+
+<footer>Relay is not affiliated with Mattermost, Inc. or with Telegram. Mattermost is a trademark of Mattermost,
+Inc.</footer>
+</main>
+</body>
+</html>
