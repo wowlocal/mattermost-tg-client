@@ -4,7 +4,7 @@ Working log for the Mattermost client fork. Each work session reads this first a
 
 ## Current state
 
-- **Phase:** 0–3 done; Phase 4: 4A, 4B, 4C, 4E, 4F, 4G done on `main` (release candidate `0.1.0 (31844)` passed the regression checklist on Mattermost 11.7.14 and 12.0.1 and six simulators, [release/REGRESSION.md](release/REGRESSION.md); push delivery from 12.0.1 still needs the push proxy re-rendered with `infra/push-proxy/up.sh` and a check); next: 5A voice messages. 4D (TestFlight) is still blocked on the user's App Store Connect setup: the App Store Connect record, a distribution certificate and App Store profiles, D1/D6 and the GPL review (development signing with the user's team works, `tools/relay-device-build.sh`).
+- **Phase:** 0–3 done; Phase 4: 4A, 4B, 4C, 4E, 4F, 4G done on `main` (release candidate `0.1.0 (31844)` passed the regression checklist on Mattermost 11.7.14 and 12.0.1 and six simulators, [release/REGRESSION.md](release/REGRESSION.md); the push proxy now serves Mattermost 12's platform names too); next: 5A voice messages. 4D (TestFlight) is still blocked on the user's App Store Connect setup: the App Store Connect record, a distribution certificate and App Store profiles, D1/D6 and the GPL review (development signing with the user's team works, `tools/relay-device-build.sh`).
 - **Upstream pin:** Telegram‑iOS `5c20d095d1ab` (app 13.0.1, tag `upstream-pin`), the newest commit built with Xcode 27.0 (installed). Master needs Xcode 27.1.
 - **Working name:** "Relay" (`org.relaychat.Relay`, URL scheme `relay`). Placeholder until D6 is decided.
 - **Build:** commands in [BUILD.md](BUILD.md). Main simulator "Relay iPhone 17 Pro" (iOS 26.5). `main` is pushed to `origin` (github.com/wowlocal/mattermost-tg-client) after each merge.
@@ -514,3 +514,4 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
     (`relay4e12`, containers, volumes, network), its image, both TLS proxies, the release simulator and all six
     matrix simulators. "Relay iPhone 17 Pro" holds the final debug build with alice/bob/dave. The push proxy is
     untouched (still rendered from the old template). The Mac's pasteboard was overwritten by a Copy Link check.
+- **After 4E** (coordinator): the running push proxy was re-rendered from the 4E template and restarted; it now initializes `relay_apple`, `relay_apple_sandbox`, `apple_rn` and `apple_rnbeta` with the real APNs key, so Relay accounts on Mattermost 12 (registered as `apple_rnbeta`/`apple_rn`) get pushes through it. `infra/push-proxy/up.sh` now force-recreates the container (the rendered config is a bind mount, so a changed config alone never restarted a running proxy). Next: 5A voice messages.

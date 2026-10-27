@@ -56,7 +56,8 @@ sed -e "s|__APNS_KEY_ID__|$APNS_KEY_ID|g" \
     mattermost-push-proxy.template.json > .state/mattermost-push-proxy.json
 chmod 644 .state/mattermost-push-proxy.json
 
-docker compose --project-directory "$DIR" -f "$DIR/docker-compose.yml" --env-file "$DIR/.env" up -d --wait --wait-timeout 120
+# --force-recreate: the rendered config is a bind mount, so a changed config alone would not restart a running proxy.
+docker compose --project-directory "$DIR" -f "$DIR/docker-compose.yml" --env-file "$DIR/.env" up -d --force-recreate --wait --wait-timeout 120
 echo "==> push proxy up: http://127.0.0.1:${PUSH_PROXY_PORT:-8066} (host), http://push-proxy:8066 (mmdev_default)"
 docker compose --project-directory "$DIR" -f "$DIR/docker-compose.yml" --env-file "$DIR/.env" logs --no-log-prefix push-proxy | grep -E "Initializing apple|Failed to initialize|Server is listening|Loading" || true
 echo "    Point the dev server at it: $DIR/configure-dev-server.py"
