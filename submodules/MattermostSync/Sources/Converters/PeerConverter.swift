@@ -14,11 +14,12 @@ enum PeerConverter {
         let lastName = names.last ?? ""
         var photo: [TelegramMediaImageRepresentation] = []
         // Without a custom picture Mattermost serves a generated default; Telegram's own initials look better.
-        let pictureUpdate = user.isBot ? user.botLastIconUpdate : user.lastPictureUpdate
-        if pictureUpdate > 0 {
+        // Bots too: a bot's picture is its profile image (plugins and `POST /users/{id}/image` set
+        // `last_picture_update`), as Mattermost's own apps draw it; `bot_last_icon_update` stays 0 on 11.x.
+        if user.hasCustomPicture {
             photo.append(TelegramMediaImageRepresentation(
                 dimensions: PixelDimensions(width: 128, height: 128),
-                resource: MattermostAvatarResource(userId: user.id, lastPictureUpdate: pictureUpdate),
+                resource: MattermostAvatarResource(userId: user.id, lastPictureUpdate: user.lastPictureUpdate),
                 progressiveSizes: [],
                 immediateThumbnailData: nil
             ))

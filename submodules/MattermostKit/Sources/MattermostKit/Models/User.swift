@@ -27,6 +27,8 @@ public struct User: Codable, Sendable, Equatable, Identifiable {
     public var lastActivityAt: Int64?
     public var isBot: Bool
     public var botDescription: String
+    /// From the removed `POST /bots/{id}/icon` (SVG icons); 0 for every bot on 11.x. A bot's picture follows
+    /// `lastPictureUpdate` like anyone's.
     public var botLastIconUpdate: Int64
     public var mfaActive: Bool
     public var remoteId: String?
