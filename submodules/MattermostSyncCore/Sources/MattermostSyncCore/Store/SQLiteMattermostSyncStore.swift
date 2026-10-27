@@ -189,6 +189,16 @@ public final class SQLiteMattermostSyncStore {
         return peer
     }
 
+    /// Every peer of a kind, in allocation order (4H: every stored user is renamed when the display setting
+    /// changes).
+    public func peers(kind: MattermostPeerKind) throws -> [MattermostPeer] {
+        var peers: [MattermostPeer] = []
+        try connection.query("SELECT \(Self.peerColumns) FROM peers WHERE kind = ?1 ORDER BY peer_id", [.text(kind.rawValue)]) { row in
+            peers.append(readPeer(row))
+        }
+        return peers
+    }
+
     /// The peer that shows a channel's messages: the channel or GM peer, or for a DM channel the
     /// other user's peer (registered with `setDirectChannel`). Nil when unknown.
     public func peer(channelId: String) throws -> MattermostPeer? {

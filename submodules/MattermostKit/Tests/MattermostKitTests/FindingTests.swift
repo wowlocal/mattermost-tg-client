@@ -31,6 +31,19 @@ final class FindingTests: StubbedClientTestCase {
         XCTAssertTrue(empty.orderedPosts.isEmpty)
     }
 
+    func testChannelTimezones() async throws {
+        StubURLProtocol.respond(with: .json(#"["Europe/Berlin","America/New_York",""]"#))
+        let zones = try await makeClient().channelTimezones(channelId: "c1")
+        let request = try XCTUnwrap(StubURLProtocol.lastRequest)
+        XCTAssertEqual(request.method, "GET")
+        XCTAssertEqual(request.path, "/api/v4/channels/c1/timezones")
+        XCTAssertEqual(zones, ["Europe/Berlin", "America/New_York"])
+        // 11.7 answers `null` when no member has a time zone.
+        StubURLProtocol.respond(with: .json("null"))
+        let none = try await makeClient().channelTimezones(channelId: "c1")
+        XCTAssertEqual(none, [])
+    }
+
     func testPinAndUnpin() async throws {
         StubURLProtocol.respond(with: .json(#"{"status":"OK"}"#))
         try await makeClient().pinPost(id: "p1")

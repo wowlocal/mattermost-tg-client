@@ -88,6 +88,16 @@ extension MattermostClient {
         try await send(APIRequest(.get, apiPath("channels", channelId, "stats")))
     }
 
+    /// `GET /channels/{channel_id}/timezones`: the distinct time zones of the channel's members (the `@channel`
+    /// confirmation counts them). The server answers `null` when no member has one.
+    public func channelTimezones(channelId: String) async throws -> [String] {
+        let value: JSONValue = try await send(APIRequest(.get, apiPath("channels", channelId, "timezones")))
+        guard case let .array(items) = value else {
+            return []
+        }
+        return items.compactMap { $0.stringValue }.filter { !$0.isEmpty }
+    }
+
     /// `GET /teams/{team_id}/channels`: public channels in a team (browse).
     public func publicChannels(teamId: String, page: Int? = nil, perPage: Int? = nil) async throws -> [Channel] {
         var query = QueryBuilder()

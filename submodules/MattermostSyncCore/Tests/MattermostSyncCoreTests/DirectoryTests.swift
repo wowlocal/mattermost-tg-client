@@ -85,6 +85,8 @@ final class ChannelAccessRulesTests: XCTestCase {
         XCTAssertFalse(result.canArchive)
         XCTAssertFalse(result.canConvertToPrivate)
         XCTAssertTrue(result.canEditProperties)
+        // 4H: nobody is added to or removed from the default channel.
+        XCTAssertFalse(result.canManageMembers)
     }
 
     func testAdminsAndSystemAdmin() {

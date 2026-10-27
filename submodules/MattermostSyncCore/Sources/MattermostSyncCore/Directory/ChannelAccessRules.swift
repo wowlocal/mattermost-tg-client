@@ -16,7 +16,8 @@ public enum ChannelAccessRules {
         public var canUnarchive = false
         public var canConvertToPrivate = false
         public var canLeave = false
-        /// The team's default channel (town square): it can't be left, archived or made private.
+        /// The team's default channel (town square): it can't be left, archived or made private, and its members
+        /// are the team's (none added or removed).
         public var isDefaultChannel = false
         /// Delete other users' posts (`delete_others_posts`: channel and team admins by default, 4F).
         public var canDeleteOthersPosts = false
@@ -50,7 +51,10 @@ public enum ChannelAccessRules {
             return result
         }
         result.canEditProperties = has(isPublic ? "manage_public_channel_properties" : "manage_private_channel_properties")
-        result.canManageMembers = has(isPublic ? "manage_public_channel_members" : "manage_private_channel_members")
+        // 4H: the default channel's members are the team's: the server refuses removals
+        // (`api.channel.remove.default.app_error`) and every team member is in it already, so the members pane offers
+        // neither Add Members nor Remove (Mattermost's clients don't either).
+        result.canManageMembers = has(isPublic ? "manage_public_channel_members" : "manage_private_channel_members") && !result.isDefaultChannel
         result.canManageRoles = has("manage_channel_roles")
         result.canArchive = has(isPublic ? "delete_public_channel" : "delete_private_channel") && !result.isDefaultChannel
         result.canConvertToPrivate = isPublic && has("convert_public_channel_to_private") && !result.isDefaultChannel
