@@ -714,3 +714,26 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
     ideviceinstaller.
   - **Gaps:** with collapsed reply threads off the Threads tab stays and says so (no dynamic tab list); the Settings
     tab's badge counts the other accounts' unread chats (Telegram's behaviour, e.g. "22.5K" on the dev accounts).
+- **4D: App Store Connect, TestFlight and App Store prep** (2026-10-27, user decisions: name "Relay: Team Chat",
+  TestFlight first, review server = the user's own Mattermost, privacy/support pages on GitHub Pages).
+  - **Signing and builds:** Apple Distribution identity and four App Store profiles (outside the repo,
+    `~/.relay-secrets`); `tools/relay-device-build.sh appstore`. App Store Connect app "Relay: Team Chat" created.
+    `0.1.0 (31865)` failed processing (ITMS-90683: Siri and speech purpose strings, Telegram code still linked);
+    fixed in `1.0.0 (31868)` (tags `relay-0.1.0-31865`, `relay-1.0.0-31868`), which processed `VALID` with only
+    the ITMS-91198 warning (Telegram's embedded SF Camera fonts, rejected from 2027-10-01).
+  - **App Review prep:** no `location` background mode, Location/Contact attachments hidden (never posted),
+    purpose strings that promise nothing Relay doesn't do. Icon: the origami artwork (Codex image generation, second
+    round). Pages: https://wowlocal.github.io/mattermost-tg-client/ (support, privacy).
+  - **TestFlight:** internal group "Internal" (all builds); external group "Public" with a public link,
+    `1.0.0 (31868)` submitted to Beta App Review (waiting at the time of writing).
+  - **App Store version 1.0.0:** description, keywords (no third-party trademarks), subtitle, promo text, URLs,
+    categories Business/Productivity, age rating (messaging and user-generated content), free, all territories but
+    mainland China, App Privacy "Data Not Collected", content rights, manual release, build attached, review contact
+    and demo account; screenshots (iPhone 6.9", iPad 13") in `docs/release/appstore-screenshots/`. Not submitted:
+    waiting for the user's go.
+  - **Review server:** team "Relay Demo" on the user's server with a reviewer account and two demo users (passwords
+    outside the repo); push notifications for Relay through a push router there (operator's infrastructure repo).
+  - **Found:** Mattermost 11.10 already refuses Relay's own push platforms (Relay registers as `apple_rn*`), and a
+    push server's `REMOVE` is sticky per session (`last_removed_device_id`; a new login clears it). iPad simulators
+    (iOS 26.5) stop delivering synthetic touches once the main UI is up; the real iPad works (screenshots taken through
+    the debug remote).
