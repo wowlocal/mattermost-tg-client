@@ -23,19 +23,31 @@ The server hands the platform to the proxy, which picks the `ApplePushSettings` 
 |---|---|---|
 | `relay_apple` | production (`ApplePushUseDevelopment: false`) | App Store, TestFlight and ad-hoc builds |
 | `relay_apple_sandbox` | sandbox (`ApplePushUseDevelopment: true`) | development builds and the simulator |
-| `apple_rn` | production | as `relay_apple`, on Mattermost 12 and newer |
-| `apple_rnbeta` | sandbox | as `relay_apple_sandbox`, on Mattermost 12 and newer |
+| `apple_rn` | production | as `relay_apple`, on Mattermost 11.10 and newer |
+| `apple_rnbeta` | sandbox | as `relay_apple_sandbox`, on Mattermost 11.10 and newer |
 
 All use topic `org.relaychat.Relay` and the same key (an APNs auth key works for both environments). The
 app picks the platform from its `aps-environment` (`MattermostPushDevice`, submodules/MattermostPush). No
 `-v<N>` suffix: the proxy reads one as an app version and changes how `clear` badges are sent.
 
-**Mattermost 12 and newer** accept only the official apps' platforms in a device id (`apple_rn`,
+**Mattermost 11.10 and newer** accept only the official apps' platforms in a device id (`apple_rn`,
 `apple_rnbeta`, `android_rn`, optionally with `-v<N>`; `model.IsValidDeviceId`) and refuse Relay's own with
 400 `api.context.invalid_body_param.app_error`. Relay then registers with `apple_rn` / `apple_rnbeta` (found in
-Phase 4E against 12.0.1). The two extra entries above give those to Relay's topic; a proxy rendered from an
-older template needs `up.sh` again (it re-renders the config) before Mattermost 12 servers can push to Relay.
-Since a server has one push proxy, a server pointed at Relay's proxy can't also push to the official app.
+Phase 4E against 12.0.1; 11.7 still accepted Relay's platforms, 11.10.1 did not, seen on a production server on
+2026-10-27). The two extra entries above give those to Relay's topic; a proxy rendered from an older template
+needs `up.sh` again (it re-renders the config) before such servers can push to Relay.
+
+A server has one push server. Pointed straight at Relay's proxy it can't also push to the official apps, so a
+server whose users also run the official app needs a router in front: Relay's platforms to this proxy,
+`apple_rn`/`apple_rnbeta` sends to this proxy first and to Mattermost's service when APNs refuses the token for
+Relay's topic (`DeviceTokenNotForTopic` → `REMOVE`), everything else (`apple_rn-v2`, Android, acks) to Mattermost's
+service. The first deployment of that (a stdlib Python service beside this proxy) is documented in the operator's
+infrastructure repository, not here.
+
+**`REMOVE` is sticky in Mattermost 11.10+.** When a push server answers `REMOVE`, the server records the token in
+the session's `last_removed_device_id` prop and skips the session from then on, even when the app registers the
+same token again (`GetSessionsWithActiveDeviceIds`); only a new session (log out and in) clears it. A Relay device
+whose server pushed through Mattermost's own service before the switch is in that state.
 
 ## Quick start (local, with the dev server)
 
