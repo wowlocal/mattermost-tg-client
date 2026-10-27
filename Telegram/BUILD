@@ -1919,19 +1919,26 @@ plist_fragment(
     <string>Relay uses your contacts only when you choose one to share in a chat.</string>
     <key>NSFaceIDUsageDescription</key>
     <string>You can use Face ID to unlock the app.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Relay doesn't use your location in the background.</string>
     <key>NSLocationAlwaysUsageDescription</key>
-    <string>When you share your location in a chat, Relay needs access to show it on a map.</string>
+    <string>Relay doesn't use your location in the background.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>When you share your location in a chat, Relay needs access to show it on a map.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Relay uses the microphone to record voice messages and videos with sound. A recording is sent to your Mattermost server only when you send it.</string>
     <key>NSMotionUsageDescription</key>
     <string>Relay doesn't record your motion or fitness activity.</string>
+    <!-- MATTERMOST: Telegram's Siri intents and voice-to-text code is still linked (unused), and App Store
+         Connect rejects a binary that references those APIs without purpose strings (ITMS-90683). -->
+    <key>NSSiriUsageDescription</key>
+    <string>Relay doesn't use Siri.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Relay doesn't transcribe speech.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>We need this so that you can share photos and videos from your photo library.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>We need this so that you can share photos and videos from your photo library.</string>
-    <!-- MATTERMOST: no Siri and no voice-to-text, so no NSSiriUsageDescription or NSSpeechRecognitionUsageDescription -->
     <key>NSUserActivityTypes</key>
     <array>
         <string>INSendMessageIntent</string>
