@@ -152,6 +152,9 @@ extension TelegramRootController {
                 filter = .files
             case "music":
                 filter = .music
+            case "voice":
+                // Phase 5A: the Voice tab.
+                filter = .voice
             default:
                 filter = .chats
             }
@@ -250,7 +253,7 @@ extension TelegramRootController {
             }
             let pane = command["pane"] as? String ?? "files"
             let query = command["query"] as? String ?? ""
-            let tags: MessageTags = pane == "links" ? .webPage : (pane == "music" ? .music : .file)
+            let tags: MessageTags = pane == "links" ? .webPage : (pane == "music" ? .music : (pane == "voice" ? .voiceOrInstantVideo : .file))
             let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
             |> deliverOnMainQueue).startStandalone(next: { [weak self] peer in
                 guard let self, let peer, let controller = context.sharedContext.makePeerInfoController(context: context, updatedPresentationData: nil, peer: peer, mode: .generic, avatarInitiallyExpanded: false, fromChat: false, requestsContext: nil) else {

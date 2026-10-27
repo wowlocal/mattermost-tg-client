@@ -190,6 +190,12 @@ final class ManagedAudioRecorderContext {
     private var toneTimer: SwiftSignalKit.Timer?
     private var idleTimerExtensionDisposable: Disposable?
     
+    #if DEBUG
+    // MATTERMOST: debug builds only (5A): `RelayDebugFakeMicrophone` feeds a file or a tone instead of the microphone.
+    private var relayDebugFakeMicrophoneTimer: SwiftSignalKit.Timer?
+    private var relayDebugFakeMicrophoneOffset = 0
+    #endif
+    
     init(
         queue: Queue,
         mediaManager: MediaManager,
@@ -437,6 +443,18 @@ final class ManagedAudioRecorderContext {
         assert(self.queue.isCurrent())
         
         self.paused = false
+        
+        #if DEBUG
+        // MATTERMOST: debug builds only (5A). A fake microphone (a speech file or a tone, `RelayDebugFakeMicrophone`)
+        // goes through the recorder's own encoding, waveform and preview path; no audio session and no audio unit,
+        // so the simulator never opens the Mac's microphone (and never asks macOS for it).
+        if let fakeMicrophone = RelayDebugFakeMicrophone.current {
+            self.processSamples = true
+            self.beganWithTone(false)
+            self.relayDebugStartFakeMicrophone(fakeMicrophone)
+            return
+        }
+        #endif
     
         if self.audioSessionDisposable == nil {
             let queue = self.queue
@@ -521,9 +539,38 @@ final class ManagedAudioRecorderContext {
         self.start()
     }
     
+    #if DEBUG
+    private func relayDebugStartFakeMicrophone(_ fakeMicrophone: RelayDebugFakeMicrophone) {
+        self.relayDebugFakeMicrophoneTimer?.invalidate()
+        // 20 ms of 48 kHz mono 16-bit audio per tick, as the audio unit delivers it.
+        let frameCount = 960
+        let timer = SwiftSignalKit.Timer(timeout: 0.02, repeat: true, completion: { [weak self] in
+            guard let self, !self.paused else {
+                return
+            }
+            let byteCount = frameCount * 2
+            let data = malloc(byteCount)!
+            fakeMicrophone.fill(data.assumingMemoryBound(to: Int16.self), count: frameCount, offset: self.relayDebugFakeMicrophoneOffset)
+            self.relayDebugFakeMicrophoneOffset += frameCount
+            var buffer = AudioBuffer()
+            buffer.mNumberChannels = 1
+            buffer.mDataByteSize = UInt32(byteCount)
+            buffer.mData = data
+            self.processAndDisposeAudioBuffer(buffer)
+        }, queue: self.queue)
+        self.relayDebugFakeMicrophoneTimer = timer
+        timer.start()
+    }
+    #endif
+    
     private var resumeData: Data?
     func stop() {
         assert(self.queue.isCurrent())
+        
+        #if DEBUG
+        self.relayDebugFakeMicrophoneTimer?.invalidate()
+        self.relayDebugFakeMicrophoneTimer = nil
+        #endif
         
         let state = self.oggWriter.pause()
         

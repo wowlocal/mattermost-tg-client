@@ -42,6 +42,8 @@ extension TelegramRootController {
         self.relayDebugInstallLinkCommands()
         // Phase 4B: scroll smoothness probes (RelayDebugPerf.swift).
         self.relayDebugInstallPerfCommands()
+        // Phase 5A: voice messages, the fake microphone (RelayDebugVoice.swift).
+        self.relayDebugInstallVoiceCommands()
         guard let screen = ProcessInfo.processInfo.environment["RELAY_DEBUG_OPEN_SCREEN"], !screen.isEmpty else {
             return
         }

@@ -18,6 +18,8 @@ public extension PeerInfoScreenImpl {
             key = .links
         case "music":
             key = .music
+        case "voice":
+            key = .voice
         default:
             key = .files
         }
@@ -40,6 +42,21 @@ public extension PeerInfoScreenImpl {
                 contentNode.searchTextUpdated(text: query)
             }
         }
+    }
+
+    /// Phase 5A: switches to a media pane (`voice`, `music`, `files`, `links`, `media`) without searching; returns the
+    /// panes the profile offers.
+    func relayDebugShowPane(_ pane: String) -> [String] {
+        let node = self.controllerNode
+        let keys: [String: PeerInfoPaneKey] = ["voice": .voice, "music": .music, "files": .files, "links": .links, "media": .media]
+        if let key = keys[pane] {
+            node.paneContainerNode.pendingSwitchToPaneKey = key
+            node.expandTabs(animated: false)
+            if let (layout, navigationHeight) = node.validLayout {
+                node.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: .immediate)
+            }
+        }
+        return (node.data?.availablePanes ?? []).map { "\($0)" }
     }
 }
 #endif
