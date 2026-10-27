@@ -4,7 +4,7 @@ Working log for the Mattermost client fork. Each work session reads this first a
 
 ## Current state
 
-- **Phase:** 0–3 done; Phase 4: 4A, 4B, 4C, 4E, 4F, 4G done on `main` (release candidate `0.1.0 (31844)` passed the regression checklist on Mattermost 11.7.14 and 12.0.1 and six simulators, [release/REGRESSION.md](release/REGRESSION.md); the push proxy now serves Mattermost 12's platform names too); Phase 5: 5A voice messages done (2026‑10‑27). 4D (TestFlight) is still blocked on the user's App Store Connect setup: the App Store Connect record, a distribution certificate and App Store profiles, D1/D6 and the GPL review (development signing with the user's team works, `tools/relay-device-build.sh`).
+- **Phase:** 0–3 done; Phase 4: 4A, 4B, 4C, 4E, 4F, 4G, 4H done on `main` (release candidate `0.1.0 (31844)` passed the regression checklist on Mattermost 11.7.14 and 12.0.1 and six simulators, [release/REGRESSION.md](release/REGRESSION.md); the push proxy now serves Mattermost 12's platform names too); Phase 5: 5A voice messages done (2026‑10‑27). 4H (daily-use gaps, after 5A) done: names follow the user's display setting, `@channel` confirmation, forwards as Mattermost forwards, servers in the account switcher, and four smaller fixes. 4D (TestFlight) is still blocked on the user's App Store Connect setup: the App Store Connect record, a distribution certificate and App Store profiles, D1/D6 and the GPL review (development signing with the user's team works, `tools/relay-device-build.sh`).
 - **Upstream pin:** Telegram‑iOS `5c20d095d1ab` (app 13.0.1, tag `upstream-pin`), the newest commit built with Xcode 27.0 (installed). Master needs Xcode 27.1.
 - **Working name:** "Relay" (`org.relaychat.Relay`, URL scheme `relay`). Placeholder until D6 is decided.
 - **Build:** commands in [BUILD.md](BUILD.md). Main simulator "Relay iPhone 17 Pro" (iOS 26.5). `main` is pushed to `origin` (github.com/wowlocal/mattermost-tg-client) after each merge.
@@ -85,6 +85,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | 4F | Known-gaps burn-down (CRT chat-list preview/sort, thread unread separator, mixed posts, attachment polish, ephemeral semantics, in-chat search incl. replies, permalink into unjoined channel, DND indicator, push sender display name, live DM close, live mentions, persisted upload ids, admin delete) | Done (main checkout; 4C merged in at `cd723ed9`); design: mattermost-sync.md "Known-gaps burn-down (4F)"; screenshots `docs/research/phase4f-*.png` |
 | 4G | Security and diagnostics (plan 05 Phase 4): Telegram passcode lock with Relay accounts, managed app configuration (AppConfig/MDM: server URL, restrictions), optional certificate pinning, privacy-respecting local diagnostics (MetricKit, exportable logs) | Done (main checkout); design: mattermost-sync.md "Security and diagnostics (4G)"; admin guide: [release/managed-configuration.md](release/managed-configuration.md); privacy: [release/privacy.md](release/privacy.md); BUILD.md "Phase 4G"; evidence `docs/research/phase4g/`, screenshots `docs/research/phase4g-*.png` |
 | 4E | Release-candidate regression: written checklist, release build, cold start from cache, supported server versions (11.7 ESR and the newest release), device matrix | Done (main checkout): checklist and results [release/REGRESSION.md](release/REGRESSION.md); BUILD.md "Phase 4E"; screenshots `docs/research/phase4e-*.png` |
+| 4H | Daily-use gap burn-down: names follow "Teammate Name Display", `@channel` confirmation, forwards as Mattermost forwards with "Forwarded from", the server under each account, blank DM avatar, reply count after deleted replies, chat-list previews after a catch-up, town square members pane | Done (main checkout, 2026‑10‑27): checklist section T and Run 2 in [release/REGRESSION.md](release/REGRESSION.md); design: mattermost-sync.md "Daily-use gaps (4H)"; BUILD.md "Phase 4H"; screenshots `docs/research/phase4h-*.png` |
 | 4D | Release: TestFlight build ([release/RELEASE.md](release/RELEASE.md)) | Development signing done with the user's team (App IDs, App Group, APNs key, development profiles; device build installed; BUILD.md "Device builds"). TestFlight blocked on the user: App Store Connect record, distribution certificate and App Store profiles, D1/D6, GPL review |
 
 ## Phase 5
@@ -601,3 +602,97 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
     granted to Relay (`simctl privacy`); `Documents/relay-debug/speech48.wav` and a voice-DM push payload in the app's
     container; text size back to Large. The push proxy untouched. Scratch: web app bundle copy, test audio and
     browser profiles in the session's scratchpad.
+- **4H done** (main checkout). Daily-use gaps from 4E/4F/4G. Design: mattermost-sync.md "Daily-use gaps (4H)";
+  checklist section T and Run 2 in [release/REGRESSION.md](release/REGRESSION.md); BUILD.md "Phase 4H"; screenshots
+  `docs/research/phase4h-*.png`. Verified on "Relay iPhone 17 Pro" (debug build, alice/bob/dave; real taps through
+  `tools/relay-axe.py`; REST as alice/bob/dave/sysadmin).
+  - **1. Names follow "Teammate Name Display".** User peers now carry the display name the user's setting gives
+    (`display_settings`/`name_format`, else the server's `TeammateNameDisplay`, the server's under
+    `LockTeammateNameDisplay`; `username`, `nickname_full_name` or `full_name` with Mattermost's fallbacks), so chat
+    titles, chat list rows, message authors, the `@` list, member lists, profiles and search follow without upstream
+    UI changes; group messages are titled with the other members' names, sorted (the web app's rule; members loaded
+    by username at the bootstrap); a profile titled with another name gets a "full name" row; interactive menus,
+    dialogs and permalink card titles use the same names. The own user keeps the real name (Settings, Edit Profile).
+    A changed preference or server setting renames every stored user live (1,630 users in 0.2–0.4 s). Two upstream
+    fixes made renamed authors show live in chat list rows: Postbox's chat list view replaced `message.peers` but not
+    `message.author`, and ChatListUI's entry comparison ignored authors. Verified: the dev server's default is
+    `username` (alice had no preference), so the app now shows "bob", "bob, carol" where it showed "Bob Brennan",
+    "alice, bob, carol"; `full_name`, `nickname_full_name` (carol "CJ") and back, each live (screenshots
+    `phase4h-names-*.png`).
+  - **2. `@channel` confirmation.** The 11.7 web app's check (read from its bundle): `EnableConfirmNotificationsToChannel`,
+    `use_channel_mentions` in the channel, more than 5 members; its wording, "N people" = members − 1, "at least N
+    other people" for `@here`, "in N timezones" when members have time zones (`GET /channels/{id}/timezones`, new in
+    MattermostKit). Composer sends only; Cancel keeps the text. The web app does not consult the sender's
+    `ignore_channel_mentions` (it decides only whether that member is notified), so Relay doesn't either. Verified:
+    Town Square (7) asked "…to 6 people", Cancel/Confirm; `@here` with two time zones set on bob/dave; Sandbox (3)
+    and a user without `use_channel_mentions` sent at once.
+  - **3. Forwards.** The 11.7 web app's Forward (`forwardPost`, read from its bundle) posts `<comment>\n<permalink>`
+    and copies no files; the server adds a `permalink` embed with the forwarded post; posts of private channels, DMs
+    and GMs can only be forwarded into their own channel. Relay now does the same for Telegram's Forward with the
+    sender's name (no upload), refuses other chats for private posts with the web app's notice, and keeps "Hide Sender
+    Name" as a copy (Telegram hides the name by default for the user's own messages, so those go as copies unless
+    the name is shown). Any plain forward (from Relay or the web app) shows as Telegram's forwarded message — "Forwarded
+    from <author>" (tap: the post where it is stored, else the author), the forwarded post's text, files and
+    attachments, the forward's own reactions/replies/pin; one with a comment keeps 3E's card. Verified: forward of a
+    mixed post into Town Square (server: permalink only, embed), seen by bob and by alice; DM post refused for Town
+    Square, sent into the same DM; REST forwards by bob (plain album, with a comment).
+  - **4. Same user on two servers.** The server (host[:port], "site name · host" for a non-default site name) under
+    each account in the Settings account list and the Settings tab's switcher; VoiceOver reads it. Verified with
+    alice on `localhost:8065` and a namesake test user on `127.0.0.1:8065` (the same user can't log in twice to one
+    server, and the 12.0.1 server of 4E was gone).
+  - **5. Blank avatar on bob's DM row.** Root cause (diagnosed with temporary logging in AvatarNode, removed): user
+    peers had access hash `.personal(0)`, which Postbox stores as none, so users read back from the database had no
+    `PeerReference`; the chat list loads photo avatars through `AvatarNode.setPeerV2`/`DirectMediaImageCache`, which
+    needs one and then keeps the failed attempt (other screens use the older loader). Users now get `.personal(1)`
+    and every stored user is rewritten once. Verified: the row shows bob's picture after relaunch and after opening
+    the DM.
+  - **6. Reply count after a deleted reply.** Not reproduced on the old build; the cause is in the code: a deleted
+    reply reached its root's count only through `thread_updated` (thread followers only), and `since=` catch-ups
+    never recounted. A deleted reply now recounts its root from the server, live and in catch-ups. Verified 4 → 3
+    live, → 2 after a relaunch (channel active), → 1 (channel quiet).
+  - **7. Stale chat-list previews.** The catch-up checks the row message of every quiet channel (one `POST /posts/ids`
+    per 100): updated since the last sync → loaded with `GET /posts/{id}` (embeds) and rewritten; deleted → removed.
+    Found: edits move `last_post_at` on 11.7, so edited channels were already caught up as active; deletions and
+    reactions don't. Verified: a deleted newest post and a reaction in quiet channels while Relay was closed; launch
+    catch-up of ~100 chats 44–78 ms (4B: 50–120 ms).
+  - **8. Members pane.** Current state checked: Telegram's leftovers were gone except in the town square, where alice
+    (a plain member) was offered Add Members and Remove; the server refuses removals there
+    (`api.channel.remove.default.app_error`) and every team member is in it. Both hidden now (`ChannelAccessRules`);
+    Edit stays (properties may be edited); other channels unchanged.
+  - **Skipped / not needing a server feature:** nothing was skipped.
+  - **Checks:** parked Telegram requests 0 after the 4H flows and after a 5-minute `tools/relay-session.py` (footprint
+    ~171 MB); MattermostKit 214 tests (5 skipped; 1 new), MattermostSyncCore 202 (12 new), MattermostPush 43,
+    MattermostShare 9 (1 skipped); `release_sim_arm64` of the final tree (`appstore-configuration.json`):
+    `tools/relay-release-audit.sh` 0 debug markers, no ATS exception for the app's own connections, privacy manifests
+    present, 0 closed-source/analytics markers (no new debug code in 4H; the avatar diagnostics were removed before the
+    commits); the 4H code is in the release binaries (`user_names_format`, the preview check's log line, the
+    confirmation's strings).
+  - **Gaps:** the own user keeps the real name (member lists, a forward of one's own post say "Alice Anderson" where
+    the web app would say "alice"); GM titles don't follow a member's later rename until the next format change or a
+    rewrite of the channel; a `@channel` in a caption sent with media doesn't ask; a forward's notification shows the
+    permalink (the server's push text) and its chat-list preview the forwarded text; a forward whose forwarded post
+    isn't stored opens the author's profile from its header, not the post; forwarding a forward links the forward when
+    its source isn't stored; the chat-list preview check covers the row's message only (older edits stay stale until
+    the chat opens, 4B); the account rows show the host only (no server icon).
+  - Upstream files touched (all `// MATTERMOST:`): Postbox `ChatListViewState.swift` (renamed authors);
+    ChatListUI `Node/ChatListNodeEntries.swift` (author comparison); TelegramUI `ChatControllerNode.swift` (one hunk),
+    `ChatControllerForwardMessages.swift` (two hunks), new `MattermostForwarding.swift`, `MattermostComposerQueries.swift`;
+    PeerInfoScreen `ListItems/PeerInfoScreenMemberItem.swift`, `MattermostPeerInfoDirectory.swift`;
+    `AccountPeerContextItem.swift`; AccountContext `MattermostUIHooks.swift`; `Relay.strings` (4H block). Relay:
+    MattermostSync (`Sync/DisplayNames.swift`, `Composer/ChannelMentions.swift`, `Write/Forwards.swift`,
+    `Converters/ForwardedPost.swift`, `PeerConverter`, `PostConverter`, `PostLayout`, `OwnPosts`, `PostSender`,
+    `CatchUp`, `Threads`, `EventApplier`, `Bootstrapper`, `MattermostSync`, `MattermostAccountSync`, …), MattermostSyncCore
+    (`Mapping/Naming.swift`, `Mapping/Forwarding.swift`, `ChannelAccessRules`, store `peers(kind:)`), MattermostKit
+    (`channelTimezones`), MattermostUI (`MattermostAppHooks`).
+  - **State left behind:** dev server 11.7: ~sandbox: bob's "4H reply count check: root" (1 reply left, 3 deleted),
+    alice's "@channel 4H small channel, sent without asking"; engineering Town Square: alice's "@channel 4H confirmation
+    check" and her forward of bob's mixed post (`srxxjkaf…`); ~off-topic: bob's two REST forwards (album, comment);
+    ~architecture: bob's "4H preview check: edited while Relay was closed" with 🎉 (alice), 👀 and 🚀 (bob);
+    ~code-review: bob's deleted preview post; DM alice↔bob: alice's forward of "4E push check…"; GM alice/bob/carol:
+    alice's forward of the thread root; bob's test forward in ~sandbox and alice's `@here`/no-permission post deleted.
+    Test user `alice4h` ("Alice Anderson") created and deactivated (sysadmin). Restored: alice's `name_format`
+    preference (deleted again: none, as before), bob's and dave's time zones (empty), `channel_user`'s
+    `use_channel_mentions`. No server settings changed. Simulator "Relay iPhone 17 Pro": the 4H debug build with
+    alice/bob/dave (the `127.0.0.1` account logged out, its data deleted); stored users rewritten once (user names
+    format cursor `username/2`). The push proxy untouched. Scratch: the web app bundle and server binary copies in the
+    session's scratchpad.

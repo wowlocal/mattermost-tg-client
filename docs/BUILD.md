@@ -520,6 +520,26 @@ tools/relay-remote.py "$UDID" search filter=voice                    # the chat 
   runs (`nse: post … is a voice message` in the `[Relay]` log); `simulate-push` with a payload whose `post_id` is a voice
   post runs the same code in the app.
 
+#### Phase 4H: daily-use gaps
+
+Nothing new to drive it: real taps (AXe) and REST as the test users. Notes:
+
+- **Name format**: `PUT /users/{me}/preferences` with `{"category": "display_settings", "name": "name_format", "value":
+  "full_name" | "nickname_full_name" | "username"}` switches it live (log `names: N user(s) and M group message(s)
+  renamed as …`); `POST /users/{me}/preferences/delete` with the same entry goes back to the server's
+  `TeammateNameDisplay` (the dev server's is `username`). The rename also runs once per build that bumps
+  `userPeersVersion` (cursor `user_names_format` in `sync.sqlite`).
+- **`@channel` confirmation** needs a channel with more than 5 members (engineering Town Square and Off-Topic have 7);
+  time zones come from the members' `timezone` (`PUT /users/me/patch`, empty on the seeded users). The permission check
+  caches roles for 60 s, so wait a minute after changing `channel_user` (`PUT /roles/{id}/patch` as sysadmin).
+- **Forwards from another client**: post the permalink (`<SiteURL>/<team>/pl/<post id>`) as bob through REST; that is
+  exactly what the web app's Forward posts. `GET /posts/{id}` shows the `permalink` embed (`POST /posts/ids` has none).
+- **Catch-up paths**: `simctl terminate`, change things through REST, `simctl launch`: the launch's catch-up logs
+  `catch-up: chat-list previews of N quiet chat(s): …` and `threads: … recounted after deleted replies`. Edits move a
+  channel's `last_post_at` on 11.7 (the channel is then caught up as an active one); deletions and reactions don't.
+- **Two servers**: one server under two addresses (`http://localhost:8065`, `http://127.0.0.1:8065`) gives two
+  accounts with different server labels, but not the same user twice (the login refuses a user id it already has).
+
 ### Push notifications on the simulator (Phase 3A)
 
 Simulator builds (`--disableProvisioningProfiles`) get `aps-environment: development`, communication notifications and, for the notification service extension, the app group (`TelegramSimulatorEntitlements` / `NotificationServiceSimulatorEntitlements` in `Telegram/BUILD`). On Apple silicon the simulator then gets a real APNs **sandbox** token; the app logs it (`[Relay] push: APNs sandbox token …`) and every account attaches it to its session as `relay_apple_sandbox:<token>` (check with `infra/push-proxy/configure-dev-server.py --sessions alice`).

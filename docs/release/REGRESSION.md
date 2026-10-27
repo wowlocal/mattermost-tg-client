@@ -102,8 +102,8 @@ details on debug. ★ = core set for the second server version. ● = device-mat
 | D7 ★ | Media | Attach → Gallery (photo permission) → 2 photos + caption → one post with 2 files; File tab → document picker; a file over the server's `MaxFileSize` is refused | REST `file_ids` | R |
 | D8 ★ | Offline queue | Server stopped, send → clock; server back → posted once | REST | R |
 | D9 | Upload ids kept across a restart | `RELAY_DEBUG_SEND_DELAY` (BUILD.md "Phase 4F") | log | D |
-| D10 | Forward | Long-press → Forward → chat → posted (known gap: without attribution) | REST | R |
-| D11 | `@channel` confirmation | Not implemented (plan 05 Phase 3 composer): a `@channel` in a large channel is sent without asking | — | — |
+| D10 | Forward | Long-press → Forward → chat → Send → the post is the forwarded post's permalink (Mattermost's forward; no files); "Forwarded from <author>" on both sides. See T3 | REST `message`, `metadata.embeds[permalink]` | R |
+| D11 | `@channel` confirmation | `@channel` in a channel with more than 5 members → "Confirm sending notifications to entire channel". See T2 | OCR | R |
 
 ## E · Collapsed threads
 
@@ -241,6 +241,19 @@ details on debug. ★ = core set for the second server version. ● = device-mat
 | S2 ● | Large phone (iPhone 17 Pro Max), landscape | Chat and chat list usable in landscape | R |
 | S3 ● | iPad (regular width) | Split view: chat list beside the chat; landscape and portrait | R |
 | S4 ● | Largest text on each | As P2 | R |
+
+## T · Daily-use gaps (4H)
+
+| ID | Item | Steps → expected | How checked | Build |
+|---|---|---|---|---|
+| T1 ★ | Names follow "Teammate Name Display" | Server default `username` (no preference): chat list, DM titles, message authors, `@` list show `bob`, a GM "bob, carol" (members but the user, sorted). Set alice's `display_settings`/`name_format` via REST to `full_name` → live "Bob Brennan", "Bob Brennan, Carol Núñez" (titles and "Author:" lines); `nickname_full_name` → carol "CJ", GM "Bob Brennan, CJ", carol's profile title "CJ" with a "full name" row; delete the preference → back to usernames. The own user keeps the real name (Settings) | OCR, REST preferences, log `names: … renamed as …` | R/D |
+| T2 ★ | `@channel` confirmation | engineering Town Square (7 members): `@channel …` → Send → "Confirm sending notifications to entire channel / By using @all or @channel you are about to send notifications to 6 people…"; Cancel keeps the text, Confirm posts it. `@here` with members in 2 time zones → "…at least 6 other people in 2 timezones…". Sandbox (3 members): sent at once. Without `use_channel_mentions` (removed from `channel_user` as sysadmin): sent at once (the server sets `mentionHighlightDisabled`) | OCR, REST posts | R |
+| T3 ★ | Forward | Long-press bob's post in a public channel → Forward → another chat → Send → post = `<SiteURL>/<team>/pl/<post id>`, no `file_ids`, a `permalink` embed; the sender sees "Forwarded from bob" with the post's text and files; another account sees it the same way. A post of a DM → Forward → another chat → "This message is from a private conversation and can only be shared with bob." (OK), → the same DM → sent. A forward made by the web app (REST: message = permalink) shows as "Forwarded from <author>" with the files; one with a comment shows the comment and the permalink card | REST, OCR | R |
+| T4 | Server under each account | Accounts on two servers (or one server under two addresses): Settings account rows and the Settings tab's long-press switcher show the host ("localhost:8065", "127.0.0.1:8065") under each name; VoiceOver "Alice Anderson, 127.0.0.1:8065" | OCR, AXe tree | R |
+| T5 | Photos in chat list rows | A DM with a user who has a picture shows the picture in its chat list row, also after a relaunch and after opening the chat | OCR/screenshot | R |
+| T6 | Reply count after a deleted reply | bob deletes one of his replies (REST) while alice's chat is open → the root's "N Replies" goes down at once; deleted while Relay is closed → right after the relaunch's catch-up | `visible` (replyCount), log `threads: … recounted` | R/D |
+| T7 | Chat-list previews after a catch-up | Relay closed: bob deletes the newest post of a quiet channel, or someone reacts to it → after the relaunch the row shows the message before / the reacted post is rewritten, without opening the chat | OCR, log `catch-up: chat-list previews …` | R/D |
+| T8 | Members pane | Town Square profile: no Add Members, no Remove on members (Edit stays: properties may be edited); other public channels keep Add Members; archived channels have neither | AXe/OCR, `info-state` | R/D |
 
 ## Results
 
@@ -404,16 +417,34 @@ can. Screenshots: `docs/research/phase4e-matrix-*.png`.
 
 1. **Pushes on Mattermost 12 need the proxy's new entries**: run `infra/push-proxy/up.sh` (re-renders the config with
    `apple_rn`/`apple_rnbeta`), then on a 12 server: Relay in the background, a DM from another user → banner. Until
-   then the proxy logs "No push target for platform apple_rnbeta".
-2. **Same name on two servers**: log in as alice on two servers → the Settings tab's long-press menu and the Settings
-   account list show "Alice Anderson" twice with nothing telling the servers apart (plan 05: "the switcher shows the
-   server name and icon").
-3. **`@channel` confirmation** (plan 05 Phase 3): `@channel` in a channel with many members is sent without asking.
-4. **Forward** posts without attribution (2A gap).
-5. **Reply count after another client deletes a reply**: the debug account on "Relay iPhone 17 Pro" kept "14 Replies"
-   after the release build deleted one of the 14 (server 13) until it relaunched; seen once, not reproduced on purpose.
+   then the proxy logs "No push target for platform apple_rnbeta". (Done after 4E: the proxy was re-rendered.)
+2. ~~**Same name on two servers**~~: fixed in 4H (T4): the server is shown under each account.
+3. ~~**`@channel` confirmation**~~: done in 4H (T2).
+4. ~~**Forward** posts without attribution~~: fixed in 4H (T3): Mattermost's forward (permalink), "Forwarded from".
+5. ~~**Reply count after another client deletes a reply**~~: fixed in 4H (T6). Not re-run on the old build; the cause
+   is in the code: a deleted reply reached its root's count only through `thread_updated`, which only the thread's
+   followers get, and a `since=` catch-up never recounted. Both now recount from the server (checked live, after a
+   relaunch with the channel active, and with it quiet).
 6. **iPad**: right after logging in on iPad Air 13 (iOS 26.5) touches didn't reach the app until it was relaunched;
    not on iOS 27.0. Not investigated. iPad landscape unchecked (no rotation driver).
 7. The "All Chats" tab written as a stored folder (`311b59b3`) showed in debug builds and not in release builds; not
    root-caused, replaced by the UI-side tab (`26aad49d`).
-8. Bob's DM row avatar blank after opening the DM (4G gap, still there).
+8. ~~Bob's DM row avatar blank after opening the DM~~: fixed in 4H (T5). Cause: user peers' access hash 0 is stored
+   as none, and the chat list's avatar loader needs a `PeerReference`.
+
+### Run 2 · 2026-10-27 (Phase 4H, daily-use gaps)
+
+Debug build (`debug_sim_arm64`) on "Relay iPhone 17 Pro" (iOS 26.5), Mattermost 11.7.14, accounts alice/bob/dave; real
+taps through `tools/relay-axe.py`, server checks through REST. The `release_sim_arm64` build of the final tree passed
+`tools/relay-release-audit.sh` (PROGRESS 4H). Screenshots `docs/research/phase4h-*.png`.
+
+| ID | Result | Notes |
+|---|---|---|
+| T1 | P | default `username`: "bob", "bob, carol" (was "Bob Brennan", "alice, bob, carol": `phase4h-names-before.png` → `-username.png`); `full_name` live incl. "Author:" lines (`-full-live.png`); `nickname_full_name`: "Bob Brennan, CJ", members "CJ"/"Bob Brennan" (`-gm-members.png`), carol's profile "CJ" + full name row (`-profile-fullname.png`), `@ca` → "CJ @carol" (`-mention-autocomplete.png`); back to usernames live in the open chat (`-chat-username.png`). 1,630 stored users renamed in 0.2–0.4 s |
+| T2 | P | Town Square 7 members: "…to 6 people" (`phase4h-channel-mention-confirm.png`), Cancel kept the text, Confirm posted `@channel 4H confirmation check`; `@here` with bob/dave in Europe/Berlin and America/New_York: "…at least 6 other people in 2 timezones" (`-here-timezones.png`); Sandbox (3): sent at once; without `use_channel_mentions`: sent at once, server `mentionHighlightDisabled: true` |
+| T3 | P | bob's mixed post (image + file) from Sandbox → Town Square: post `http://localhost:8065/engineering/pl/6in5y3o9…`, no files, `permalink` embed; bob's side "Forwarded from" with image, file, text in one bubble (`-forward-received.png`); alice's side after the rewrite fix (`-forward-sender.png`); DM post → Town Square refused (`-forward-private-refused.png`), → the same DM sent (`-forward-same-dm.png`); web-app-style forwards via REST: plain (album) and with a comment (card) (`-forward-from-web.png`) |
+| T4 | P | alice on `localhost:8065` + a namesake test user "Alice Anderson" on `127.0.0.1:8065` (the same user can't log in twice to one server): `phase4h-accounts-settings.png`, `-switcher.png`; AXe labels "Alice Anderson, 127.0.0.1:8065" |
+| T5 | P | bob's DM row: blank (`phase4h-dm-avatar-before.png`) → picture after the relaunch that follows the one-time user rewrite, and after opening the DM by tap (`-after.png`, `-after-open.png`) |
+| T6 | P | bob's thread "4H reply count check: root", 4 replies: REST delete while open → 3 (`-reply-count-live.png`); app closed, delete, relaunch → 2 (channel active), → 1 (channel quiet: on the catch-up and when opened) |
+| T7 | P | app closed: bob's newest post in Code Review deleted → row shows the post before after the relaunch (`phase4h-previews-before.png` → `-after.png`); a reaction in a quiet channel → `1 edited or reacted to`. Launch catch-up of ~100 chats 44–78 ms |
+| T8 | P | Town Square: Add Members and Remove gone (`phase4h-town-square-members-before.png` → `.png`), Edit kept; Sandbox keeps Add Members; the archived 4E RC Check has neither |
