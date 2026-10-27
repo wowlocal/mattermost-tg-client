@@ -180,6 +180,11 @@ final class PostSender: MattermostMessageSender {
         guard let channelId = await sync.ensureChannel(forPeerId: messageId.peerId) else {
             throw SendFailure.unknownChat
         }
+        // 4H: a forward goes as the forwarded post's permalink; its files stay where they are.
+        if await sync.isPermalinkForward(messageId) {
+            progress(1.0)
+            return
+        }
         // Uploaded by an earlier run of the app (4F): the file ids are in the message's pending row.
         if self.uploadedFiles(messageId: messageId).isEmpty, let stored = sync.store.pendingPost(channelId: channelId, localMessageId: messageId.id), !stored.uploadedFiles.isEmpty {
             let files = stored.uploadedFiles.map { UploadedFile(mediaIndex: $0.mediaIndex, fileId: $0.fileId) }

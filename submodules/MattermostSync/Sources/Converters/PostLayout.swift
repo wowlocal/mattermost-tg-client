@@ -39,7 +39,8 @@ struct PostLayout: Equatable {
             self.textPartIndex = 0
             return
         }
-        let files = (post.metadata?.files ?? []).filter { $0.deleteAt == 0 }
+        // 4H: a plain forward shows the forwarded post's files (`ForwardedPost`); grouping keys stay the post's own.
+        let files = (ForwardedPost.content(of: post).metadata?.files ?? []).filter { $0.deleteAt == 0 }
         let images = files.filter { MediaConverter.isAlbumImage($0) }
         let others = files.filter { !MediaConverter.isAlbumImage($0) }
         if images.count + others.count <= 1 {

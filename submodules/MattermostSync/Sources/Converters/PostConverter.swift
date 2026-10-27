@@ -47,6 +47,8 @@ struct PostConversionContext {
     var existingConsumed: (Int32) -> Bool? = { _ in nil }
     /// Voice messages (5A): the waveform computed here for a file whose marker has none (`computedVoiceWaveform`, `Write/VoiceMessages.swift`).
     var computedWaveform: (String) -> Data? = { _ in nil }
+    /// 4H: the stored message of a forwarded post (channel id, post id), for the forward header's tap.
+    var forwardedMessageId: (String, String) -> MessageId? = { _, _ in nil }
 }
 
 /// The messages of one post (one per mapped part, in part order) and the custom emoji files their text
@@ -64,6 +66,10 @@ enum PostConverter {
         var result = ConvertedPost()
         let layout = PostLayout(post: post)
         let isIncoming = post.userId != context.ownUserId
+        // 4H: a plain forward (`ForwardedPost`) shows the forwarded post (text, files, attachments) under a
+        // "Forwarded from" header; reactions, replies, pin and thread are the forward's own.
+        let forwarded = ForwardedPost.original(of: post)
+        let content = forwarded?.post ?? post
         let flags: StoreMessageFlags = isIncoming ? [.Incoming] : []
         let authorId = context.authorOverride(post) ?? context.userPeerId(post.userId)
 
@@ -123,14 +129,14 @@ enum PostConverter {
         } else {
             var builder = FormattedTextBuilder()
             builder.markdownOptions = context.richContent.markdownOptions
-            builder.appendMarkdown(post.message)
-            let attachments = AttachmentConverter.convert(props: post.props, images: post.metadata?.images ?? [:], serverURL: context.serverURL, imageProxy: context.richContent.imageProxy, builder: &builder)
+            builder.appendMarkdown(content.message)
+            let attachments = AttachmentConverter.convert(props: content.props, images: content.metadata?.images ?? [:], serverURL: context.serverURL, imageProxy: context.richContent.imageProxy, builder: &builder)
             if let markup = attachments.replyMarkup {
                 primaryAttributes.append(markup)
             }
             let formatted = builder.formatted
             text = formatted.text
-            let customEmojiNames = Set((post.metadata?.emojis ?? []).map { $0.name.lowercased() })
+            let customEmojiNames = Set((content.metadata?.emojis ?? []).map { $0.name.lowercased() })
             var entities: [MessageTextEntity] = []
             for entity in formatted.entities {
                 if case let .customEmoji(name) = entity.type {
@@ -160,7 +166,7 @@ enum PostConverter {
                 result.customEmojiFiles.append(file)
                 entities.append(MessageTextEntity(range: icon.range, type: .CustomEmoji(stickerPack: nil, fileId: file.fileId.id)))
             }
-            if post.type == "me", !text.isEmpty {
+            if content.type == "me", !text.isEmpty {
                 entities.insert(MessageTextEntity(range: 0 ..< (text as NSString).length, type: .Italic), at: 0)
             }
             if !entities.isEmpty {
@@ -170,12 +176,13 @@ enum PostConverter {
             // DM/GM message as a mention).
             // With collapsed reply threads a mention in a reply counts in its thread, not in the chat.
             let countsInChat = !(context.collapsedThreads && !post.rootId.isEmpty)
-            if isIncoming && countsInChat && context.showsMentionBadge && post.createAt > context.lastViewedAt && mentionsMe(formatted, kind: context.kind, ownUsername: context.ownUsername) {
+            // A forward's text is the forwarded post's: the server notified nobody for its mentions (4H).
+            if isIncoming && countsInChat && forwarded == nil && context.showsMentionBadge && post.createAt > context.lastViewedAt && mentionsMe(formatted, kind: context.kind, ownUsername: context.ownUsername) {
                 textTags.insert(.unseenPersonalMessage)
             }
 
             // A Relay voice message (5A): the marker in `props` and one audio file.
-            let voice = PostConverter.voiceMarker(post: post, layout: layout)
+            let voice = PostConverter.voiceMarker(post: content, layout: layout)
             for (index, part) in layout.parts.enumerated() {
                 guard let file = part.file else {
                     continue
@@ -196,7 +203,7 @@ enum PostConverter {
                 if !text.isEmpty {
                     textAttributes.append(InvertMediaMessageAttribute())
                 }
-            } else if media[layout.textPartIndex].isEmpty, !text.isEmpty, let preview = LinkPreviewConverter.webpage(post: post, context: context) {
+            } else if media[layout.textPartIndex].isEmpty, !text.isEmpty, let preview = LinkPreviewConverter.webpage(post: content, context: context) {
                 // A link preview (3E) on the text message when it carries no file or attachment image: Telegram
                 // shows one media per message.
                 media[layout.textPartIndex].append(preview.webpage)
@@ -242,7 +249,7 @@ enum PostConverter {
                 tags: tags,
                 globalTags: [],
                 localTags: [],
-                forwardInfo: nil,
+                forwardInfo: forwarded.map { PostConverter.forwardInfo($0, context: context) },
                 authorId: authorId,
                 text: partText,
                 attributes: attributes,
@@ -250,6 +257,23 @@ enum PostConverter {
             ))
         }
         return result
+    }
+
+    /// 4H: the "Forwarded from" header of a plain forward: the forwarded post's author and date. When the forwarded
+    /// post is stored (its channel loaded), tapping the header opens it there; otherwise it opens the author's profile
+    /// (an author the sync doesn't know is shown by name only).
+    static func forwardInfo(_ forwarded: ForwardedPost.Original, context: PostConversionContext) -> StoreMessageForwardInfo {
+        let authorId = context.authorOverride(forwarded.post) ?? context.userPeerId(forwarded.post.userId)
+        let source = context.forwardedMessageId(forwarded.preview.channelId, forwarded.post.id)
+        return StoreMessageForwardInfo(
+            authorId: authorId,
+            sourceId: nil,
+            sourceMessageId: source,
+            date: mmSeconds(forwarded.post.createAt),
+            authorSignature: authorId == nil ? (context.userDisplayName(forwarded.post.userId) ?? forwarded.preview.channelDisplayName) : nil,
+            psaType: nil,
+            flags: []
+        )
     }
 
     /// The voice marker of a post that shows as a voice message (5A): the marker and exactly one audio file.

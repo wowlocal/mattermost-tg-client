@@ -162,7 +162,15 @@ extension MattermostAccountSync {
                 })
                 return markdown.isEmpty ? nil : markdown
             }
-            let markdown = texts.joined(separator: "\n\n")
+            var markdown = texts.joined(separator: "\n\n")
+            var fileIds = fileIds
+            var props = groupMessageIds.count > 1 ? [:] : self.voiceProps(of: message)
+            // 4H: Telegram's forward (with the sender's name) goes as Mattermost's forward: the permalink alone.
+            if let permalink = self.forwardPermalink(of: message, channelId: channelId, transaction: transaction) {
+                markdown = PermalinkForward.message(permalink: permalink)
+                fileIds = []
+                props = [:]
+            }
             var rootId = ""
             if let reply = message.attributes.first(where: { $0 is ReplyMessageAttribute }) as? ReplyMessageAttribute, reply.messageId.peerId == messageId.peerId {
                 rootId = self.threadRootPostId(replyTarget: reply.messageId, transaction: transaction) ?? ""
@@ -172,8 +180,7 @@ extension MattermostAccountSync {
             let globallyUniqueId = message.globallyUniqueId ?? Int64(messageId.id)
             let pendingPostId = String(globallyUniqueId)
             self.store.registerPendingPost(MattermostPendingPost(pendingPostId: pendingPostId, channelId: channelId, globallyUniqueId: globallyUniqueId, localMessageId: messageId.id))
-            // A voice recording (5A): the marker that makes it a voice message in Relay (`PostConverter.voiceMarker`).
-            let props = groupMessageIds.count > 1 ? [:] : self.voiceProps(of: message)
+            // A voice recording (5A) carries the marker that makes it a voice message in Relay (`props`, above).
             return OutgoingDraft(post: PostDraft(channelId: channelId, message: markdown, rootId: rootId, fileIds: fileIds, pendingPostId: pendingPostId, props: props), globallyUniqueId: globallyUniqueId)
         }
     }
@@ -333,7 +340,8 @@ extension MattermostAccountSync {
                             tags: cloud.tags,
                             globalTags: [],
                             localTags: current.localTags,
-                            forwardInfo: nil,
+                            // 4H: a forward's header (`ForwardedPost`) comes with the server's post.
+                            forwardInfo: cloud.forwardInfo,
                             authorId: cloud.authorId,
                             text: cloud.text,
                             attributes: cloud.attributes,

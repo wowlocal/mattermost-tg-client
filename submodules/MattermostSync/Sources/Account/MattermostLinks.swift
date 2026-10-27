@@ -91,17 +91,22 @@ public extension MattermostSync {
         guard let entry = sync.store.entries(channelId: channelId, fromLocalId: messageId.id, ascending: true, limit: 1).first, entry.localId == messageId.id, !entry.isDeleted else {
             return nil
         }
-        let teams = sync.state.with { $0.teams }
-        let teamId = sync.channelState(channelId)?.teamId ?? ""
-        guard let team = teams.first(where: { $0.id == teamId }) ?? teams.first else {
-            return nil
-        }
-        let base = sync.siteURL.flatMap { $0.isEmpty ? nil : $0 } ?? sync.server.url
-        return MattermostLink.permalink(serverURL: base, teamName: team.name, postId: entry.serverPostId)
+        return sync.permalink(channelId: channelId, postId: entry.serverPostId)
     }
 }
 
 extension MattermostAccountSync {
+    /// The web permalink of a post of a channel (Copy Link, Share, 4H forwards).
+    func permalink(channelId: String, postId: String) -> String? {
+        let teams = self.state.with { $0.teams }
+        let teamId = self.channelState(channelId)?.teamId ?? ""
+        guard let team = teams.first(where: { $0.id == teamId }) ?? teams.first else {
+            return nil
+        }
+        let base = self.siteURL.flatMap { $0.isEmpty ? nil : $0 } ?? self.server.url
+        return MattermostLink.permalink(serverURL: base, teamName: team.name, postId: postId)
+    }
+
     /// The server's `SiteURL` (client config), which permalinks from other clients use.
     var siteURL: String? {
         return self.state.with { $0.siteURL }

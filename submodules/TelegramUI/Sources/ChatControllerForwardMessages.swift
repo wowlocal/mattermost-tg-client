@@ -106,6 +106,10 @@ extension ChatControllerImpl {
             }
             controller.multiplePeersSelected = { [weak self, weak controller] peers, peerMap, messageText, mode, forwardOptions, _ in
                 let peerIds = peers.map { $0.id }
+                // MATTERMOST: Mattermost forwards posts of private chats only within their own chat (4H).
+                if forwardOptions?.hideNames != true, let self, self.mattermostRefuseForward(messages: messages, targetPeerIds: peerIds, controller: controller) {
+                    return
+                }
                 
                 let _ = (context.engine.data.get(
                     EngineDataMap(
@@ -358,6 +362,10 @@ extension ChatControllerImpl {
                     return
                 }
                 let peerId = peer.id
+                // MATTERMOST: Mattermost forwards posts of private chats only within their own chat (4H).
+                if strongSelf.mattermostRefuseForward(messages: messages, targetPeerIds: [peerId], controller: strongController) {
+                    return
+                }
                 let accountPeerId = strongSelf.context.account.peerId
                 
                 if resetCurrent {
