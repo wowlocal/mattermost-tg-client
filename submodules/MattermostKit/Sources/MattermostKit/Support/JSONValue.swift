@@ -178,6 +178,58 @@ extension JSONValue {
     public static func parse(_ data: Data) throws -> JSONValue {
         try JSONDecoder().decode(JSONValue.self, from: data)
     }
+
+    /// The value as `JSONSerialization` types (`NSNull`, `Bool`, `Int64`, `Double`, `String`, arrays and
+    /// `[String: Any]`), for code that reads props without MattermostKit (Relay's voice marker, Phase 5A).
+    public var foundationObject: Any {
+        switch self {
+        case .null: return NSNull()
+        case .bool(let value): return value
+        case .int(let value): return value
+        case .double(let value): return value
+        case .string(let value): return value
+        case .array(let value): return value.map { $0.foundationObject }
+        case .object(let value): return value.mapValues { $0.foundationObject }
+        }
+    }
+
+    /// A value from `JSONSerialization` types; nil for anything else.
+    public init?(foundationObject: Any) {
+        switch foundationObject {
+        case is NSNull:
+            self = .null
+        case let number as NSNumber:
+            if CFGetTypeID(number) == CFBooleanGetTypeID() {
+                self = .bool(number.boolValue)
+            } else if CFNumberIsFloatType(number) {
+                self = .double(number.doubleValue)
+            } else {
+                self = .int(number.int64Value)
+            }
+        case let value as String:
+            self = .string(value)
+        case let value as [Any]:
+            var items: [JSONValue] = []
+            for item in value {
+                guard let converted = JSONValue(foundationObject: item) else {
+                    return nil
+                }
+                items.append(converted)
+            }
+            self = .array(items)
+        case let value as [String: Any]:
+            var items: [String: JSONValue] = [:]
+            for (key, item) in value {
+                guard let converted = JSONValue(foundationObject: item) else {
+                    return nil
+                }
+                items[key] = converted
+            }
+            self = .object(items)
+        default:
+            return nil
+        }
+    }
 }
 
 // MARK: - Literals

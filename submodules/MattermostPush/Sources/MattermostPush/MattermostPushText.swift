@@ -52,8 +52,12 @@ public struct MattermostPushText: Equatable, Sendable {
 /// `senderDisplayName` (4F) is the sender as the recipient's display setting names them
 /// (`MattermostPushSenderName`): it replaces the server's `sender_name` in the title and as the person shown, unless
 /// a webhook overrides the name.
+///
+/// `voiceMessage` (5A) is the text for a Relay voice message ("Voice message", localized by the caller): the post
+/// carries the `relay_voice` marker and no text, so the server wrote "attached a file." The extension learns it by
+/// fetching the post (pushes carry no `props`); it replaces the server's text as the body.
 public enum MattermostPushTextBuilder {
-    public static func text(for payload: MattermostPushPayload, kind: MattermostPushChannelKind, siteName: String?, senderDisplayName: String? = nil) -> MattermostPushText {
+    public static func text(for payload: MattermostPushPayload, kind: MattermostPushChannelKind, siteName: String?, senderDisplayName: String? = nil, voiceMessage: String? = nil) -> MattermostPushText {
         let threadIdentifier = payload.channelId ?? payload.threadIdentifier ?? "mattermost"
         // The server's name for the sender, which its text uses (`"@bob: hello"`, a DM's `channel_name`).
         let serverSender = nonEmpty(payload.overrideUsername) ?? nonEmpty(payload.senderName)
@@ -97,10 +101,13 @@ public enum MattermostPushTextBuilder {
         }
         var body = nonEmpty(payload.message) ?? "New message"
         let isReply = payload.isThreadReply
+        let voiceMessage = nonEmpty(voiceMessage)
 
         switch resolvedKind {
         case .direct:
-            if let serverSender = serverSender {
+            if let voiceMessage = voiceMessage {
+                body = voiceMessage
+            } else if let serverSender = serverSender {
                 body = stripSenderPrefix(body, sender: serverSender)
             }
             let title = sender ?? channelName ?? site
@@ -120,7 +127,10 @@ public enum MattermostPushTextBuilder {
             if isReply && !payload.isCRTEnabled {
                 title = "Reply in \(title)"
             }
-            if let serverSender = serverSender {
+            if let voiceMessage = voiceMessage {
+                // The server's "@bob attached a file." names the sender, which the group intent shows anyway.
+                body = sender == nil ? (serverSender.map { "\($0): \(voiceMessage)" } ?? voiceMessage) : voiceMessage
+            } else if let serverSender = serverSender {
                 // The group intent shows the sender with its avatar; the body keeps the server's
                 // "sender: text" only when there is no sender to show.
                 body = stripSenderPrefix(body, sender: serverSender)

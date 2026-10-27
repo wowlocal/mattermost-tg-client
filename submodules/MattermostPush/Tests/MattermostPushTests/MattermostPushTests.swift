@@ -189,6 +189,25 @@ final class MattermostPushTextTests: XCTestCase {
         XCTAssertEqual(dmText.body, "in the thread")
     }
 
+    func testVoiceMessage() throws {
+        // A Relay voice message: the server's text for a post with a file and no message.
+        var dm = try XCTUnwrap(MattermostPushPayload(userInfo: try fixture("dm")))
+        dm.message = "attached a file."
+        let dmText = MattermostPushTextBuilder.text(for: dm, kind: .direct, siteName: nil, voiceMessage: "Voice message")
+        XCTAssertEqual(dmText.title, "bob")
+        XCTAssertEqual(dmText.body, "Voice message")
+        XCTAssertEqual(MattermostPushTextBuilder.text(for: dm, kind: .direct, siteName: nil).body, "attached a file.")
+
+        var channel = try XCTUnwrap(MattermostPushPayload(userInfo: try fixture("channel-mention")))
+        channel.message = "@bob attached a file."
+        let channelText = MattermostPushTextBuilder.text(for: channel, kind: .channel, siteName: nil, voiceMessage: "Voice message")
+        XCTAssertEqual(channelText.title, "Town Square")
+        XCTAssertEqual(channelText.senderName, "bob")
+        XCTAssertEqual(channelText.body, "Voice message")
+        // An empty text changes nothing.
+        XCTAssertEqual(MattermostPushTextBuilder.text(for: channel, kind: .channel, siteName: nil, voiceMessage: " ").body, "@bob attached a file.")
+    }
+
     func testWebhookOverrideAndGenericContents() {
         let webhook = MattermostPushPayload(type: .message, channelId: "c", senderId: "u", senderName: "ci-bot", overrideUsername: "ci-bot", isFromWebhook: true, channelName: "Builds", message: "ci-bot: build 42 passed")
         let text = MattermostPushTextBuilder.text(for: webhook, kind: .channel, siteName: nil)

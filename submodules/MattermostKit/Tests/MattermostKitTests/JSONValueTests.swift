@@ -43,4 +43,19 @@ final class JSONValueTests: XCTestCase {
         XCTAssertEqual(try structured.decodeEmbedded(Post.self).id, "p2")
         XCTAssertThrowsError(try JSONValue.string("not json").decodeEmbedded(Post.self))
     }
+
+    func testFoundationObjectRoundTrip() throws {
+        let json = #"{"relay_voice":{"v":1,"duration":12,"waveform":"AAEC"},"n":null,"b":true,"d":1.5,"a":[1,"two",false]}"#
+        let value = try JSONValue.parse(Data(json.utf8))
+        let object = try XCTUnwrap(value.foundationObject as? [String: Any])
+        let voice = try XCTUnwrap(object["relay_voice"] as? [String: Any])
+        XCTAssertEqual(voice["duration"] as? Int64, 12)
+        XCTAssertEqual(voice["waveform"] as? String, "AAEC")
+        XCTAssertTrue(object["n"] is NSNull)
+        // What JSONSerialization makes of the same document converts back to the same value.
+        let serialized = try JSONSerialization.jsonObject(with: JSONSerialization.data(withJSONObject: object))
+        XCTAssertEqual(JSONValue(foundationObject: serialized), value)
+        XCTAssertEqual(JSONValue(foundationObject: try JSONSerialization.jsonObject(with: Data(json.utf8))), value)
+        XCTAssertNil(JSONValue(foundationObject: Date()))
+    }
 }
