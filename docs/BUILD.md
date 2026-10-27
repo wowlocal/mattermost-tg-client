@@ -323,7 +323,7 @@ tools/relay-remote.py "$UDID" background-refresh          # what the BGAppRefres
 ```
 
 - `RELAY_REMOTE_TIMEOUT=<s>` makes `relay-remote.py` wait longer than 15 s for an answer.
-- Every launch logs `[Relay] perf: chat list ready <ms> after didFinishLaunching, <ms> after process start`; the bootstrap logs `bootstrap: newest pages n/N after <ms>` and `bootstrap: done in <ms>`, each catch-up `catch-up since …: N channels, M with new posts …, K stale, in <ms>`, the foreground check `foreground: active after <s> s in the background; websocket alive|…`.
+- Every launch logs `[Relay] perf: chat list ready <ms> after didFinishLaunching, <ms> after process start` (release builds too, since 4E); the bootstrap logs `bootstrap: newest pages n/N after <ms>` and `bootstrap: done in <ms>`, each catch-up `catch-up since …: N channels, M with new posts …, K stale, in <ms>`, the foreground check `foreground: active after <s> s in the background; websocket alive|…`.
 - `tools/relay-session.py "$UDID" --minutes 10 --out session.jsonl`: a scripted session (chats, profiles, thread, search, Settings screens, threads list, background/foreground) with a memory and parked-request sample every minute; the last line lists every parked function.
 - **Background refresh** (`BGAppRefreshTask` `org.relaychat.Relay.refresh`): the simulator refuses `BGTaskScheduler.submit` (`BGTaskSchedulerErrorDomain` 1, logged as "could not schedule", although `backgroundRefreshStatus` is available), so `_simulateLaunchForTaskWithIdentifier:` has no pending request to launch there. `tools/relay-remote.py "$UDID" background-refresh` runs what the task runs (also while the app is in the background); the app logs `background refresh: started` and `… N account(s) caught up in … ms`. On a device, after the app was put in the background once: attach lldb (Xcode, or `xcrun lldb -p <pid>`), `e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"org.relaychat.Relay.refresh"]`, continue.
 
@@ -435,6 +435,41 @@ tools/relay-remote.py "$UDID" screen name=passcode         # Privacy and Securit
   (`simctl keychain reset` would remove everything else too).
 - **MetricKit** on a device: Xcode → Debug → Simulate MetricKit Payloads delivers a sample of each payload to the
   running app.
+
+#### Phase 4E: release-candidate regression (release builds)
+
+The checklist is [release/REGRESSION.md](release/REGRESSION.md); it is run on the `release_sim_arm64` build with real
+taps, and on a debug build only for the items that need the remote.
+
+- **Release builds log in over HTTPS only**: run a TLS proxy in front of the dev server (nginx on `mmdev_default`,
+  `proxy_pass http://mmdev-mattermost-1:8065` with the WebSocket upgrade headers, published on `127.0.0.1:8443`, a
+  leaf for `localhost`/`127.0.0.1` from a throwaway CA) and `xcrun simctl keychain <udid> add-root-cert ca.pem` on
+  every simulator; the server address is then `https://localhost:8443`. The same leaf serves a second server's proxy
+  on another port.
+- **`tools/relay-axe.py <udid> …`** drives any build with AXe: `tree`, `find`/`tap`/`wait` by accessibility label,
+  `tap-text`/`wait-text`/`gone-text`/`ocr` by text on screen (Vision OCR of a screenshot, `tools/relay-ocr.swift`,
+  compiled once into `build-input/relay-ocr`), `type` (`--env NAME` keeps a password off the command line), `clear`,
+  `key`, `swipe`, `tap-xy`, `shot`. Set `AXE` to XcodeBuildMCP's `bundled/axe`. Telegram's alerts, action sheets,
+  tab bar and chat list header are only reachable through `tap-text`. Driving tips are in REGRESSION.md "Setup".
+- **Cold start on any build**: every launch logs `[Relay] perf: chat list ready <ms> after didFinishLaunching, <ms>
+  after process start` to the unified log (since 4E also in release builds; two numbers, nothing else):
+  `xcrun simctl spawn <udid> log stream --style compact --predicate 'eventMessage CONTAINS "[Relay] perf:"'`, then
+  `simctl terminate` / `simctl launch` a few times.
+- **Release logs**: Settings → About Relay → Diagnostics → Save Diagnostic Logs turns on Telegram's file log in a
+  release build; MattermostSync's lines (`bootstrap: done in …`, `catch-up since …`) are then in
+  `$(xcrun simctl get_app_container <udid> org.relaychat.Relay groups)/telegram-data/logs/app-logs/*.txt`.
+- **A second server version** (D2: the ESR and the newest release) runs as its own compose project from a copy of
+  `infra/dev-server/` (outside the repository) with `name:` and the image tag changed and `MM_PORT`/`MM_SITE_URL` set
+  in the copy's `.env`; `seed.py` and `mmlib.py` work unchanged on whatever directory they are in (its compose
+  project, its `.state/`; 46 s against 12.0.1). The Team Edition image is amd64-only: `docker pull --platform
+  linux/amd64`. For pushes, point it at the dev push proxy: `MM_EMAILSETTINGS_SENDPUSHNOTIFICATIONS: "true"`,
+  `MM_EMAILSETTINGS_PUSHNOTIFICATIONSERVER: "http://push-proxy:8066"`, then `docker network connect mmdev_default
+  <its mattermost container>`. Before connecting, change its datasource host from `postgres` to its own Postgres
+  container's name: on two networks the name `postgres` also resolves to the ESR server's database. Remove it all with
+  `docker compose … down -v` and `docker rmi` the image.
+- **Real pushes on a simulator**: with the push proxy's real APNs key (Phase 4D device signing), a release
+  simulator build registers a sandbox token and receives real pushes through APNs, so the notification service
+  extension runs as on a device (proxy log "Acknowledged delivery receipt").
 
 If `simctl install` doesn't pick up a rebuilt binary (same build number), replace the installed bundle in place as described in the root `CLAUDE.md` ("Updating the running simulator after a rebuild"). This happened in 2D after a 30-second incremental build: compare the md5 of `Frameworks/TelegramUIFramework.framework/TelegramUIFramework` in the `.ipa` and in the installed app when a change seems missing.
 

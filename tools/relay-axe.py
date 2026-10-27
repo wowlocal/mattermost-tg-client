@@ -12,7 +12,8 @@ next to its `Frameworks/`). Point AXE at it, or put it on PATH.
   tools/relay-axe.py <udid> tree                       # every labelled element: type, label, [value], frame
   tools/relay-axe.py <udid> find "Log In"              # elements whose label contains the text (--exact)
   tools/relay-axe.py <udid> tap "Log In"               # touch the first match's centre (--index N, --exact,
-                                                       #   --value TEXT, --type Button, --hold SECONDS)
+                                                       #   --value TEXT, --type Button, --hold SECONDS,
+                                                       #   --below Y / --above Y: centre in that band)
   tools/relay-axe.py <udid> tap-xy 201 437             # touch a point (screen points)
   tools/relay-axe.py <udid> type "text"                # type into the focused field (--env NAME: text from
                                                        #   an environment variable, so passwords stay off the
@@ -108,6 +109,10 @@ def matches(udid, args):
             continue
         if getattr(args, "type", None) and e["type"].lower() != args.type.lower():
             continue
+        if getattr(args, "below", None) is not None and e["y"] + e["h"] / 2 < args.below:
+            continue  # e.g. under the navigation bar, which takes the touch
+        if getattr(args, "above", None) is not None and e["y"] + e["h"] / 2 > args.above:
+            continue
         if e["w"] <= 0 or e["h"] <= 0:
             continue
         found.append(e)
@@ -175,6 +180,8 @@ def main():
         p.add_argument("--exact", action="store_true")
         p.add_argument("--value")
         p.add_argument("--type")
+        p.add_argument("--below", type=float)
+        p.add_argument("--above", type=float)
         p.add_argument("--index", type=int, default=0)
         p.add_argument("--hold", type=float, default=0.15)
         p.add_argument("--timeout", type=float, default=15.0)

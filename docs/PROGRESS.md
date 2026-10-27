@@ -4,7 +4,7 @@ Working log for the Mattermost client fork. Each work session reads this first a
 
 ## Current state
 
-- **Phase:** 0–3 done; Phase 4: 4A, 4B, 4C, 4F, 4G done on `main`; 4E (release-candidate regression) next, then 5A voice messages. 4D (TestFlight): development signing with the user's team works (device builds installed, `tools/relay-device-build.sh`); TestFlight still needs the App Store Connect record, a distribution certificate and App Store profiles, D1/D6 and the GPL review.
+- **Phase:** 0–3 done; Phase 4: 4A, 4B, 4C, 4E, 4F, 4G done on `main` (release candidate `0.1.0 (31844)` passed the regression checklist on Mattermost 11.7.14 and 12.0.1 and six simulators, [release/REGRESSION.md](release/REGRESSION.md); push delivery from 12.0.1 still needs the push proxy re-rendered with `infra/push-proxy/up.sh` and a check); next: 5A voice messages. 4D (TestFlight) is still blocked on the user's App Store Connect setup: the App Store Connect record, a distribution certificate and App Store profiles, D1/D6 and the GPL review (development signing with the user's team works, `tools/relay-device-build.sh`).
 - **Upstream pin:** Telegram‑iOS `5c20d095d1ab` (app 13.0.1, tag `upstream-pin`), the newest commit built with Xcode 27.0 (installed). Master needs Xcode 27.1.
 - **Working name:** "Relay" (`org.relaychat.Relay`, URL scheme `relay`). Placeholder until D6 is decided.
 - **Build:** commands in [BUILD.md](BUILD.md). Main simulator "Relay iPhone 17 Pro" (iOS 26.5). `main` is pushed to `origin` (github.com/wowlocal/mattermost-tg-client) after each merge.
@@ -84,7 +84,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | 4C | Accessibility (VoiceOver, Dynamic Type) on new screens, localization readiness | Done on branch `worktree-agent-a894352d0927065cd` (main merged in three times, last with 4F so far; merged into main by the 4F agent); design: [design/localization.md](design/localization.md); evidence `docs/research/phase4c-a11y/`, screenshots `docs/research/phase4c-*.png` |
 | 4F | Known-gaps burn-down (CRT chat-list preview/sort, thread unread separator, mixed posts, attachment polish, ephemeral semantics, in-chat search incl. replies, permalink into unjoined channel, DND indicator, push sender display name, live DM close, live mentions, persisted upload ids, admin delete) | Done (main checkout; 4C merged in at `cd723ed9`); design: mattermost-sync.md "Known-gaps burn-down (4F)"; screenshots `docs/research/phase4f-*.png` |
 | 4G | Security and diagnostics (plan 05 Phase 4): Telegram passcode lock with Relay accounts, managed app configuration (AppConfig/MDM: server URL, restrictions), optional certificate pinning, privacy-respecting local diagnostics (MetricKit, exportable logs) | Done (main checkout); design: mattermost-sync.md "Security and diagnostics (4G)"; admin guide: [release/managed-configuration.md](release/managed-configuration.md); privacy: [release/privacy.md](release/privacy.md); BUILD.md "Phase 4G"; evidence `docs/research/phase4g/`, screenshots `docs/research/phase4g-*.png` |
-| 4E | Release-candidate regression: written checklist, release build, cold start from cache, supported server versions (11.7 ESR and the newest release), device matrix | After 4G |
+| 4E | Release-candidate regression: written checklist, release build, cold start from cache, supported server versions (11.7 ESR and the newest release), device matrix | Done (main checkout): checklist and results [release/REGRESSION.md](release/REGRESSION.md); BUILD.md "Phase 4E"; screenshots `docs/research/phase4e-*.png` |
 | 4D | Release: TestFlight build ([release/RELEASE.md](release/RELEASE.md)) | Development signing done with the user's team (App IDs, App Group, APNs key, development profiles; device build installed; BUILD.md "Device builds"). TestFlight blocked on the user: App Store Connect record, distribution certificate and App Store profiles, D1/D6, GPL review |
 
 ## Phase 5
@@ -431,3 +431,86 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
     used for the paste check (text restored).
 - **Device signing with the user's own team** (branch `device-signing`): Apple Developer portal set up through the cua driver with the user signed in (App Group `group.org.relaychat.Relay`; App IDs `org.relaychat.Relay` with Push, App Groups, Communication Notifications, `.NotificationService` with App Groups and Communication Notifications, `.NotificationContent` and `.Share` with App Groups; four iOS App Development profiles, valid to 2027‑10‑26; an APNs key, team‑scoped, Sandbox & Production, kept outside the repository). The push proxy runs with the real key ("Initializing apple notification server with AuthKey" for `relay_apple` and `relay_apple_sandbox`). `tools/relay-device-build.sh` builds with the team id in git-ignored `build-input/` and installs with `ideviceinstaller` or `devicectl`; signing must run in the GUI login session (BUILD.md "Device builds"). First `debug_arm64` device build installed on the user's iPhone (iOS 27.0.1). 4D still needs the App Store Connect record, a distribution certificate and App Store profiles, D1/D6 and the GPL review.
 - **Voice messages added to the roadmap** as 5A ([plan 05](plan/05-phases.md#5a--voice-messages-12-weeks), decision V1 in plan 09): Mattermost 11.7 has no voice post type (web app and config checked), so they go out as audio attachments with a `props` marker.
+
+### 2026‑10‑27
+
+- **4E done** (main checkout). Checklist and results: [release/REGRESSION.md](release/REGRESSION.md) (96 items in
+  sections A–S: steps, expected result, how it's checked, release or debug build); BUILD.md "Phase 4E"; screenshots
+  `docs/research/phase4e-*.png`.
+  - **Method:** release candidates built with `appstore-configuration.json` (`release_sim_arm64`), driven with real
+    taps only: the new `tools/relay-axe.py` (AXe by accessibility label; Vision OCR through `tools/relay-ocr.swift`
+    for what AXe's tree misses: Telegram's alerts, action sheets, tab bar and chat list header), REST checks as the
+    test users, the login over HTTPS through a throwaway nginx TLS proxy (`relay-4e-tls`, the 4G test CA trusted per
+    simulator). Release logs: the Diagnostics screen's "Save Diagnostic Logs" (MattermostSync lines in the file log)
+    and a new `[Relay] perf:` unified-log line that every build writes at launch (two numbers). Debug-only items on
+    the debug build of the same tree on "Relay iPhone 17 Pro". RC1 `0.1.0 (31839)` → RC4 `0.1.0 (31844)` as fixes
+    landed; `tools/relay-release-audit.sh` passed for each (0 debug markers, no ATS exception for the app's own
+    connections, privacy manifests present, 0 closed-source/analytics markers).
+  - **Results:** 11.7.14 ESR: 78 of 91 items pass (2 on the debug build, 2 after this run's fixes), 2 known gaps,
+    11 not run (debug-only items verified in 4F/4G, SSO, the old-server check, appearance). **Mattermost 12.0.1**
+    (the newest release: Docker Hub `latest` = `12.0.1`; `12.1.0-rc2` is a release candidate) as a separate compose
+    project on port 8075 (TLS on 8444) seeded with `seed.py` unchanged (46 s): 29 items run, 28 pass, push
+    registration failed (fixed, below). Device matrix (RC3; iPhone 17e, iPhone 17 Pro Max, iPad Air 13-inch (M4) on
+    iOS 26.5 and 27.0, one simulator at a time): login, All tab, chat, send, thread, search, Settings/About, landscape
+    (iPhones), largest text — all pass; iPad split view works; iPad landscape unchecked (no way to rotate an iPad
+    simulator here).
+  - **Performance (release, simulator):** cold start to chat list from cache, 7 runs each: median **786 ms** after
+    process start (326 ms after `didFinishLaunching`) with ~70 chats, **807 ms** with 602 chats, **803 ms** with
+    accounts on two servers (4B debug: 1.1–2.0 s / 489–691 ms; target < 1 s: met). First bootstrap of 602 chats:
+    **3.08 s** (chat list 1.5 s after Log In; 4B debug 5.7 s). Launch catch-up of 602 channels 47–59 ms. Chat list
+    flings through the 500-row large folder render without blanks; debug `chatlist-scroll` 0 dropped of 961 frames.
+  - **Found and fixed:**
+    - *No "All" tab* (since 2B): the generated team folders don't name "All Chats" (Telegram's server always lists
+      it), so the tab strip held only the teams and, once a team was picked, the unfiltered list had no tab to
+      return to. First written as a stored folder (`311b59b3`): it showed in debug builds but not in release builds
+      (not root-caused); now the tab is added where the tab strip is built (`26aad49d`, ChatListUI). Checked on six
+      simulators and after RC1 → RC2 → RC3 upgrades.
+    - *Telegram leftovers on first use* (`0611264c`): a "Hold to record audio. Tap to switch to video." tip pointing
+      at the hidden mic button the first time a chat opens; the passcode note "All secret chats will be lost."
+      (Relay.strings override); a wallet warning when turning the passcode off.
+    - *Push on Mattermost 12* (`0feeacc5`): 12.0.1 refuses device ids whose platform isn't an official app's
+      (`model.IsValidDeviceId`: `apple_rn`, `apple_rnbeta`, `android_rn`, optional `-v<N>`; 400
+      `api.context.invalid_body_param.app_error`), so Relay's `relay_apple[_sandbox]:<token>` left 12.0.1 accounts
+      without pushes. A refused registration is now repeated as `apple_rn` / `apple_rnbeta` and kept per account;
+      the push proxy template, `sim-bridge.py`, the push proxy README and plan 04 list the two new platforms.
+      Checked on RC4: the 12.0.1 account registered `apple_rnbeta:…` and the 11.7 account kept
+      `relay_apple_sandbox:…`; 12.0.1 then pushed to the proxy, which answered "No push target for platform
+      apple_rnbeta" because the running proxy was rendered from the old template (left as it is, as instructed).
+      MattermostPush 42 tests (1 new).
+    - *Cold-start timing in release builds* (`efb8503e`): the `[Relay] perf:` line moved out of `#if DEBUG`
+      (`RelayLaunchTiming.swift`, `os_log`, two numbers), so release candidates can be timed.
+  - **Differences 11.7.14 → 12.0.1:** only the device id check above. Login (ping, client config, MFA), teams,
+    channels, unread counts, posts, threads/CRT, search, reactions, preferences, status, files, WebSocket events,
+    slash commands, autocomplete, permalinks and the share extension behaved the same; 12.0.1 took longer to be
+    ready after a restart (posts sent 6.5 s after `/ping` answered vs 1.9 s).
+  - **Checks:** parked Telegram requests 0 after a 5-minute `tools/relay-session.py` on the final debug build (and on
+    an earlier one); MattermostKit 212 tests (5 skipped), MattermostSyncCore 181, MattermostPush 42, MattermostShare
+    9 (1 skipped).
+  - **Gaps:** pushes from Mattermost 12+ need `infra/push-proxy/up.sh` (re-render) and an end-to-end check; accounts
+    with the same name on two servers look identical in the switcher and the Settings account list (no server
+    shown); no `@channel` confirmation for large channels (plan 05 Phase 3); Forward without attribution; a reply
+    count stayed one too high on another device after a reply was deleted (once, fixed by a relaunch); on the iPad
+    (26.5) touches didn't reach the app right after login until a relaunch (once); iPad landscape unchecked; the 4G
+    blank DM-row avatar. Details and steps in REGRESSION.md "Open gaps".
+  - **Tooling notes** (REGRESSION.md "Driving tips"): AXe's hardware-keyboard typing gets lost when it starts before
+    a field is ready, after the app was switched away, or after typing `/` on one simulator (the software keyboard
+    always works); AXe's frames of Telegram's list items go stale after scrolling (prefer OCR); a login sequence
+    once typed into a chat composer because the expected screen wasn't up (credentials typed, not sent, composer
+    cleared; Relay's drafts are local, the server's drafts were unaffected) — the helpers now wait for each screen.
+  - Upstream files touched (all `// MATTERMOST:`): `TelegramUI/Sources/AppDelegate.swift` (perf line), new
+    `TelegramUI/Sources/RelayLaunchTiming.swift`, `RelayDebugScreens.swift` (helper moved out), `ChatController.swift`
+    (recording tip), `SettingsUI/…/PasscodeOptionsController.swift` (wallet warning), `ChatListUI/ChatListController.swift`
+    (All tab), `Telegram-iOS/Relay.strings` (passcode notes). Relay: `MattermostPush` (`MattermostPushDevice`),
+    `MattermostSync` (`Push/MattermostPushRegistration.swift`); `infra/push-proxy` (template, `sim-bridge.py`,
+    README); plan 04; tools `relay-axe.py`, `relay-ocr.swift`.
+  - **State left behind:** dev server 11.7: posts by alice/bob in ~sandbox ("4E …": RC sends, an album, a share, the
+    smoke posts from six simulators, a forwarded copy of "4E after restart from bob" in 3F Share), a DM bob → alice
+    ("4E push check…", "4E tap this notification"), bob's "4E permalink …" in 3E Links, the archived channel
+    `4e-rc-check` ("4E RC Check", alice + bob), alice joined and left `relay-3d-join`, the "Ping me when you're back"
+    pin and save undone, alice's custom status cleared, position/push level/mute/favorite restored; alice detached
+    from `relay-4b-large` again (`tools/mm-large-server.py join`/`detach` ran); carol's MFA re-enrolled (new secret in
+    `build-input/dev-mfa-secrets.json`); dave's sessions revoked once (the main simulator's dave logged in again);
+    extra REST sessions for alice/bob/dave/sysadmin. No server settings changed. Removed: the 12.0.1 project
+    (`relay4e12`, containers, volumes, network), its image, both TLS proxies, the release simulator and all six
+    matrix simulators. "Relay iPhone 17 Pro" holds the final debug build with alice/bob/dave. The push proxy is
+    untouched (still rendered from the old template). The Mac's pasteboard was overwritten by a Copy Link check.

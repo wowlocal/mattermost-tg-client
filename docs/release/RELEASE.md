@@ -143,8 +143,11 @@ python3 build-system/Make/Make.py --cacheDir <bazel disk cache dir> build \
 5. TestFlight → Internal Testing: add the testers (up to 100 App Store Connect users; no review needed). External
    testing needs Beta App Review and the beta "What to Test" text, contact and privacy policy URL.
 6. **Test with real pushes** before inviting anyone: a TestFlight build is a production-APNs build
-   (`aps-environment` = `production`), so it registers `relay_apple:<token>` and needs the proxy's `relay_apple`
-   entry with your key (push-proxy README step 6 describes the sandbox check; repeat it with a TestFlight build).
+   (`aps-environment` = `production`), so it registers `relay_apple:<token>` (`apple_rn:<token>` on Mattermost 12
+   and newer, which refuse other platform names) and needs the proxy's `relay_apple` and `apple_rn` entries with your
+   key (push-proxy README step 6 describes the sandbox check; repeat it with a TestFlight build).
+7. **Run the regression checklist** ([REGRESSION.md](REGRESSION.md)) on the candidate before inviting testers, on
+   the current Mattermost ESR and the newest release, and add a results table for the run.
 
 ## 6. Audit: no debug code in the release
 
