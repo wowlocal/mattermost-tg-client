@@ -1,67 +1,20 @@
 {
-  "fill" : "system-light",
+  "fill" : "automatic",
   "groups" : [
     {
       "blend-mode" : "normal",
-      "blur-material" : 1,
       "layers" : [
         {
-          "blend-mode-specializations" : [
-            {
-              "value" : "normal"
-            },
-            {
-              "appearance" : "dark",
-              "value" : "normal"
-            }
-          ],
-          "fill-specializations" : [
-            {
-              "appearance" : "dark",
-              "value" : "automatic"
-            }
-          ],
-          "glass" : true,
-          "image-name" : "R.svg",
-          "name" : "R"
-        },
-        {
-          "blend-mode-specializations" : [
-            {
-              "value" : "normal"
-            },
-            {
-              "appearance" : "dark",
-              "value" : "normal"
-            }
-          ],
-          "fill-specializations" : [
-            {
-              "value" : {
-                "linear-gradient" : [
-                  "srgb:0.16000,0.62000,0.62000,1.00000",
-                  "srgb:0.20000,0.33000,0.70000,1.00000"
-                ]
-              }
-            },
-            {
-              "appearance" : "dark",
-              "value" : {
-                "automatic-gradient" : "srgb:0.16000,0.50000,0.60000,1.00000"
-              }
-            }
-          ],
           "glass" : false,
-          "image-name" : "Square.svg",
-          "name" : "Square"
+          "image-name" : "Relay.png",
+          "name" : "Artwork"
         }
       ],
-      "lighting" : "combined",
       "shadow" : {
-        "kind" : "layer-color",
-        "opacity" : 1
+        "kind" : "neutral",
+        "opacity" : 0
       },
-      "specular" : true,
+      "specular" : false,
       "translucency" : {
         "enabled" : false,
         "value" : 1
