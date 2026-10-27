@@ -8,5 +8,5 @@
 "NSCameraUsageDescription" = "We need this so that you can take and share photos and videos.";
 "NSPhotoLibraryUsageDescription" = "We need this so that you can share photos and videos from your photo library and save the ones you capture.";
 "NSPhotoLibraryAddUsageDescription" = "We need this so that you can save photos and videos to your photo library and save the ones you capture.";
-"NSMicrophoneUsageDescription" = "We need this so that you can record and share voice messages and videos with sound.";
+"NSMicrophoneUsageDescription" = "Relay uses the microphone to record voice messages and videos with sound. A recording is sent to your Mattermost server only when you send it.";
 "NSFaceIDUsageDescription" = "You can use Face ID to unlock the app.";

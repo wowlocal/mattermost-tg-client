@@ -189,6 +189,12 @@ public final class ChatMessageAccessibilityData {
                                             label = item.presentationData.strings.VoiceOver_Chat_YourVoiceMessage
                                         }
                                         text = item.presentationData.strings.VoiceOver_Chat_Duration(durationString).string
+                                        // MATTERMOST: whether a received voice message was played on this device (5A;
+                                        // the "not played" dot, local only).
+                                        if MattermostBackend.isEnabled && isIncoming, let consumable = message.attributes.first(where: { $0 is ConsumableContentMessageAttribute }) as? ConsumableContentMessageAttribute {
+                                            text.append(", ")
+                                            text.append(consumable.consumed ? item.presentationData.strings.Relay_VoiceOver_Chat_Played : item.presentationData.strings.Relay_VoiceOver_Chat_NotPlayed)
+                                        }
                                     } else {
                                         let durationString = musicDurationFormatter.string(from: Double(duration)) ?? ""
                                         if isIncoming {

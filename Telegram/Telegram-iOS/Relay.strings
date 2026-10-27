@@ -506,3 +506,15 @@
 /* Release-candidate regression (Phase 4E): Telegram texts on kept screens that named features Relay doesn't have. */
 "PasscodeSettings.Help" = "When you set up an additional passcode, a lock icon will appear on the chats page. Tap it to lock and unlock the app.\n\nNote: if you forget the passcode, you'll need to delete and reinstall the app and log in to your servers again.";
 "PasscodeSettings.HelpBottom" = "Note: if you forget the passcode, you'll need to delete and reinstall the app and log in to your servers again.";
+
+/* Voice messages (Phase 5A): sent as an audio file with a marker (Mattermost has no voice posts). The recording hint
+   without Telegram's switch to video messages, the microphone text (also in InfoPlist.strings), the uploaded file's
+   name before its date ("Voice message 2026-10-27 14.05.m4a"), the notification text (read by the notification
+   service extension from the app's bundle) and VoiceOver's played state of a received voice message. */
+"VoiceOver.Chat.RecordModeVoiceMessageInfo" = "Double tap and hold to record a voice message. Slide up to lock the recording, slide left to cancel.";
+"InfoPlist.NSMicrophoneUsageDescription" = "Relay uses the microphone to record voice messages and videos with sound. A recording is sent to your Mattermost server only when you send it.";
+"Relay.VoiceMessage.FileName" = "Voice message";
+"Relay.Push.VoiceMessage" = "Voice message";
+"Relay.VoiceOver.Chat.NotPlayed" = "Not played";
+"Relay.VoiceOver.Chat.Played" = "Played";
+"Relay.VoiceOver.Chat.RecordMore" = "Record more";

@@ -3689,6 +3689,16 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             viewOnceIsVisible = true
             recordMoreIsVisible = true
         }
+        // MATTERMOST: no view-once voice messages (a Mattermost post can't expire after one play; 5A).
+        if MattermostBackend.isEnabled {
+            viewOnceIsVisible = false
+            // VoiceOver: while a recording waits in the preview the attachment button is its Delete button, and the
+            // button above the send button records more (both unlabelled upstream).
+            self.attachmentButton.accessibilityLabel = interfaceState.interfaceState.mediaDraftState != nil ? interfaceState.strings.Common_Delete : interfaceState.strings.VoiceOver_AttachMedia
+            self.recordMoreButton.isAccessibilityElement = recordMoreIsVisible
+            self.recordMoreButton.accessibilityLabel = interfaceState.strings.Relay_VoiceOver_Chat_RecordMore
+            self.recordMoreButton.accessibilityTraits = [.button]
+        }
                 
         /*var clippingDelta: CGFloat = 0.0
         if case let .media(_, _, focused) = interfaceState.inputMode, focused {
@@ -4576,7 +4586,8 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         
         var hideMicButton = false
         var hideMicButtonBackground = false
-        // MATTERMOST: no voice or round video messages yet; fades the mic button out like `businessLinkSetup`.
+        // MATTERMOST: without voice and round video messages the mic button fades out like `businessLinkSetup` (voice
+        // messages are on since 5A).
         if !MattermostFeatures.voiceMessages && !MattermostFeatures.videoMessages {
             hideMicButton = true
         }

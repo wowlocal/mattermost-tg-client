@@ -1923,7 +1923,7 @@ plist_fragment(
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>When you share your location in a chat, Relay needs access to show it on a map.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>We need this so that you can record and share voice messages and videos with sound.</string>
+    <string>Relay uses the microphone to record voice messages and videos with sound. A recording is sent to your Mattermost server only when you send it.</string>
     <key>NSMotionUsageDescription</key>
     <string>When you share your location in a chat, Relay needs access to show it on a map.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>

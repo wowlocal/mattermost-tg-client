@@ -3065,8 +3065,9 @@ extension ChatControllerImpl {
             guard let strongSelf = self else {
                 return
             }
-            // MATTERMOST: no round video messages.
+            // MATTERMOST: no round video messages; a tap on the record button shows "Hold to record audio." (5A).
             guard MattermostFeatures.videoMessages else {
+                strongSelf.displayMediaRecordingTooltip()
                 return
             }
             

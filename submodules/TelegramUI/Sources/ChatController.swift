@@ -10187,8 +10187,8 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         guard let peer = self.presentationInterfaceState.renderedPeer?.peer else {
             return
         }
-        // MATTERMOST: no voice or video messages yet (the composer hides the record button), so no "Hold to record
-        // audio" tip pointing at nothing on a fresh install (4E).
+        // MATTERMOST: without voice and video messages the composer hides the record button, so no "Hold to record
+        // audio" tip pointing at nothing on a fresh install (4E). Voice messages are on since 5A.
         if !MattermostFeatures.voiceMessages && !MattermostFeatures.videoMessages {
             return
         }
@@ -10203,7 +10203,8 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         
         let text: String
         
-        var canSwitch = true
+        // MATTERMOST: no round video messages to switch to ("Hold to record audio."; 5A).
+        var canSwitch = MattermostFeatures.videoMessages
         if let channel = peer as? TelegramChannel {
             if channel.hasBannedPermission(.banSendVoice) != nil && channel.hasBannedPermission(.banSendInstantVideos) != nil {
                 canSwitch = false
@@ -10245,6 +10246,11 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         }
         
         self.silentPostTooltipController?.dismiss()
+        
+        // MATTERMOST: VoiceOver reads the recording hint (5A).
+        if MattermostBackend.isEnabled && UIAccessibility.isVoiceOverRunning {
+            UIAccessibility.post(notification: .announcement, argument: text as NSString)
+        }
         
         if let tooltipController = self.mediaRecordingModeTooltipController {
             tooltipController.updateContent(.text(text), animated: true, extendTimer: true)
