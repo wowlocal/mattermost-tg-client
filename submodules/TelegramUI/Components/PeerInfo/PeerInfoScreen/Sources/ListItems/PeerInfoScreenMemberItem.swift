@@ -200,8 +200,14 @@ private final class PeerInfoScreenMemberItemNode: PeerInfoScreenItemNode {
         let itemText: ItemListPeerItemText
         var synchronousLoads = false
         if case .account = item.member {
-            itemHeight = .generic
-            itemText = .none
+            // MATTERMOST: the account's server under the name (4H), so the same user on two servers can be told apart.
+            if let label = MattermostUIHooks.accountServerLabel?(item.member.peer.id) {
+                itemHeight = .peerList
+                itemText = .text(label, .secondary)
+            } else {
+                itemHeight = .generic
+                itemText = .none
+            }
             synchronousLoads = true
         } else {
             itemHeight = .peerList

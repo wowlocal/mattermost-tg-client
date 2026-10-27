@@ -195,6 +195,35 @@ public enum MattermostSync {
         }
     }
 
+    /// 4H: the server of an account (by its own user's peer id), as the account switcher and Settings name it under
+    /// the user's name, so the same user on two servers can be told apart: the server's site name and host
+    /// ("Acme Chat · chat.acme.com"), the host alone when the site name is Mattermost's default or unknown.
+    public static func serverLabel(accountPeerId: PeerId) -> String? {
+        guard let server = self.registry.with({ registry in registry.values.first(where: { $0.account.peerId == accountPeerId })?.server }) else {
+            return nil
+        }
+        return MattermostSync.serverLabel(url: server.url, siteName: server.siteName)
+    }
+
+    static func serverLabel(url: String, siteName: String?) -> String {
+        var host = url
+        if let components = URLComponents(string: url), let name = components.host {
+            host = name
+            if let port = components.port {
+                host += ":\(port)"
+            }
+            let path = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if !path.isEmpty {
+                host += "/" + path
+            }
+        }
+        let site = (siteName ?? "").trimmingCharacters(in: .whitespaces)
+        if site.isEmpty || site == "Mattermost" || site.lowercased() == host.lowercased() {
+            return host
+        }
+        return "\(site) · \(host)"
+    }
+
     static func stopAccount(_ accountId: AccountRecordId) {
         let sync = self.accounts.with { $0.removeValue(forKey: accountId) }
         sync?.stop()

@@ -38,6 +38,8 @@ private final class AccountPeerContextItemNode: ASDisplayNode, ContextMenuCustom
     
     private let buttonNode: HighlightTrackingButtonNode
     private let textNode: ImmediateTextNode
+    // MATTERMOST: the account's server under the name (4H).
+    private let subtitleNode: ImmediateTextNode?
     private let avatarNode: AvatarNode
     private let emojiStatusView: ComponentView<Empty>
     
@@ -57,17 +59,34 @@ private final class AccountPeerContextItemNode: ASDisplayNode, ContextMenuCustom
         self.textNode.attributedText = NSAttributedString(string: peerTitle, font: textFont, textColor: presentationData.theme.contextMenu.primaryColor)
         self.textNode.maximumNumberOfLines = 1
         
+        // MATTERMOST: the account's server under the name (4H), so the same user on two servers can be told apart.
+        let serverLabel = MattermostUIHooks.accountServerLabel?(item.account.peerId)
+        if let serverLabel {
+            let subtitleNode = ImmediateTextNode()
+            subtitleNode.isAccessibilityElement = false
+            subtitleNode.isUserInteractionEnabled = false
+            subtitleNode.displaysAsynchronously = false
+            subtitleNode.attributedText = NSAttributedString(string: serverLabel, font: Font.regular(presentationData.listsFontSize.baseDisplaySize * 13.0 / 17.0), textColor: presentationData.theme.contextMenu.secondaryColor)
+            subtitleNode.maximumNumberOfLines = 1
+            self.subtitleNode = subtitleNode
+        } else {
+            self.subtitleNode = nil
+        }
+        
         self.avatarNode = AvatarNode(font: avatarPlaceholderFont(size: 14.0))
         
         self.emojiStatusView = ComponentView<Empty>()
         
         self.buttonNode = HighlightTrackingButtonNode()
         self.buttonNode.isAccessibilityElement = true
-        self.buttonNode.accessibilityLabel = peerTitle
+        self.buttonNode.accessibilityLabel = serverLabel.flatMap { peerTitle + ", " + $0 } ?? peerTitle
         
         super.init()
         
         self.addSubnode(self.textNode)
+        if let subtitleNode = self.subtitleNode {
+            self.addSubnode(subtitleNode)
+        }
         self.addSubnode(self.avatarNode)
         self.addSubnode(self.buttonNode)
         
@@ -94,11 +113,18 @@ private final class AccountPeerContextItemNode: ASDisplayNode, ContextMenuCustom
         }
     
         let textSize = self.textNode.updateLayout(CGSize(width: constrainedWidth - sideInset - rightTextInset, height: .greatestFiniteMagnitude))
+        // MATTERMOST: the server line (4H).
+        let subtitleSize = self.subtitleNode?.updateLayout(CGSize(width: constrainedWidth - sideInset - rightTextInset + (self.item.peer.emojiStatus != nil ? 32.0 : 0.0), height: .greatestFiniteMagnitude)) ?? .zero
+        let subtitleSpacing: CGFloat = self.subtitleNode != nil ? 1.0 : 0.0
+        let contentHeight = textSize.height + subtitleSpacing + subtitleSize.height
         
-        return (CGSize(width: textSize.width + sideInset + rightTextInset, height: verticalInset * 2.0 + textSize.height), { size, transition in
-            let verticalOrigin = floor((size.height - textSize.height) / 2.0)
+        return (CGSize(width: max(textSize.width, subtitleSize.width) + sideInset + rightTextInset, height: verticalInset * 2.0 + contentHeight), { size, transition in
+            let verticalOrigin = floor((size.height - contentHeight) / 2.0)
             let textFrame = CGRect(origin: CGPoint(x: iconSideInset + 40.0, y: verticalOrigin), size: textSize)
             transition.updateFrameAdditive(node: self.textNode, frame: textFrame)
+            if let subtitleNode = self.subtitleNode {
+                transition.updateFrameAdditive(node: subtitleNode, frame: CGRect(origin: CGPoint(x: textFrame.minX, y: textFrame.maxY + subtitleSpacing), size: subtitleSize))
+            }
             
             var iconContent: EmojiStatusComponent.Content?
             if case let .user(user) = self.item.peer {
@@ -145,6 +171,12 @@ private final class AccountPeerContextItemNode: ASDisplayNode, ContextMenuCustom
             let updatedAttributedText = NSMutableAttributedString(attributedString: attributedText)
             updatedAttributedText.addAttribute(.foregroundColor, value: presentationData.theme.contextMenu.primaryColor.cgColor, range: NSRange(location: 0, length: updatedAttributedText.length))
             self.textNode.attributedText = updatedAttributedText
+        }
+        // MATTERMOST: the server line (4H).
+        if let subtitleNode = self.subtitleNode, let attributedText = subtitleNode.attributedText {
+            let updatedAttributedText = NSMutableAttributedString(attributedString: attributedText)
+            updatedAttributedText.addAttribute(.foregroundColor, value: presentationData.theme.contextMenu.secondaryColor, range: NSRange(location: 0, length: updatedAttributedText.length))
+            subtitleNode.attributedText = updatedAttributedText
         }
     }
     

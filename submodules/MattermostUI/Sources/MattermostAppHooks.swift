@@ -37,6 +37,10 @@ public enum MattermostAppHooks {
         MattermostUIHooks.makeDiagnosticsController = { context in
             return relayDiagnosticsController(context: context)
         }
+        // 4H: the server under each account's name (account switcher, Settings).
+        MattermostUIHooks.accountServerLabel = { accountPeerId in
+            return MattermostSync.serverLabel(accountPeerId: accountPeerId)
+        }
         #if DEBUG
         MattermostDebugRemote.shared.start(sharedContext: sharedContext)
         #endif
