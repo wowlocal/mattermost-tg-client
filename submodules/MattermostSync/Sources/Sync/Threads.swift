@@ -354,6 +354,29 @@ extension MattermostAccountSync {
         }
     }
 
+    /// 4H: the reply counts of these roots after replies of theirs were deleted (live or while the app was away):
+    /// the server's count (`POST /posts/ids`), keeping the stored latest repliers. Without it the root kept counting
+    /// the deleted reply until it was loaded again (4E: "14 Replies" with 13 on the server).
+    func refreshThreadRootCounts(channelId: String, rootIds: Set<String>) async {
+        let ids = Array(rootIds.filter { !$0.isEmpty })
+        if ids.isEmpty {
+            return
+        }
+        var roots: [Post] = []
+        for start in stride(from: 0, to: ids.count, by: 100) {
+            guard let chunk = try? await self.client.posts(ids: Array(ids[start ..< min(ids.count, start + 100)])) else {
+                return
+            }
+            roots.append(contentsOf: chunk)
+        }
+        await self.postbox.mmTransaction { transaction in
+            for root in roots where root.deleteAt == 0 && root.channelId == channelId {
+                self.updateThreadRootSummary(channelId: channelId, rootPostId: root.id, replyCount: root.replyCount, latestUserIds: [], mergingStoredUsers: true, transaction: transaction)
+            }
+        }
+        MMLog.log("threads: \(roots.count) root(s) recounted after deleted replies: \(roots.map { "\($0.id) \($0.replyCount)" })")
+    }
+
     /// Sets a root's "N replies" (count and the latest repliers' avatars, newest first). Channel pages carry no
     /// participants, so these come from loaded threads and the threads list. `mergingStoredUsers`: the given
     /// users go in front of the stored latest repliers (they are only some of the thread's).

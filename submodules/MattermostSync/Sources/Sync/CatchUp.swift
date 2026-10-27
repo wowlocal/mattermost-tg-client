@@ -141,15 +141,92 @@ extension MattermostAccountSync {
                 }
             }
             self.clearStale(active)
+            // 4H: the chat-list rows of the quiet channels (their newest message may have been edited, deleted or
+            // reacted to meanwhile, which doesn't move `last_post_at`).
+            let previews = await self.refreshChatListPreviews(channelIds: quiet, since: since)
             // A small overlap: posts saved in the same millisecond as the request would otherwise be missed.
             await self.postbox.mmTransaction { _ in
                 self.store.setCursor(MattermostCursorKey.lastSyncAt, String(startedAt - 2000))
             }
             let staleCount = self.staleChannels.with { $0?.since.count ?? 0 }
-            MMLog.log("catch-up since \(since): \(snapshot.channels.count) channels, \(active.count) with new posts (\(changed.current) posts), \(readOnly.count) read states, \(added.count) added, \(staleCount) stale, in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
+            MMLog.log("catch-up since \(since): \(snapshot.channels.count) channels, \(active.count) with new posts (\(changed.current) posts), \(readOnly.count) read states, \(added.count) added, \(staleCount) stale, \(previews) chat-list preview(s) updated, in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
         } catch {
             MMLog.log("catch-up failed: \(error)")
         }
+    }
+
+    /// 4H: the message each quiet channel's chat-list row shows (its newest message, the newest root post with
+    /// collapsed reply threads), asked for in one `POST /posts/ids` per 100 channels: the ones edited or reacted to
+    /// since `since` (`update_at`) are loaded on their own (`GET /posts/{id}`: `/posts/ids` has no embeds, so its
+    /// copy would drop a link card or a forward) and rewritten, deleted ones removed (the row then shows the message
+    /// before). The rest of a quiet channel's history stays stale until it opens (`StaleChannels`). Returns the number
+    /// of rows changed.
+    func refreshChatListPreviews(channelIds: [String], since: Int64) async -> Int {
+        if channelIds.isEmpty {
+            return 0
+        }
+        let targets: [String: String] = await self.postbox.mmTransaction { transaction in
+            var targets: [String: String] = [:]
+            for channelId in channelIds {
+                guard let channelState = self.channelState(channelId), let (_, index) = transaction.getPeerChatListIndex(channelState.peerId) else {
+                    continue
+                }
+                if let reference = self.postReference(for: index.messageIndex.id), reference.channelId == channelId {
+                    targets[reference.postId] = channelId
+                }
+            }
+            return targets
+        }
+        if targets.isEmpty {
+            return 0
+        }
+        let ids = Array(targets.keys)
+        var changed: [Post] = []
+        var returned = Set<String>()
+        for start in stride(from: 0, to: ids.count, by: 100) {
+            guard let chunk = try? await self.client.posts(ids: Array(ids[start ..< min(ids.count, start + 100)])) else {
+                MMLog.log("catch-up: chat-list previews could not be checked")
+                return 0
+            }
+            returned.formUnion(chunk.map { $0.id })
+            changed.append(contentsOf: chunk.filter { $0.updateAt > since || $0.deleteAt > 0 })
+        }
+        // Deleted posts come back with `delete_at`; posts not returned at all were deleted for good.
+        var deleted = changed.filter { $0.deleteAt > 0 }
+        for postId in ids where !returned.contains(postId) {
+            if let channelId = targets[postId] {
+                deleted.append(Post(id: postId, channelId: channelId))
+            }
+        }
+        if changed.isEmpty && deleted.isEmpty {
+            return 0
+        }
+        var live: [Post] = []
+        for post in changed where post.deleteAt == 0 {
+            if let full = try? await self.client.post(id: post.id) {
+                if full.deleteAt > 0 {
+                    deleted.append(full)
+                } else {
+                    live.append(full)
+                }
+            }
+        }
+        await self.ensureUsers(referencedUserIds(live))
+        let byChannel = Dictionary(grouping: live, by: { $0.channelId })
+        let deletedByChannel = Dictionary(grouping: deleted, by: { $0.channelId })
+        await self.postbox.mmTransaction { transaction in
+            for (channelId, posts) in byChannel where self.channelState(channelId) != nil {
+                self.writeMessages(channelId: channelId, posts: posts, transaction: transaction)
+            }
+            for (channelId, posts) in deletedByChannel where self.channelState(channelId) != nil {
+                _ = self.removePostsLocally(posts.map { $0.id }, channelId: channelId, transaction: transaction)
+            }
+        }
+        for (channelId, posts) in deletedByChannel {
+            await self.refreshThreadRootCounts(channelId: channelId, rootIds: Set(posts.map { $0.rootId }.filter { !$0.isEmpty }))
+        }
+        MMLog.log("catch-up: chat-list previews of \(targets.count) quiet chat(s): \(live.count) edited or reacted to, \(deleted.count) deleted: \(live.map { $0.id } + deleted.map { $0.id })")
+        return live.count + deleted.count
     }
 
     /// Channels the user was added to while the WebSocket was away, written in one transaction (each would
@@ -222,6 +299,8 @@ extension MattermostAccountSync {
         }
         // Roots of new replies: their reply counts (the `since=` list says 0 for every root).
         await self.refreshThreadRoots(channelId: channelId, posts: posts.filter { $0.createAt > since })
+        // 4H: and of deleted replies (a root's count otherwise kept them).
+        await self.refreshThreadRootCounts(channelId: channelId, rootIds: Set(posts.filter { $0.deleteAt > 0 && !$0.rootId.isEmpty }.map { $0.rootId }))
         if needsLatestPage.current {
             do {
                 try await self.loadPage(channelId: channelId, cursor: .latest, requestedRange: nil, resetReadState: true)

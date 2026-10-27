@@ -284,6 +284,10 @@ extension MattermostAccountSync {
             return self.removePostsLocally([post.id], channelId: post.channelId, transaction: transaction)
         }
         MMLog.log("live: deleted \(post.id) → \(deletedCount) message(s) removed \(Int((CFAbsoluteTimeGetCurrent() - received) * 1000)) ms after the event")
+        // 4H: a deleted reply leaves its root one reply short (`thread_updated` reaches thread followers only).
+        if !post.rootId.isEmpty {
+            await self.refreshThreadRootCounts(channelId: post.channelId, rootIds: [post.rootId])
+        }
     }
 
     func applyReaction(_ reaction: Reaction, added: Bool) async {
