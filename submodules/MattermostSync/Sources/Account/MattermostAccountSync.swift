@@ -97,6 +97,10 @@ public final class MattermostAccountSync: @unchecked Sendable {
         var richContent = RichContentSettings()
         /// Phase 3E: the server's `SiteURL` (permalinks; links to it open in the app, `MattermostLinks.swift`).
         var siteURL: String?
+        /// 4H: how users are named (`DisplayNames.swift`): `username`, `nickname_full_name` or `full_name`.
+        var nameFormat: String = UserDisplayName.usernameFormat
+        /// 4H: the server's `EnableConfirmNotificationsToChannel` (`ChannelMentions.swift`).
+        var confirmChannelMentions = true
     }
 
     let state = MMLocked(SyncState())
@@ -191,6 +195,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
         // Collapsed reply threads as last known, before any chat opens (the bootstrap checks the server).
         self.restoreCollapsedThreads()
         self.restoreRichContent()
+        // 4H: users named as last known.
+        self.restoreNameFormat()
         self.account.network.mattermostSetConnectionState(isConnected: false, isNetworkAvailable: true)
 
         // Write path: sending/editing through PendingMessageManager, then the operation consumers.
@@ -527,7 +533,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
             } else {
                 continue
             }
-            peers.append(PeerConverter.user(user, peerId: peerId))
+            // 4H: named as the user's display setting has them (`DisplayNames.swift`).
+            peers.append(PeerConverter.user(user, peerId: peerId, names: self.peerNames(for: user)))
             usersByPeerId[peerId] = user
             // Phase 3F: the custom status emoji (the name's emoji status) needs its file stored to render.
             if let file = PeerConverter.customStatusEmojiFile(user) {
@@ -615,7 +622,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
                 return nil
             }
             peerId = MattermostPeerIds.channelPeerId(peer.peerId)
-            let title = channel.displayName.isEmpty ? channel.name : channel.displayName
+            // 4H: a group message is titled with its other members' display names, as Mattermost's clients do.
+            let title = channel.type == .groupMessage ? self.groupMessageTitle(channel) : (channel.displayName.isEmpty ? channel.name : channel.displayName)
             let access = self.channelAccess(channel: channel, member: member, teamId: teamId)
             updatePeersCustom(transaction: transaction, peers: [PeerConverter.channel(channel, title: title, peerId: peerId, access: access)], update: { _, updated in
                 return updated
@@ -700,7 +708,11 @@ public final class MattermostAccountSync: @unchecked Sendable {
                 return self.userPeerId(userId)
             },
             userDisplayName: { [weak self] userId in
-                return self?.state.with { state in state.users[userId].map(PeerConverter.displayName) }
+                // 4H: as the user's display setting names users (a permalink preview's title).
+                guard let self, let user = self.state.with({ $0.users[userId] }) else {
+                    return nil
+                }
+                return self.displayName(of: user)
             },
             localId: { postId in
                 if let entry = entries[postId] {
@@ -715,7 +727,14 @@ public final class MattermostAccountSync: @unchecked Sendable {
                 return store.allocateMediaId(fileId: fileId)
             },
             collapsedThreads: self.isCollapsedThreads,
-            richContent: self.richContent
+            richContent: self.richContent,
+            forwardedMessageId: { [weak self] channelId, postId in
+                // 4H: a forward's header opens the forwarded post where it is stored.
+                guard let self, let channelState = self.channelState(channelId), let entry = store.entries(channelId: channelId, postIds: [postId])[postId], !entry.isDeleted else {
+                    return nil
+                }
+                return MessageId(peerId: channelState.peerId, namespace: Namespaces.Message.Cloud, id: entry.localId)
+            }
         )
     }
 }

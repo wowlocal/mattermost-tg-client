@@ -32,10 +32,10 @@ public enum MattermostPostActions {
         }
         switch action.dataSource {
         case "users":
-            return sync.state.with { state in
-                return state.users.values.filter { $0.deleteAt == 0 && !$0.isBot }.sorted(by: { PeerConverter.displayName($0).lowercased() < PeerConverter.displayName($1).lowercased() }).map { user in
-                    return MattermostPostActionData.Option(text: "\(PeerConverter.displayName(user)) (@\(user.username))", value: user.id)
-                }
+            // 4H: named as the user's display setting has them.
+            let users = sync.state.with { state in state.users.values.filter { $0.deleteAt == 0 && !$0.isBot } }
+            return users.map { (user: $0, name: sync.displayName(of: $0)) }.sorted(by: { $0.name.lowercased() < $1.name.lowercased() }).map { item in
+                return MattermostPostActionData.Option(text: item.name == item.user.username ? "@\(item.user.username)" : "\(item.name) (@\(item.user.username))", value: item.user.id)
             }
         case "channels":
             return sync.state.with { state in
@@ -168,7 +168,7 @@ extension MattermostAccountSync {
             return override.username
         }
         if let user = self.state.with({ $0.users[post.userId] }) {
-            return PeerConverter.displayName(user)
+            return self.displayName(of: user)
         }
         return "System"
     }

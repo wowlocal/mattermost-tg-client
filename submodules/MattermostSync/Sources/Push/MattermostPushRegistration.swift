@@ -136,17 +136,25 @@ extension MattermostAccountSync {
         }
         let preference = preferences.last(where: { $0.category == PreferenceCategory.displaySettings && $0.name == "name_format" })?.value
         let format = MattermostPushSenderName.nameFormat(preference: preference, serverDefault: config["TeammateNameDisplay"], locked: config.bool("LockTeammateNameDisplay") ?? false)
+        // 4H: the app names users the same way (`DisplayNames.swift`); the `@channel` confirmation follows the
+        // server's `EnableConfirmNotificationsToChannel` (`ChannelMentions.swift`), read with the same config.
+        let confirmChannelMentions = config.bool("EnableConfirmNotificationsToChannel") ?? true
+        self.state.with { state in
+            state.nameFormat = format
+            state.confirmChannelMentions = confirmChannelMentions
+        }
         if self.store.cursor(MattermostPushSenderName.nameFormatCursor) != format {
             self.store.setCursor(MattermostPushSenderName.nameFormatCursor, format)
             MMLog.log("push: sender names as \(format)")
         }
     }
 
-    /// After a `name_format` preference or the server config changed.
+    /// After a `name_format` preference or the server config changed: notifications and (4H) every stored user.
     func reloadPushNameFormat() async {
         guard let config = try? await self.client.clientConfig(), let preferences = try? await self.client.preferences() else {
             return
         }
         self.updatePushNameFormat(config: config, preferences: preferences)
+        await self.applyNameFormatIfNeeded(reason: "display setting changed")
     }
 }

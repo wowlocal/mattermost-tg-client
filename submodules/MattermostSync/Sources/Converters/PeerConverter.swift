@@ -6,13 +6,12 @@ import MattermostSyncCore
 
 /// Mattermost users and channels → Telegram peers.
 enum PeerConverter {
-    static func user(_ user: User, peerId: PeerId) -> TelegramUser {
-        var firstName = user.firstName.trimmingCharacters(in: .whitespaces)
-        var lastName = user.lastName.trimmingCharacters(in: .whitespaces)
-        if firstName.isEmpty && lastName.isEmpty {
-            firstName = user.username
-            lastName = ""
-        }
+    /// `names`: the peer's first and last name (4H: the user's display setting, `DisplayNames.swift`); without
+    /// them the full name, else the username.
+    static func user(_ user: User, peerId: PeerId, names: (first: String, last: String?)? = nil) -> TelegramUser {
+        let names = names ?? UserDisplayName.peerNames(username: user.username, firstName: user.firstName, lastName: user.lastName, nickname: "", format: UserDisplayName.fullNameFormat)
+        let firstName = names.first
+        let lastName = names.last ?? ""
         var photo: [TelegramMediaImageRepresentation] = []
         // Without a custom picture Mattermost serves a generated default; Telegram's own initials look better.
         let pictureUpdate = user.isBot ? user.botLastIconUpdate : user.lastPictureUpdate
@@ -26,7 +25,7 @@ enum PeerConverter {
         }
         return TelegramUser(
             id: peerId,
-            accessHash: .personal(0),
+            accessHash: PeerConverter.userAccessHash,
             firstName: firstName,
             lastName: lastName.isEmpty ? nil : lastName,
             username: user.username,
@@ -47,6 +46,12 @@ enum PeerConverter {
             verificationIconFileId: nil
         )
     }
+
+    /// 4H: the access hash of user peers. Any non-zero value: Postbox stores 0 as "no access hash", and a user read
+    /// back without one has no `PeerReference`, which the chat list's avatar loader (`AvatarNode.setPeerV2`,
+    /// `DirectMediaImageCache`) needs, so DM rows of users with a picture stayed blank (4G gap: bob's DM row). The
+    /// value is never sent anywhere.
+    static let userAccessHash: TelegramPeerAccessHash = .personal(1)
 
     /// Public/private channels and group messages are all supergroups (`TelegramChannel` with `.group`
     /// info): basic groups never get a `threadId` on replies.

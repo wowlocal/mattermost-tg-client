@@ -117,6 +117,15 @@ private func updateMessagePeers(_ message: Message, updatedPeers: [PeerId: Peer]
             break
         }
     }
+    // MATTERMOST: a renamed author (4H: the user's display setting changed) updates the row's "Author:" line too, as
+    // the history view's `updatePeers` already does; the row otherwise kept the old name until it was reloaded.
+    if let author = message.author, let updatedAuthor = updatedPeers[author.id], !arePeersEqual(author, updatedAuthor) {
+        var peers = SimpleDictionary<PeerId, Peer>()
+        for (peerId, currentPeer) in message.peers {
+            peers[peerId] = updatedPeers[peerId] ?? currentPeer
+        }
+        return message.withUpdatedPeers(peers).withUpdatedAuthor(updatedAuthor)
+    }
     if updated {
         var peers = SimpleDictionary<PeerId, Peer>()
         for (peerId, currentPeer) in message.peers {

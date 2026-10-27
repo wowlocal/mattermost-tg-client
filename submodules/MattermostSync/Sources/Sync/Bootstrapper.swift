@@ -104,6 +104,8 @@ extension MattermostAccountSync {
         }
         // What the user may do with each channel (3D-2) goes into the channel peers.
         await self.loadRoles(me: me, channelRoles: included.map { $0.member.roles })
+        // 4H: group messages are titled with their members' display names.
+        await self.ensureGroupMessageMembers(included.map { $0.channel })
         var favoriteChannelIds: [String] = []
         var favoritesByTeam: [String: [String]] = [:]
         for team in teams {
@@ -174,6 +176,10 @@ extension MattermostAccountSync {
                 await self?.finishRichContentBootstrap(isFirstSync: false)
             })
             self.state.with { $0.newestPagesLoaded = true }
+            // 4H: users stored with another display setting (changed while the app wasn't running, or an older build).
+            self.addTask(Task { [weak self] in
+                await self?.applyNameFormatIfNeeded(reason: "bootstrap")
+            })
             MMLog.log("bootstrap: already synced before; catch-up follows")
             return
         }
@@ -201,6 +207,8 @@ extension MattermostAccountSync {
         await self.postbox.mmTransaction { _ in
             self.store.setCursor(MattermostCursorKey.lastSyncAt, String(startedAt))
             self.store.setCursor(MattermostCursorKey.bootstrapped, "1")
+            // 4H: everything was written with the current display setting.
+            self.store.setCursor(MattermostAccountSync.userNamesFormatCursor, MattermostAccountSync.userNamesCursorValue(self.nameFormat))
         }
         MMLog.log("bootstrap: done in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
     }

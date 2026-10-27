@@ -153,7 +153,9 @@ extension MattermostAccountSync {
                 return []
             }
             return (found.users + found.outOfChannel).filter { $0.deleteAt == 0 }.map { user in
-                DialogOption(text: "\(PeerConverter.displayName(user)) (@\(user.username))", value: user.id)
+                // 4H: named as the user's display setting has them.
+                let name = self.displayName(of: user)
+                return DialogOption(text: name == user.username ? "@\(user.username)" : "\(name) (@\(user.username))", value: user.id)
             }
         case "channels":
             guard !teamId.isEmpty, let channels = try? await self.client.autocompleteChannels(teamId: teamId, name: query.lowercased()) else {

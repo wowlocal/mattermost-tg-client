@@ -145,6 +145,10 @@ public final class MattermostSyncStore: MessageIdStore {
         return self.attempt("peer(namespace:peerId:)", nil) { try self.base.peer(namespace: namespace, peerId: peerId) }
     }
 
+    public func peers(kind: MattermostPeerKind) -> [MattermostPeer] {
+        return self.attempt("peers(kind:)", []) { try self.base.peers(kind: kind) }
+    }
+
     public func allocatePeer(mattermostId: String, kind: MattermostPeerKind, teamId: String?) -> MattermostPeer? {
         return self.attempt("allocatePeer(\(mattermostId))", nil) { try self.base.allocatePeer(mattermostId: mattermostId, kind: kind, teamId: teamId) }
     }

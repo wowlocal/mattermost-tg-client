@@ -204,6 +204,10 @@ enum ChatListNodeEntry: Comparable, Identifiable {
                 if lhs.messages[i].id != rhs.messages[i].id {
                     return false
                 }
+                // MATTERMOST: a renamed author (4H: the display setting changed) re-renders the row's "Author:" line.
+                if MattermostBackend.isEnabled && lhs.messages[i].author != rhs.messages[i].author {
+                    return false
+                }
                 if lhs.messages[i].associatedMessages.count != rhs.messages[i].associatedMessages.count {
                     return false
                 }

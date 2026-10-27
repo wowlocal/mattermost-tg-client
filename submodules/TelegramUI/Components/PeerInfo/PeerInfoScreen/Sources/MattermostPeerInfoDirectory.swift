@@ -106,8 +106,8 @@ extension PeerInfoScreenNode {
     }
 }
 
-/// The Mattermost profile rows of a user (after the username): nickname, position, email, local time, custom
-/// status. The bio row (the position, see MattermostSync `writeUsers`) is left out for people.
+/// The Mattermost profile rows of a user (after the username): full name (when the title is another name, 4H),
+/// nickname, position, email, local time, custom status. The bio row (the position, see MattermostSync `writeUsers`) is left out for people.
 func mattermostProfileItems(context: AccountContext, user: TelegramUser, presentationData: PresentationData, requestLayout: @escaping (Bool) -> Void) -> [PeerInfoScreenItem] {
     guard MattermostBackend.isEnabled, let profile = MattermostDirectory.userProfile(accountId: context.account.id, peerId: user.id) else {
         return []
@@ -128,7 +128,13 @@ func mattermostProfileItems(context: AccountContext, user: TelegramUser, present
         }
         items.append(PeerInfoScreenLabeledValueItem(id: baseId + 1, label: strings.Relay_Profile_Status, text: text, textColor: .primary, textBehavior: .multiLine(maxLines: 3, enabledEntities: []), action: nil, requestLayout: requestLayout))
     }
-    if !profile.nickname.isEmpty {
+    // 4H: the full name when the title shows another name (the username or the nickname, as the user's display
+    // setting names people).
+    let title = [user.firstName ?? "", user.lastName ?? ""].filter { !$0.isEmpty }.joined(separator: " ")
+    if !profile.fullName.isEmpty && profile.fullName != title && !profile.isBot {
+        items.append(PeerInfoScreenLabeledValueItem(id: baseId + 6, label: strings.Relay_Profile_FullName, text: profile.fullName, textColor: .primary, action: nil, requestLayout: requestLayout))
+    }
+    if !profile.nickname.isEmpty && profile.nickname != title {
         items.append(PeerInfoScreenLabeledValueItem(id: baseId + 2, label: strings.Relay_Profile_Nickname, text: profile.nickname, textColor: .primary, action: nil, requestLayout: requestLayout))
     }
     if !profile.position.isEmpty && !profile.isBot {

@@ -518,3 +518,19 @@
 "Relay.VoiceOver.Chat.NotPlayed" = "Not played";
 "Relay.VoiceOver.Chat.Played" = "Played";
 "Relay.VoiceOver.Chat.RecordMore" = "Record more";
+
+/* Daily-use gaps (Phase 4H). The full name on a profile whose title is another name (the user's display setting);
+   the confirmation before @all/@channel/@here reaches a large channel, worded as Mattermost's web app words it (the
+   people count is the channel's members but the sender; with time zones when members have them); and the web app's
+   notice when a post of a private channel or conversation is forwarded elsewhere. */
+"Relay.Profile.FullName" = "full name";
+"Relay.ChannelMention.Title" = "Confirm sending notifications to entire channel";
+"Relay.ChannelMention.Confirm" = "Confirm";
+"Relay.ChannelMention.All" = "By using @all or @channel you are about to send notifications to %@ people. Are you sure you want to do this?";
+"Relay.ChannelMention.AllTimezones" = "By using @all or @channel you are about to send notifications to %1$@ people in %2$@. Are you sure you want to do this?";
+"Relay.ChannelMention.Here" = "By using @here you are about to send notifications to at least %@ other people. Are you sure you want to do this?";
+"Relay.ChannelMention.HereTimezones" = "By using @here you are about to send notifications to at least %1$@ other people in %2$@. Are you sure you want to do this?";
+"Relay.ChannelMention.Timezone" = "1 timezone";
+"Relay.ChannelMention.Timezones" = "%@ timezones";
+"Relay.Forward.PrivateChannel" = "This message is from a private channel and can only be shared with ~%@.";
+"Relay.Forward.PrivateConversation" = "This message is from a private conversation and can only be shared with %@.";

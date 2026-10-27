@@ -114,7 +114,7 @@ extension MattermostAccountSync {
         if transaction.getPeer(peerId) == nil {
             let user = TelegramUser(
                 id: peerId,
-                accessHash: .personal(0),
+                accessHash: PeerConverter.userAccessHash,
                 firstName: "System",
                 lastName: nil,
                 username: nil,

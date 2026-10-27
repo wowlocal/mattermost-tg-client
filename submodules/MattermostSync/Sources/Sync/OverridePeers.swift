@@ -71,7 +71,7 @@ extension MattermostAccountSync {
             }
             let user = TelegramUser(
                 id: peerId,
-                accessHash: .personal(0),
+                accessHash: PeerConverter.userAccessHash,
                 firstName: name,
                 lastName: nil,
                 username: nil,
