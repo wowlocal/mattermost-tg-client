@@ -15,7 +15,7 @@ Related: [privacy.md](privacy.md) (App Store privacy answers and the privacy man
 |---|---|---|---|
 | D1 | Distribution: TestFlight internal/external, App Store, Apple Business Manager custom app, ad hoc/MDM | App Store Connect record, review, profile type; GPL/App Store risk (plan 08) | Internal distribution first (TestFlight internal testers) |
 | D6 | App name and branding | App Store name, icon, metadata; the bundle id `org.relaychat.Relay` can stay whatever the name becomes, but choose it before creating the App IDs if you want it to match | Working name "Relay", placeholder icon |
-| — | Legal review of the GPL terms before any external distribution | Telegram-iOS has no LICENSE file (plan 08) | Not done |
+| — | Legal review of the GPL terms before any external distribution | Telegram-iOS has no LICENSE file; telegram.org/apps says GPL v2 or later (plan 08) | Not done |
 | — | Who runs the push proxy, and its log retention | App Store privacy answers ([privacy.md](privacy.md)) | — |
 
 ## 1. Apple Developer account
@@ -200,7 +200,7 @@ was installed over it. That only happens on development machines (release builds
 
 ## 8. GPL source offer
 
-Relay is built from Telegram-iOS, whose source is published under the GNU GPL (no LICENSE file in the repository,
+Relay is built from Telegram-iOS, whose source is published under the GNU GPL v2 or later (telegram.org/apps; no LICENSE file in the repository,
 see plan 08). Everyone who gets the app must be able to get the complete corresponding source:
 
 - The source is public at **https://github.com/wowlocal/mattermost-tg-client** (shown in Settings → About Relay →
