@@ -1,8 +1,9 @@
 # Releasing Relay (TestFlight / App Store)
 
 Step-by-step for the person who owns the Apple Developer account. Everything here up to "Build" was prepared and
-checked in the repository (Phase 4A); **nothing was signed or uploaded**: no Apple Developer account, certificate
-or profile was available. The sections say what was verified and what wasn't.
+checked in the repository (Phase 4A). **First real upload 2026-10-27:** `0.1.0 (31865)` (tag `relay-0.1.0-31865`)
+was signed with the publisher's Apple Distribution identity, uploaded with `altool` and given to an internal
+TestFlight group; the steps below say how that was done.
 
 Related: [privacy.md](privacy.md) (App Store privacy answers and the privacy manifest),
 [managed-configuration.md](managed-configuration.md) (MDM/EMM app configuration keys for company deployments),
@@ -100,6 +101,13 @@ that matches the profile (bazel's `rules_apple`); the `certs/` folder is not imp
 
 ## 4. Build
 
+**As done for the first upload:** `tools/relay-device-build.sh appstore` (in a separate worktree, from a GUI
+Terminal session, because codesign needs the login keychain: [BUILD.md](../BUILD.md) "Device builds"). It writes
+the team id into the git-ignored `build-input/` configuration, uses the four App Store profiles from
+`RELAY_APPSTORE_PROFILES_DIR` (default `~/.relay-secrets/profiles-appstore`) and copies the result to
+`build-input/Relay-<version>-<build>-appstore.ipa`. The first time, macOS asks whether codesign may use the new
+Distribution key: **Always Allow**. The equivalent manual command:
+
 ```sh
 git checkout main && git pull
 git submodule update --init --recursive --depth 1 --jobs 8
@@ -116,36 +124,38 @@ python3 build-system/Make/Make.py --cacheDir <bazel disk cache dir> build \
 - `release_arm64` = `-c opt`, whole-module optimisation, `-Osize`, dead stripping. `DEBUG` is not defined, so
   every Relay debug hook, the debug remote and the debug screens are compiled out (section 6).
 - A first release build takes much longer than a debug build (whole-module optimisation of the large modules).
-- **Not verified**: a `release_arm64` build was never signed (no account/profiles). The same sources were built
-  as `release_sim_arm64` (section 6), which compiles identically except for the CPU slice and signing.
+- Verified 2026-10-27 on `0.1.0 (31865)`: signed by Apple Distribution, `aps-environment` production,
+  `get-task-allow` false, the four App Store profiles embedded, `tools/relay-release-audit.sh` clean, 87 MB.
 
 ## 5. Upload to TestFlight
 
 1. **App Store Connect** → Apps → **+** New App: platform iOS, name (D6), primary language English, bundle id
    `org.relaychat.Relay`, SKU (any, e.g. `relay-ios`). Note the app's Apple ID → `appstore_id` in
    `build-config/appstore-configuration.json` (next build).
-2. **Validate, then upload** (either):
-   - Transporter (Mac App Store app): drag `Telegram.ipa` in → Deliver; or
-   - command line with an App Store Connect API key (Users and Access → Integrations → App Store Connect API;
-     the `.p8` goes in `~/.appstoreconnect/private_keys/`):
+2. **Upload** with an App Store Connect API key (a team key with the Developer role is enough; the first upload
+   used the account holder's *individual* key, `ApiKey_<id>.p8`), kept outside the repository:
 
-     ```sh
-     xcrun altool --validate-app -f Telegram.ipa -t ios --apiKey <KEY_ID> --apiIssuer <ISSUER_ID>
-     xcrun altool --upload-app   -f Telegram.ipa -t ios --apiKey <KEY_ID> --apiIssuer <ISSUER_ID>
-     ```
+   ```sh
+   API_PRIVATE_KEYS_DIR=<dir with the .p8> xcrun altool --upload-package build-input/Relay-<v>-<b>-appstore.ipa \
+     --api-key <KEY_ID> --api-issuer <ISSUER_ID>
+   ```
 
-     (Upstream's CI uses `altool --upload-app` with an app-specific password instead.)
+   Then tag the commit (section 8). For the App Store Connect REST API (builds, TestFlight groups), an individual
+   key's JWT carries `sub: "user"` and no `iss`; `altool --generate-jwt` adds `iss` and gets 401, so sign it
+   yourself (ES256, header `kid`, payload `sub`/`iat`/`exp`/`aud: appstoreconnect-v1`).
 3. Upload the dSYMs only if a crash reporter is added later; App Store Connect symbolicates TestFlight crash logs
    from the uploaded build's symbols.
 4. **Export compliance**: Relay uses only standard encryption (HTTPS/TLS through the system, SQLCipher for the local
-   database, Keychain) → "uses encryption: yes, exempt (standard encryption only)". Consider adding
-   `ITSAppUsesNonExemptEncryption = false` to the Info.plist once confirmed, so TestFlight stops asking per build.
-5. TestFlight → Internal Testing: add the testers (up to 100 App Store Connect users; no review needed). External
+   database, Keychain) → "uses encryption: yes, exempt (standard encryption only)". The Info.plist already has
+   `ITSAppUsesNonExemptEncryption = false`, so TestFlight doesn't ask per build.
+5. TestFlight → Internal Testing: add the testers (up to 100 App Store Connect users; no review needed). The first
+   upload's group is "Internal" with access to all builds, so each new build reaches it after processing. External
    testing needs Beta App Review and the beta "What to Test" text, contact and privacy policy URL.
 6. **Test with real pushes** before inviting anyone: a TestFlight build is a production-APNs build
-   (`aps-environment` = `production`), so it registers `relay_apple:<token>` (`apple_rn:<token>` on Mattermost 12
-   and newer, which refuse other platform names) and needs the proxy's `relay_apple` and `apple_rn` entries with your
-   key (push-proxy README step 6 describes the sandbox check; repeat it with a TestFlight build).
+   (`aps-environment` = `production`), so it registers `relay_apple:<token>` (`apple_rn:<token>` on Mattermost
+   11.10 and newer, which refuse other platform names) and needs the proxy's `relay_apple` and `apple_rn` entries with
+   your key (push-proxy README step 6 describes the sandbox check; repeat it with a TestFlight build). A server whose
+   users also run the official app needs a router in front of the proxy ([push-proxy README](../../infra/push-proxy/README.md)).
 7. **Run the regression checklist** ([REGRESSION.md](REGRESSION.md)) on the candidate before inviting testers, on
    the current Mattermost ESR and the newest release, and add a results table for the run.
 

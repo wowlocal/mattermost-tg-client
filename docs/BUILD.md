@@ -47,6 +47,7 @@ tools/relay-release-audit.sh bazel-bin/Telegram/Telegram.ipa
 ```sh
 RELAY_TEAM_ID=<team id> tools/relay-device-build.sh build            # debug_arm64; or: build release_arm64
 tools/relay-device-build.sh install <udid or name>                   # xcrun devicectl list devices
+RELAY_TEAM_ID=<team id> tools/relay-device-build.sh appstore         # release_arm64 for TestFlight (RELEASE.md §4–5)
 ```
 
 - **Once, in the Apple Developer portal** (Certificates, Identifiers & Profiles): the App Group `group.org.relaychat.Relay`; explicit App IDs `org.relaychat.Relay` (Push Notifications, App Groups, Communication Notifications), `.NotificationService` (App Groups, Communication Notifications), `.NotificationContent` and `.Share` (App Groups), each with the group assigned (App Groups → Configure); one **iOS App Development** profile per App ID with your Apple Development certificate and your devices. Put the four `.mobileprovision` files in `~/.relay-secrets/profiles/` (or `RELAY_PROFILES_DIR`). Xcode's automatic signing can't make these here: `Make.py` signs with explicit profiles (`--codesigningInformationPath`).
