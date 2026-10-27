@@ -4,6 +4,7 @@ import UserNotifications
 import Intents
 import AppLockState
 import NotificationsPresentationData
+import AppBundle
 import MattermostKit
 import MattermostSyncCore
 import MattermostPush
@@ -24,7 +25,9 @@ import MattermostPush
 //    (`INSendMessageIntent`) with their picture: the one the app already downloaded (media box), else one
 //    cached here, else `GET /users/{id}/image`;
 // 4. names the account in the title when several are signed in (`MattermostPushNames`), as Telegram's
-//    notifications do.
+//    notifications do;
+// 5. says "Voice message" for a Relay voice message (5A): the server wrote "attached a file." and pushes carry no
+//    `props`, so the post is fetched (`GET /posts/{id}`, in parallel with the rest) for its `relay_voice` marker.
 //
 // `session` says to log in again. `clear` and `update_badge` arrive without `mutable-content` and never run
 // the extension (the app removes cleared notifications; iOS applies the badge); if one does run it, it is
@@ -207,13 +210,42 @@ public final class MattermostPushServiceHandler: @unchecked Sendable {
         async let ackResponse: Data? = self.acknowledge(payload: pushed, client: client)
         async let avatarData: Data? = wantsAvatar ? self.avatar(payload: pushed, device: device, client: client, cacheDirectory: pushDirectory + "/avatars") : nil
         async let senderUser: MattermostPushSenderCache? = (wantsAvatar && cachedSenderName == nil) ? self.senderUser(payload: pushed, device: device, client: client, cacheDirectory: namesDirectory) : nil
+        async let isVoiceMessage: Bool = wantsAvatar ? self.isVoiceMessage(payload: pushed, client: client) : false
         if let data = await ackResponse, payload.isIdLoaded, let response = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
             payload.merge(idLoadedResponse: response)
         }
         let avatar = await avatarData
         let fetchedUser = await senderUser
         let senderName = cachedSenderName ?? (lockedMessage == nil ? self.senderDisplayName(payload: payload, device: device, cacheDirectory: namesDirectory, user: fetchedUser) : nil)
-        return self.content(payload: payload, kind: kind, device: device, recipientAccountName: names, lockedMessage: lockedMessage, avatar: avatar, senderDisplayName: senderName)
+        let voiceMessage = await isVoiceMessage ? self.voiceMessageText() : nil
+        return self.content(payload: payload, kind: kind, device: device, recipientAccountName: names, lockedMessage: lockedMessage, avatar: avatar, senderDisplayName: senderName, voiceMessage: voiceMessage)
+    }
+
+    // MARK: Voice messages (5A)
+
+    /// Whether the pushed post is a Relay voice message: the `relay_voice` marker, one audio file and no text.
+    private func isVoiceMessage(payload: MattermostPushPayload, client: MattermostClient?) async -> Bool {
+        guard let client = client, let postId = payload.postId else {
+            return false
+        }
+        do {
+            let post = try await client.post(id: postId)
+            let marker = VoiceMessageMarker(propsValue: post.props[VoiceMessageMarker.propsKey]?.foundationObject)
+            let files = (post.metadata?.files ?? []).filter { $0.deleteAt == 0 }.map { (name: $0.name, mimeType: $0.mimeType) }
+            let isVoice = post.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && VoiceMessageFile.isVoicePost(marker: marker, files: files)
+            if isVoice {
+                mmLog("post \(postId) is a voice message")
+            }
+            return isVoice
+        } catch {
+            mmLog("post \(postId) not loaded: \(error)")
+            return false
+        }
+    }
+
+    /// "Voice message" in the app's language: the extension has no strings, the app's bundle has Relay's.
+    private func voiceMessageText() -> String {
+        return getAppBundle().localizedString(forKey: "Relay.Push.VoiceMessage", value: "Voice message", table: nil)
     }
 
     // MARK: Sender name (4F)
@@ -412,7 +444,7 @@ public final class MattermostPushServiceHandler: @unchecked Sendable {
         return content
     }
 
-    private func content(payload: MattermostPushPayload, kind: MattermostPushChannelKind, device: MattermostDeviceAccount, recipientAccountName: String?, lockedMessage: String?, avatar: Data?, senderDisplayName: String?) -> UNNotificationContent {
+    private func content(payload: MattermostPushPayload, kind: MattermostPushChannelKind, device: MattermostDeviceAccount, recipientAccountName: String?, lockedMessage: String?, avatar: Data?, senderDisplayName: String?, voiceMessage: String? = nil) -> UNNotificationContent {
         let content = UNMutableNotificationContent()
         var userInfo = self.request.content.userInfo
         for (key, value) in MattermostPushUserInfo.additions(accountId: device.account.accountId, serverURL: device.account.serverURL) {
@@ -433,7 +465,7 @@ public final class MattermostPushServiceHandler: @unchecked Sendable {
             return content
         }
 
-        let text = MattermostPushTextBuilder.text(for: payload, kind: kind, siteName: device.siteName, senderDisplayName: senderDisplayName)
+        let text = MattermostPushTextBuilder.text(for: payload, kind: kind, siteName: device.siteName, senderDisplayName: senderDisplayName, voiceMessage: voiceMessage)
         let names = MattermostPushNames(title: text.title, recipientAccountName: recipientAccountName)
         content.title = names.title
         if let subtitle = text.subtitle {

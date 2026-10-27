@@ -15,6 +15,8 @@ swift_library(
     deps = [
         "//submodules/AppLockState:AppLockState",
         "//submodules/NotificationsPresentationData:NotificationsPresentationData",
+        # Phase 5A: "Voice message" from the app's strings.
+        "//submodules/AppBundle:AppBundle",
         "//submodules/MattermostKit:MattermostKit",
         "//submodules/MattermostSyncCore:MattermostSyncCore",
         "//submodules/MattermostPush:MattermostPush",
