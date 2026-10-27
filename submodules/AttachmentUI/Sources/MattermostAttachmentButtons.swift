@@ -7,9 +7,13 @@ import TelegramCore
 extension MattermostFeatures {
     public static func isAttachButtonEnabled(_ button: AttachmentButtonType) -> Bool {
         switch button {
-        case .gallery, .file, .location, .contact, .link, .audio:
+        case .gallery, .file, .link, .audio:
             // Audio is a file picker for music files, uploaded like any other file.
             return true
+        case .location, .contact:
+            // Mattermost has no location or contact posts, and the sender uploads only images and files: these
+            // messages were never posted. Hidden, which also leaves the location prompt and background mode unused.
+            return false
         case .app, .standalone:
             return MattermostFeatures.botWebApps
         case .gift, .money:

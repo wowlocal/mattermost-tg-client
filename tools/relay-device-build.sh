@@ -2,6 +2,7 @@
 # Device build signed with your own Apple Developer team, and install on a connected device.
 #
 #   tools/relay-device-build.sh build [debug_arm64|release_arm64]   # default debug_arm64
+#   tools/relay-device-build.sh appstore                            # release_arm64 for TestFlight / the App Store
 #   tools/relay-device-build.sh install <device udid or name>       # the last build's .ipa
 #
 # Needs (docs/BUILD.md "Device builds"):
@@ -9,6 +10,9 @@
 #   RELAY_PROFILES_DIR  the four development profiles (default ~/.relay-secrets/profiles): org.relaychat.Relay,
 #                       .NotificationService, .NotificationContent, .Share; Make.py picks each by its App ID
 #   an "Apple Development" identity of that team in the login keychain
+# and for `appstore` (docs/release/RELEASE.md):
+#   RELAY_APPSTORE_PROFILES_DIR  the four App Store profiles of the same App IDs (default
+#                       ~/.relay-secrets/profiles-appstore), and an "Apple Distribution" identity in the login keychain
 #
 # The team id only goes into git-ignored build-input/ (the committed configs keep a placeholder).
 set -euo pipefail
@@ -19,18 +23,25 @@ cd "$ROOT"
 cmd="${1:-build}"
 
 case "$cmd" in
-  build)
-    configuration="${2:-debug_arm64}"
+  build|appstore)
+    if [ "$cmd" = appstore ]; then
+      configuration=release_arm64
+      base_configuration=build-config/appstore-configuration.json
+      profiles="${RELAY_APPSTORE_PROFILES_DIR:-$HOME/.relay-secrets/profiles-appstore}"
+    else
+      configuration="${2:-debug_arm64}"
+      base_configuration=build-config/development-configuration.json
+      profiles="${RELAY_PROFILES_DIR:-$HOME/.relay-secrets/profiles}"
+    fi
     team_id="${RELAY_TEAM_ID:-$(cat build-input/relay-device-team-id 2>/dev/null || true)}"
     [[ "$team_id" =~ ^[A-Z0-9]{10}$ ]] || { echo "set RELAY_TEAM_ID (10 characters) or build-input/relay-device-team-id" >&2; exit 1; }
-    profiles="${RELAY_PROFILES_DIR:-$HOME/.relay-secrets/profiles}"
     compgen -G "$profiles/*.mobileprovision" >/dev/null || { echo "no .mobileprovision in $profiles" >&2; exit 1; }
 
     mkdir -p build-input
     printf '%s\n' "$team_id" > build-input/relay-device-team-id
-    python3 - "$team_id" <<'EOF'
+    python3 - "$team_id" "$base_configuration" <<'EOF'
 import json, sys
-configuration = json.load(open('build-config/development-configuration.json'))
+configuration = json.load(open(sys.argv[2]))
 configuration['team_id'] = sys.argv[1]
 json.dump(configuration, open('build-input/relay-device-configuration.json', 'w'), indent='\t')
 EOF
@@ -38,12 +49,20 @@ EOF
     mkdir -p build-input/relay-codesigning/profiles build-input/relay-codesigning/certs
     cp "$profiles"/*.mobileprovision build-input/relay-codesigning/profiles/
 
+    build_number="$(git rev-list --count HEAD)"
     python3 build-system/Make/Make.py --cacheDir "${RELAY_BAZEL_CACHE:-/Volumes/X5/relay-bazel-cache}" build \
       --configurationPath build-input/relay-device-configuration.json \
       --codesigningInformationPath build-input/relay-codesigning \
-      --buildNumber="$(git rev-list --count HEAD)" \
+      --buildNumber="$build_number" \
       --configuration="$configuration"
-    echo "==> bazel-bin/Telegram/Telegram.ipa"
+    if [ "$cmd" = appstore ]; then
+      # A copy per upload, named by version and build; tag the commit when it is uploaded (RELEASE.md §8).
+      version="$(python3 -c 'import json; print(json.load(open("versions.json"))["app"])')"
+      cp bazel-bin/Telegram/Telegram.ipa "build-input/Relay-$version-$build_number-appstore.ipa"
+      echo "==> build-input/Relay-$version-$build_number-appstore.ipa"
+    else
+      echo "==> bazel-bin/Telegram/Telegram.ipa"
+    fi
     ;;
   install)
     device="${2:?usage: $0 install <device udid or name> (idevice_id -l, xcrun devicectl list devices)}"
@@ -59,7 +78,7 @@ EOF
     fi
     ;;
   *)
-    echo "usage: $0 build [configuration] | install <device>" >&2
+    echo "usage: $0 build [configuration] | appstore | install <device>" >&2
     exit 1
     ;;
 esac

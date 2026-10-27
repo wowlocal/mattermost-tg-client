@@ -3,8 +3,8 @@
 /* MATTERMOST: Relay's texts; no Siri. */
 "NSContactsUsageDescription" = "Relay uses your contacts only when you choose one to share in a chat.";
 "NSLocationWhenInUseUsageDescription" = "When you share your location in a chat, Relay needs access to show it on a map.";
-"NSLocationAlwaysAndWhenInUseUsageDescription" = "When you choose to share your live location in a chat, Relay needs background access to your location to keep it updated for the duration of the sharing.";
-"NSLocationAlwaysUsageDescription" = "When you choose to share your live location in a chat, Relay needs background access to your location to keep it updated for the duration of the sharing.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "Relay doesn't use your location in the background.";
+"NSLocationAlwaysUsageDescription" = "Relay doesn't use your location in the background.";
 "NSCameraUsageDescription" = "We need this so that you can take and share photos and videos.";
 "NSPhotoLibraryUsageDescription" = "We need this so that you can share photos and videos from your photo library and save the ones you capture.";
 "NSPhotoLibraryAddUsageDescription" = "We need this so that you can save photos and videos to your photo library and save the ones you capture.";

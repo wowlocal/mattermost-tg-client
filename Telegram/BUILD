@@ -1925,7 +1925,7 @@ plist_fragment(
     <key>NSMicrophoneUsageDescription</key>
     <string>Relay uses the microphone to record voice messages and videos with sound. A recording is sent to your Mattermost server only when you send it.</string>
     <key>NSMotionUsageDescription</key>
-    <string>When you share your location in a chat, Relay needs access to show it on a map.</string>
+    <string>Relay doesn't record your motion or fitness activity.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>We need this so that you can share photos and videos from your photo library.</string>
     <key>NSPhotoLibraryUsageDescription</key>
@@ -1962,9 +1962,8 @@ plist_fragment(
     <array>
         <string>audio</string>
         <string>fetch</string>
-        <string>location</string>
         <string>remote-notification</string>
-        <!-- MATTERMOST: no voip (no calls) -->
+        <!-- MATTERMOST: no voip (no calls), no location (no live location; App Review asks what uses it) -->
         <string>processing</string>
     </array>
     <key>UIDeviceFamily</key>
