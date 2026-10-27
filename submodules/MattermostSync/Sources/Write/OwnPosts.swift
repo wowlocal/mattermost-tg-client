@@ -172,7 +172,9 @@ extension MattermostAccountSync {
             let globallyUniqueId = message.globallyUniqueId ?? Int64(messageId.id)
             let pendingPostId = String(globallyUniqueId)
             self.store.registerPendingPost(MattermostPendingPost(pendingPostId: pendingPostId, channelId: channelId, globallyUniqueId: globallyUniqueId, localMessageId: messageId.id))
-            return OutgoingDraft(post: PostDraft(channelId: channelId, message: markdown, rootId: rootId, fileIds: fileIds, pendingPostId: pendingPostId), globallyUniqueId: globallyUniqueId)
+            // A voice recording (5A): the marker that makes it a voice message in Relay (`PostConverter.voiceMarker`).
+            let props = groupMessageIds.count > 1 ? [:] : self.voiceProps(of: message)
+            return OutgoingDraft(post: PostDraft(channelId: channelId, message: markdown, rootId: rootId, fileIds: fileIds, pendingPostId: pendingPostId, props: props), globallyUniqueId: globallyUniqueId)
         }
     }
 
@@ -473,6 +475,18 @@ private func moveUploadedMedia(from localMessage: Message, to media: [Media], up
             }
         } else if let file = local as? TelegramMediaFile {
             full = file.resource
+            if file.isVoice, let path = uploaded.transcodedPath {
+                // A voice recording went as AAC (5A): that file is the server's, not the Ogg/Opus recording.
+                if let target = targets.file {
+                    mediaBox.moveResourceData(target.id, fromTempPath: path)
+                }
+                continue
+            }
+            if file.isVoice && file.mimeType.lowercased().hasPrefix("audio/ogg") {
+                // Transcoded before a restart (the AAC file isn't kept): the sent message downloads the server's file
+                // rather than holding the recording under its id.
+                continue
+            }
         }
         guard let source = full else {
             continue

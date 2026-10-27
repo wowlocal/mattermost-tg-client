@@ -72,7 +72,9 @@ public enum MattermostFeatures {
     public static let chatThemes = telegram
 
     // 06 "Later"
-    public static let voiceMessages = telegram
+    /// Phase 5A: on in Relay too. Mattermost has no voice posts, so MattermostSync sends a recording as an audio
+    /// file with a `props` marker and shows marked posts as voice messages (docs/plan/05 "5A").
+    public static let voiceMessages = true
     public static let videoMessages = telegram
     public static let scheduledMessages = telegram
 

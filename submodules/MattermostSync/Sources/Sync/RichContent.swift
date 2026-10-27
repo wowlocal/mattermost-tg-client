@@ -12,9 +12,9 @@ import MattermostSyncCore
 extension MattermostAccountSync {
     /// Version of the rendering `rerenderRichContent` brings stored messages to (3E: link previews, headings, list
     /// indents, tables, emoticons; 2 (4F): a post with images and other files as one group, attachment colours
-    /// and icons).
+    /// and icons; 3 (5A): Relay's voice messages as voice bubbles, `upgradeStoredVoiceMessages`).
     static let richContentCursor = "rich_content"
-    static let richContentVersion = "2"
+    static let richContentVersion = "3"
     /// The settings the stored messages were rendered with (`RichContentSettings.encoded`).
     static let richContentSettingsCursor = "rich_content_settings"
     /// Newest messages per chat re-rendered on a settings change or the upgrade (about a screen and a half).
@@ -91,6 +91,9 @@ extension MattermostAccountSync {
         if !isFirstSync {
             if version != MattermostAccountSync.richContentVersion {
                 await self.rerenderRichContent(reason: "upgrade \(version ?? "none") → \(MattermostAccountSync.richContentVersion)")
+                if (version.flatMap { Int($0) } ?? 0) < 3 {
+                    await self.upgradeStoredVoiceMessages()
+                }
             } else if stored != settings.encoded {
                 await self.rerenderRichContent(reason: "settings changed while not running")
             }
@@ -156,5 +159,61 @@ extension MattermostAccountSync {
             }
         }
         MMLog.log("rich content (\(reason)): \(stripped) card(s) removed, re-rendered \(written.current) message(s) in \(channels.count) chat(s) (\(failed.current) failed) in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
+    }
+
+    /// Voice messages stored as files by builds before 5A (another Relay user's voice message, a file to an older
+    /// build): every stored post with an audio file is loaded again (`POST /teams/{id}/files/search` for audio
+    /// extensions, then `POST /posts/ids`), and the marked ones are rewritten as voice messages. Posts not stored
+    /// yet need nothing: they are converted when they load.
+    func upgradeStoredVoiceMessages() async {
+        let started = CFAbsoluteTimeGetCurrent()
+        let teams = self.state.with { $0.teams.map(\.id) }
+        let terms = VoiceMessageFile.searchExtensions.map { "ext:" + $0 }.joined(separator: " ")
+        var postIdsByChannel: [String: Set<String>] = [:]
+        for teamId in teams {
+            var page = 0
+            while page < 10 {
+                guard let list = try? await self.client.searchFiles(teamId: teamId, options: FileSearchOptions(terms: terms, isOrSearch: false, timeZoneOffset: self.searchTimeZoneOffset, includeDeletedChannels: false, page: page, perPage: PostSearchOptions.maxPerPage)) else {
+                    break
+                }
+                let files = list.orderedFiles
+                for file in files where !file.postId.isEmpty && file.deleteAt == 0 {
+                    postIdsByChannel[file.channelId, default: []].insert(file.postId)
+                }
+                if files.count < PostSearchOptions.maxPerPage {
+                    break
+                }
+                page += 1
+            }
+        }
+        // Only posts stored here (a post never loaded is converted when it loads).
+        let stored: [String] = await self.postbox.mmTransaction { _ in
+            var result: [String] = []
+            for (channelId, postIds) in postIdsByChannel where self.channelState(channelId) != nil {
+                let known = self.store.entries(channelId: channelId, postIds: Array(postIds))
+                result.append(contentsOf: postIds.filter { known[$0].map { !$0.isDeleted } ?? false })
+            }
+            return result
+        }
+        var rewritten = 0
+        for start in stride(from: 0, to: stored.count, by: 100) {
+            guard let posts = try? await self.client.posts(ids: Array(stored[start ..< min(stored.count, start + 100)])) else {
+                continue
+            }
+            let marked = posts.filter { $0.deleteAt == 0 && $0.props[VoiceMessageMarker.propsKey] != nil }
+            if marked.isEmpty {
+                continue
+            }
+            await self.ensureUsers(referencedUserIds(marked))
+            let count = await self.postbox.mmTransaction { transaction -> Int in
+                var count = 0
+                for (channelId, channelPosts) in Dictionary(grouping: marked, by: \.channelId) {
+                    count += self.writeMessages(channelId: channelId, posts: channelPosts, transaction: transaction)
+                }
+                return count
+            }
+            rewritten += count
+        }
+        MMLog.log("voice: upgrade found \(stored.count) stored post(s) with audio files, rewrote \(rewritten) voice message(s) in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
     }
 }

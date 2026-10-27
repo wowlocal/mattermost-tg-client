@@ -19,6 +19,9 @@ swift_library(
         # Phase 3F: the share extension's posting (accounts, chats, planning, upload).
         "//submodules/MattermostShare:MattermostShare",
         "//submodules/WebPBinding:WebPBinding",
+        # Phase 5A: voice recordings transcoded to AAC, waveforms of received voice messages (FFmpeg decoding).
+        "//submodules/Media/ConvertOpusToAAC:ConvertOpusToAAC",
+        "//submodules/MediaPlayer:UniversalMediaPlayer",
     ],
     visibility = [
         "//visibility:public",

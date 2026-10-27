@@ -27,6 +27,9 @@ final class PostSender: MattermostMessageSender {
         /// Index into the message's `media`.
         var mediaIndex: Int
         var fileId: String
+        /// A voice recording's AAC file (5A), moved to the sent message's resource after the post (in memory only:
+        /// after a restart the sent message downloads it).
+        var transcodedPath: String? = nil
     }
 
     private weak var sync: MattermostAccountSync?
@@ -186,11 +189,29 @@ final class PostSender: MattermostMessageSender {
             return
         }
         var items: [(mediaIndex: Int, upload: FileUpload)] = []
+        var transcodedPaths: [Int: String] = [:]
+        let voiceRecording = PostSender.voiceRecording(of: message)
         for (index, media) in message.media.enumerated() {
-            guard let source = UploadSource(media: media, messageId: messageId, index: index) else {
+            guard var source = UploadSource(media: media, messageId: messageId, index: index) else {
                 continue
             }
-            let path = try await sync.completeResourcePath(source.resource)
+            var path = try await sync.completeResourcePath(source.resource)
+            if let recording = voiceRecording, recording.file.fileId == (media as? TelegramMediaFile)?.fileId {
+                // A voice message (5A, V1): Telegram's Ogg/Opus recording goes as AAC (`.m4a`) with a readable
+                // name; when transcoding fails it goes as recorded (an `.ogg`, still marked as a voice message).
+                let date = Date(timeIntervalSince1970: Double(message.timestamp))
+                if recording.needsTranscoding {
+                    if let transcoded = await PostSender.transcodeVoiceRecording(sourcePath: path, name: "\(self.accountId.int64)-\(message.globallyUniqueId ?? Int64(messageId.id))-\(index)") {
+                        path = transcoded
+                        transcodedPaths[index] = transcoded
+                        source.fileName = VoiceMessageFile.fileName(prefix: MattermostVoiceMessages.fileNamePrefix(), date: date)
+                        source.mimeType = VoiceMessageFile.mimeType
+                    } else {
+                        source.fileName = (VoiceMessageFile.fileName(prefix: MattermostVoiceMessages.fileNamePrefix(), date: date) as NSString).deletingPathExtension + ".ogg"
+                        source.mimeType = "audio/ogg"
+                    }
+                }
+            }
             items.append((index, FileUpload(clientId: "\(messageId.id)-\(index)", fileName: source.fileName, mimeType: source.mimeType, content: .file(URL(fileURLWithPath: path)))))
         }
         if items.isEmpty {
@@ -212,6 +233,9 @@ final class PostSender: MattermostMessageSender {
         if files.count != items.count {
             // Older servers may not echo client ids; the order is the request order.
             files = zip(items, response.fileInfos).map { UploadedFile(mediaIndex: $0.0.mediaIndex, fileId: $0.1.id) }
+        }
+        for index in files.indices {
+            files[index].transcodedPath = transcodedPaths[files[index].mediaIndex]
         }
         self.uploads.with { $0[messageId] = files }
         // Kept with the message's pending row, in case the app ends before the post is created (4F).

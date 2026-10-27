@@ -37,7 +37,9 @@ func _internal_markMessageContentAsConsumedInteractively(postbox: Postbox, messa
                                     }
                                 }
                             }
-                        } else {
+                        } else if !MattermostBackend.isEnabled {
+                            // MATTERMOST: a played voice message stays played on this device only (Mattermost keeps no
+                            // listened state); the operation would wait forever for Telegram's consumer (5A).
                             addSynchronizeConsumeMessageContentsOperation(transaction: transaction, messageIds: [message.id])
                         }
                     }

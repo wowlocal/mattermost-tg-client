@@ -24,6 +24,12 @@ public enum MattermostAppHooks {
             let strings = sharedContext?.currentPresentationData.with({ $0 }).strings ?? defaultPresentationStrings
             return strings.relayNotice(notice)
         }
+        // Phase 5A: the name of an uploaded voice recording ("Voice message 2026-10-27 14.05.m4a") in the app's
+        // language.
+        MattermostVoiceMessages.fileNamePrefix = { [weak sharedContext] in
+            let strings = sharedContext?.currentPresentationData.with({ $0 }).strings ?? defaultPresentationStrings
+            return strings.Relay_VoiceMessage_FileName
+        }
         // Phase 4G: managed configuration in the UI (passcode requirement, app switcher, pasteboard, device
         // check, restricted logouts) and local diagnostics (MetricKit, Settings → About Relay → Diagnostics).
         RelayManagedConfigurationPresenter.shared.start(sharedContext: sharedContext)

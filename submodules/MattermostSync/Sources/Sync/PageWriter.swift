@@ -189,6 +189,13 @@ extension MattermostAccountSync {
         context.existingReplyThread = { localId in
             return transaction.getMessage(MessageId(peerId: chatPeerId, namespace: Namespaces.Message.Cloud, id: localId))?.attributes.first(where: { $0 is ReplyThreadMessageAttribute }) as? ReplyThreadMessageAttribute
         }
+        // Voice messages (5A): the local "played" state survives rewrites; waveforms computed here fill in.
+        context.existingConsumed = { localId in
+            return (transaction.getMessage(MessageId(peerId: chatPeerId, namespace: Namespaces.Message.Cloud, id: localId))?.attributes.first(where: { $0 is ConsumableContentMessageAttribute }) as? ConsumableContentMessageAttribute)?.consumed
+        }
+        context.computedWaveform = { [weak self] fileId in
+            return self?.computedVoiceWaveform(fileId: fileId)
+        }
         var messages: [StoreMessage] = []
         var customEmojiFiles: [Int64: TelegramMediaFile] = [:]
         var threadRoots: [String: String] = [:]
@@ -221,6 +228,7 @@ extension MattermostAccountSync {
             transaction.storeMediaIfNotPresent(media: file)
         }
         let _ = transaction.addMessages(messages, location: .Random)
+        self.noteVoiceMessagesWithoutWaveform(messages, channelId: channelId)
         return messages.count
     }
 

@@ -224,9 +224,10 @@ extension MattermostAccountSync {
         if tags.contains(.music) {
             extensions += ["mp3", "m4a", "aac", "flac", "wav", "ogg", "oga", "opus", "wma", "aif", "aiff"]
         }
-        if tags.contains(.voiceOrInstantVideo) && !tags.contains(.file) && extensions.isEmpty {
-            // Mattermost has no voice messages.
-            return nil
+        if tags.contains(.voiceOrInstantVideo) {
+            // Voice messages (5A): Relay's marked posts with one audio file. The search finds the audio files; the
+            // voice tag (set by `PostConverter` for marked posts only) picks the voice messages among them.
+            extensions += VoiceMessageFile.searchExtensions.filter { !extensions.contains($0) }
         }
         if tags.contains(.file) && SearchQuery.isEmpty(request.terms) {
             // The files tab before anything is typed: recent documents (the server needs some terms).

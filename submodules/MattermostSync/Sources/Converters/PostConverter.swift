@@ -42,6 +42,11 @@ struct PostConversionContext {
     var existingReplyThread: (Int32) -> ReplyThreadMessageAttribute? = { _ in nil }
     /// Link previews, emoticons and inline LaTeX as the server and the user have them (3E).
     var richContent = RichContentSettings()
+    /// Voice messages (5A): whether the stored message (by local id) was played on this device. Mattermost keeps no
+    /// listened state, so a rewrite of the post keeps the local one.
+    var existingConsumed: (Int32) -> Bool? = { _ in nil }
+    /// Voice messages (5A): the waveform computed here for a file whose marker has none (`VoiceWaveforms`).
+    var computedWaveform: (String) -> Data? = { _ in nil }
 }
 
 /// The messages of one post (one per mapped part, in part order) and the custom emoji files their text
@@ -169,13 +174,20 @@ enum PostConverter {
                 textTags.insert(.unseenPersonalMessage)
             }
 
+            // A Relay voice message (5A): the marker in `props` and one audio file.
+            let voice = PostConverter.voiceMarker(post: post, layout: layout)
             for (index, part) in layout.parts.enumerated() {
                 guard let file = part.file else {
                     continue
                 }
-                let converted = MediaConverter.media(for: file, mediaId: context.mediaId(file.id))
+                let waveform = voice != nil && voice?.waveform == nil ? context.computedWaveform(file.id) : nil
+                let converted = MediaConverter.media(for: file, mediaId: context.mediaId(file.id), voice: voice, waveform: waveform)
                 media[index].append(converted.media)
                 partTags[index].formUnion(converted.tags)
+                if voice != nil && isIncoming, let localId = localIds[index] {
+                    // The "not played" dot: local to the device, never synced (Mattermost has no listened state).
+                    primaryAttributes.append(ConsumableContentMessageAttribute(consumed: context.existingConsumed(localId) ?? false))
+                }
             }
             if layout.parts[0].file == nil, let image = attachments.image {
                 // An attachment image (no files): the photo under the attachment text, as Mattermost shows it.
@@ -238,6 +250,15 @@ enum PostConverter {
             ))
         }
         return result
+    }
+
+    /// The voice marker of a post that shows as a voice message (5A): the marker and exactly one audio file.
+    static func voiceMarker(post: Post, layout: PostLayout) -> VoiceMessageMarker? {
+        guard let value = post.props[VoiceMessageMarker.propsKey], let marker = VoiceMessageMarker(propsValue: value.foundationObject) else {
+            return nil
+        }
+        let files = layout.parts.compactMap { $0.file }.map { (name: $0.name, mimeType: $0.mimeType) }
+        return VoiceMessageFile.isVoicePost(marker: marker, files: files) ? marker : nil
     }
 
     /// The reply count and latest repliers of a root post ("N replies"). With collapsed reply threads on,

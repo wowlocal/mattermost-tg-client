@@ -2,6 +2,7 @@ import Foundation
 import Postbox
 import TelegramCore
 import MattermostKit
+import MattermostSyncCore
 
 /// Mattermost file attachments → Telegram media.
 enum MediaConverter {
@@ -19,7 +20,28 @@ enum MediaConverter {
         return file.isImage && file.width > 0 && file.height > 0 && file.mimeType != "image/svg+xml"
     }
 
-    static func media(for file: FileInfo, mediaId: Int64) -> Converted {
+    /// `voice` (5A): the post is a Relay voice message (`VoiceMessageFile.isVoicePost`), shown as Telegram's voice
+    /// bubble; `waveform` replaces a missing one of the marker (computed here, `VoiceWaveforms`).
+    static func media(for file: FileInfo, mediaId: Int64, voice: VoiceMessageMarker? = nil, waveform: Data? = nil) -> Converted {
+        if let voice = voice {
+            let telegramFile = TelegramMediaFile(
+                fileId: MediaId(namespace: Namespaces.Media.CloudFile, id: mediaId),
+                partialReference: nil,
+                resource: MattermostFileResource(fileId: file.id, variant: .file, size: file.size),
+                previewRepresentations: [],
+                videoThumbnails: [],
+                immediateThumbnailData: nil,
+                mimeType: file.mimeType.isEmpty ? VoiceMessageFile.mimeType : file.mimeType,
+                size: file.size,
+                attributes: [
+                    .Audio(isVoice: true, duration: voice.duration, title: nil, performer: nil, waveform: voice.waveform ?? waveform),
+                    .FileName(fileName: file.name),
+                ],
+                alternativeRepresentations: []
+            )
+            // Telegram's tag for voice messages: the Voice tab, the playlist that plays the next one.
+            return Converted(media: telegramFile, tags: [.voiceOrInstantVideo])
+        }
         if isAlbumImage(file) {
             var representations: [TelegramMediaImageRepresentation] = []
             if file.hasPreviewImage {
