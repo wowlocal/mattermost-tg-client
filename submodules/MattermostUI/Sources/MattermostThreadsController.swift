@@ -15,7 +15,8 @@ import MattermostSync
 // MATTERMOST: collapsed reply threads (Phase 3B). The threads screen: a team's followed threads (Mattermost's
 // "Threads" view), newest reply first, with the root post, its channel, reply count, participants, last reply
 // time and unread replies / mentions. A row opens the thread view; a long press offers Mark as Read and Unfollow.
-// Opened from the chat list's threads button (ChatListUI), which shows the team's unread threads as its badge.
+// It is the Threads tab of the root tab bar, whose badge shows the unread threads of all teams; the debug remote
+// pushes it for one team.
 
 /// The chat location of a Mattermost thread: a Postbox thread view of the root's local id, filled by
 /// MattermostSync (`ChatReplyThreadMessage.isForumPost`, so nothing asks Telegram's server).
@@ -153,10 +154,25 @@ private func threadsEntries(list: MattermostThreadList?, strings: PresentationSt
 
 /// The threads screen for a team (`teamId`), with tabs for the account's other teams.
 public func mattermostThreadsController(context: AccountContext, teamId: String) -> ViewController {
+    return makeThreadsController(context: context, initialTeamId: teamId, selectedFolderId: nil)
+}
+
+/// The Threads tab of the root tab bar (TelegramRootController; it replaced the chat list's threads button). It is
+/// made at launch, so it starts on the account's first team once the account is ready. Each time it opens, it
+/// switches to the team of the chat list's selected team folder (`selectedFolderId`; "All" keeps the team). Its
+/// badge counts the unread followed threads of all teams, with "@" in front when one of them mentions the user.
+public func mattermostThreadsTabController(context: AccountContext, selectedFolderId: @escaping () -> Int32?) -> ViewController {
+    return makeThreadsController(context: context, initialTeamId: nil, selectedFolderId: selectedFolderId)
+}
+
+private func makeThreadsController(context: AccountContext, initialTeamId: String?, selectedFolderId: (() -> Int32?)?) -> ViewController {
     let accountId = context.account.id
-    let teams = MattermostSync.teams(accountId: accountId)
-    let selectedTeam = ValuePromise<String>(teamId, ignoreRepeated: true)
-    var selectedTeamValue = teamId
+    let actionsDisposable = DisposableSet()
+    var teamsValue = MattermostSync.teams(accountId: accountId)
+    let teams = ValuePromise<[MattermostTeamInfo]>(teamsValue, ignoreRepeated: true)
+    let teamsReady = ValuePromise<Bool>(!teamsValue.isEmpty, ignoreRepeated: true)
+    var selectedTeamValue = initialTeamId ?? teamsValue.first?.id
+    let selectedTeam = ValuePromise<String?>(selectedTeamValue, ignoreRepeated: true)
     var navigationControllerImpl: (() -> NavigationController?)?
     var presentControllerImpl: ((ViewController) -> Void)?
 
@@ -207,14 +223,35 @@ public func mattermostThreadsController(context: AccountContext, teamId: String)
         presentControllerImpl?(actionSheet)
     }, unfollow: unfollowThread)
 
+    let selectTeam: (String) -> Void = { teamId in
+        selectedTeamValue = teamId
+        selectedTeam.set(teamId)
+        MattermostSync.reloadThreads(accountId: accountId, teamId: teamId)
+    }
+    if selectedFolderId != nil && teamsValue.isEmpty {
+        // The Threads tab, made before the account synced: pick the first team once it has.
+        actionsDisposable.add((MattermostSync.teamsWhenReady(accountId: accountId)
+        |> deliverOnMainQueue).startStrict(next: { value in
+            teamsValue = value
+            teams.set(value)
+            teamsReady.set(true)
+            if selectedTeamValue == nil, let first = value.first {
+                selectTeam(first.id)
+            }
+        }))
+    }
+
     let list = selectedTeam.get()
     |> mapToSignal { teamId -> Signal<MattermostThreadList?, NoError> in
+        guard let teamId = teamId else {
+            return .single(nil)
+        }
         return MattermostSync.threadList(accountId: accountId, teamId: teamId)
     }
 
-    let signal = combineLatest(context.sharedContext.presentationData, list, selectedTeam.get())
+    let signal = combineLatest(context.sharedContext.presentationData, list, selectedTeam.get(), teams.get(), teamsReady.get())
     |> deliverOnMainQueue
-    |> map { presentationData, list, teamId -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, list, teamId, teams, teamsReady -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let strings = presentationData.strings
         let title: ItemListControllerTitle
         if teams.count > 1 && teams.count <= 4 {
@@ -222,17 +259,40 @@ public func mattermostThreadsController(context: AccountContext, teamId: String)
         } else {
             title = .text(strings.Relay_Threads_Title)
         }
+        let entries: [ThreadsEntry]
+        if teamId == nil {
+            entries = [.info(teamsReady ? strings.Relay_Threads_EmptyTitle + "\n" + strings.Relay_Threads_EmptyText : strings.Relay_Threads_Loading)]
+        } else {
+            entries = threadsEntries(list: list, strings: strings)
+        }
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: title, leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: strings.Common_Back))
-        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: threadsEntries(list: list, strings: strings), style: .plain, animateChanges: true)
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .plain, animateChanges: true)
         return (controllerState, (listState, arguments))
     }
+    |> afterDisposed {
+        actionsDisposable.dispose()
+    }
 
-    let controller = ItemListController(context: context, state: signal, tabBarItem: nil)
+    var tabBarItem: Signal<ItemListControllerTabBarItem, NoError>?
+    if selectedFolderId != nil {
+        tabBarItem = combineLatest(context.sharedContext.presentationData, MattermostSync.totalThreadsBadge(accountId: accountId))
+        |> map { presentationData, badge -> ItemListControllerTabBarItem in
+            return threadsTabBarItem(presentationData: presentationData, badge: badge)
+        }
+    }
+
+    let controller = ItemListController(context: context, state: signal, tabBarItem: tabBarItem)
+    if selectedFolderId != nil {
+        // The tab bar reads the item when the tabs are set up, before the signal's first value arrives.
+        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        let icons = relayTabBarIcons(.threads, theme: presentationData.theme)
+        controller.tabBarItem.title = presentationData.strings.Relay_Threads_Title
+        controller.tabBarItem.image = icons.image
+        controller.tabBarItem.selectedImage = icons.selectedImage
+    }
     controller.titleControlValueChanged = { index in
-        if index >= 0 && index < teams.count {
-            selectedTeamValue = teams[index].id
-            selectedTeam.set(teams[index].id)
-            MattermostSync.reloadThreads(accountId: accountId, teamId: teams[index].id)
+        if index >= 0 && index < teamsValue.count {
+            selectTeam(teamsValue[index].id)
         }
     }
     navigationControllerImpl = { [weak controller] in
@@ -241,20 +301,52 @@ public func mattermostThreadsController(context: AccountContext, teamId: String)
     presentControllerImpl = { [weak controller] c in
         controller?.present(c, in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
     }
-    controller.didAppear = { firstTime in
-        if !firstTime {
-            MattermostSync.reloadThreads(accountId: accountId, teamId: selectedTeamValue)
-        }
-    }
-    MattermostSync.reloadThreads(accountId: accountId, teamId: teamId)
-    MattermostThreadsDebug.controllerAppeared(open: { index in
+    let openRow: (Int) -> Void = { index in
         let _ = (list |> take(1) |> deliverOnMainQueue).startStandalone(next: { list in
             if let list = list, index < list.items.count {
                 openThread(list.items[index])
             }
         })
-    })
+    }
+    if let selectedFolderId = selectedFolderId {
+        controller.didAppear = { _ in
+            // The tab: the account may have joined or left teams since, and it follows the chat list's team folder.
+            let value = MattermostSync.teams(accountId: accountId)
+            if !value.isEmpty {
+                teamsValue = value
+                teams.set(value)
+                teamsReady.set(true)
+            }
+            var teamId = selectedTeamValue.flatMap { id in teamsValue.contains(where: { $0.id == id }) ? id : nil } ?? teamsValue.first?.id
+            if let folderId = selectedFolderId(), let folderTeamId = MattermostSync.teamId(accountId: accountId, chatListFilterId: folderId) {
+                teamId = folderTeamId
+            }
+            if let teamId = teamId {
+                selectTeam(teamId)
+            }
+            MattermostThreadsDebug.controllerAppeared(open: openRow)
+        }
+    } else {
+        controller.didAppear = { firstTime in
+            if !firstTime, let teamId = selectedTeamValue {
+                MattermostSync.reloadThreads(accountId: accountId, teamId: teamId)
+            }
+        }
+        if let teamId = selectedTeamValue {
+            MattermostSync.reloadThreads(accountId: accountId, teamId: teamId)
+        }
+        MattermostThreadsDebug.controllerAppeared(open: openRow)
+    }
     return controller
+}
+
+private func threadsTabBarItem(presentationData: PresentationData, badge: MattermostThreadsBadge?) -> ItemListControllerTabBarItem {
+    let icons = relayTabBarIcons(.threads, theme: presentationData.theme)
+    var badgeValue: String?
+    if let badge = badge, badge.unreadThreads > 0 {
+        badgeValue = badge.unreadMentions > 0 ? "@\(badge.unreadThreads)" : "\(badge.unreadThreads)"
+    }
+    return ItemListControllerTabBarItem(title: presentationData.strings.Relay_Threads_Title, image: icons.image, selectedImage: icons.selectedImage, tintImages: false, badgeValue: badgeValue)
 }
 
 /// Debug only: lets the debug remote open a row of the visible threads screen (no UI automation).

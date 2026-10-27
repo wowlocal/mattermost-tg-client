@@ -47,7 +47,7 @@ public struct MattermostThreadList {
     }
 }
 
-/// Unread followed threads of a team: the threads button's badge.
+/// Unread followed threads: the Threads tab's badge (summed over the account's teams).
 public struct MattermostThreadsBadge: Equatable {
     public let unreadThreads: Int
     public let unreadMentions: Int

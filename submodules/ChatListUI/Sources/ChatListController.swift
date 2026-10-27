@@ -3590,6 +3590,14 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
         super.navigationStackConfigurationUpdated(next: next)
     }
     
+    // MATTERMOST: see `ChatListController.selectedFolderId`.
+    public var selectedFolderId: Int32? {
+        guard self.isNodeLoaded, case let .filter(id) = self.chatListDisplayNode.mainContainerNode.currentItemFilter else {
+            return nil
+        }
+        return id
+    }
+
     public func activateEdit() {
         self.editPressed()
     }
@@ -6838,9 +6846,6 @@ private func chatListHeaderOverflowInfo(strings: PresentationStrings) -> [AnyHas
         "compose": ChatListHeaderComponent.OverflowInfo(title: strings.Compose_NewMessage, iconName: "Chat List/ComposeIcon", priority: 3),
         "proxy": ChatListHeaderComponent.OverflowInfo(title: strings.SocksProxySetup_Title, iconName: "Chat List/ProxyShieldIcon", priority: 2),
         "story": ChatListHeaderComponent.OverflowInfo(title: strings.StoryFeed_AddStory, iconName: "Chat List/AddStoryIcon", priority: 1),
-        // MATTERMOST: the threads button (MattermostThreadsButton.swift) takes the story button's place; the title is
-        // its VoiceOver label (no priority: the side column lays it out as before).
-        "threads": ChatListHeaderComponent.OverflowInfo(title: strings.Relay_Threads_Title, iconName: "Chat/Context Menu/Replies", priority: nil),
         "more": ChatListHeaderComponent.OverflowInfo(title: strings.Common_More, iconName: nil, priority: nil)
     ]
 }
@@ -6856,9 +6861,6 @@ private final class ChatListLocationContext {
     private var titleDisposable: Disposable?
     // MATTERMOST: `Account.mattermostSessionExpired` of this list's account (see `updateChatList`).
     private var mattermostSessionExpired = false
-    // MATTERMOST: the threads button (collapsed reply threads, `MattermostThreadsButton.swift`).
-    private var mattermostThreads: MattermostThreadsButtonState?
-    private var mattermostThreadsFilterId: Int32?
     
     private(set) var title: String = ""
     private(set) var chatTitleComponent: ChatTitleComponent?
@@ -7356,10 +7358,9 @@ private final class ChatListLocationContext {
                     }
                 }
                 
-                // MATTERMOST: the threads button in the stories button's place.
+                // MATTERMOST: no story button; threads are a root tab (TelegramRootController).
                 if MattermostBackend.isEnabled {
-                    self.mattermostThreadsFilterId = stateAndFilterId.filterId
-                    self.storyButton = self.mattermostThreadsButton(filterId: stateAndFilterId.filterId)
+                    self.storyButton = nil
                 } else if storyPostingAvailable {
                     self.storyButton = AnyComponentWithIdentity(id: "story", component: AnyComponent(NavigationButtonComponent(
                         content: .icon(imageName: "Chat List/AddStoryIcon"),
@@ -7486,31 +7487,6 @@ private final class ChatListLocationContext {
         })
     }
     
-    // MATTERMOST: see `MattermostThreadsButtonState`.
-    private func mattermostThreadsButton(filterId: Int32?) -> AnyComponentWithIdentity<NavigationButtonComponentEnvironment>? {
-        let state: MattermostThreadsButtonState
-        if let current = self.mattermostThreads {
-            state = current
-        } else {
-            state = MattermostThreadsButtonState(context: self.context)
-            state.updated = { [weak self] in
-                guard let self, self.leftButton?.id == AnyHashable("edit") else {
-                    #if DEBUG
-                    NSLog("[Relay] threads button: not in the normal header (left button %@)", "\(String(describing: self?.leftButton?.id))")
-                    #endif
-                    return
-                }
-                self.storyButton = self.mattermostThreadsButton(filterId: self.mattermostThreadsFilterId)
-                self.parentController?.requestLayout(transition: .immediate)
-            }
-            state.open = { [weak self] controller in
-                (self?.parentController?.navigationController as? NavigationController)?.pushViewController(controller)
-            }
-            self.mattermostThreads = state
-        }
-        return state.button(filterId: filterId)
-    }
-
     private func updateForum(
         peerId: EnginePeer.Id,
         peerView: PeerView,

@@ -9,6 +9,7 @@ import AccountContext
 import ContactListUI
 import CallListUI
 import ChatListUI
+import MattermostUI
 import SettingsUI
 import AppBundle
 import DatePickerNode
@@ -79,6 +80,8 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
     public var callListController: CallListController?
     public var chatListController: ChatListController?
     public var accountSettingsController: PeerInfoScreen?
+    // MATTERMOST: Relay's own tabs between Chats and Settings (`relayTabControllers`).
+    private var relayTabControllers: [ViewController] = []
     
     private var permissionsDisposable: Disposable?
     private var presentationDataDisposable: Disposable?
@@ -230,6 +233,9 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
             controllers.append(callListController)
         }
         controllers.append(chatListController)
+        // MATTERMOST: Threads and Mentions, as in Mattermost's mobile app (the tab bar had only Chats and Settings).
+        let relayTabControllers = self.makeRelayTabControllers(chatListController: chatListController)
+        controllers.append(contentsOf: relayTabControllers)
         
         var restoreSettignsController: (ViewController & SettingsController)?
         if let sharedContext = self.context.sharedContext as? SharedAccountContextImpl {
@@ -262,6 +268,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         self.contactsController = contactsController
         self.callListController = callListController
         self.chatListController = chatListController
+        self.relayTabControllers = relayTabControllers
         self.accountSettingsController = accountSettingsController
         self.rootTabController = tabBarController
         self.pushViewController(tabBarController, animated: false)
@@ -284,9 +291,24 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
             controllers.append(callListController)
         }
         controllers.append(self.chatListController!)
+        controllers.append(contentsOf: self.relayTabControllers)
         controllers.append(self.accountSettingsController!)
         
         rootTabController.setControllers(controllers, selectedIndex: nil)
+    }
+    
+    // MATTERMOST: the Threads tab (collapsed reply threads; it opens on the team of the chat list's selected folder)
+    // and the Mentions tab (Recent Mentions). Made once per account context and kept for the session, like the chat
+    // list.
+    private func makeRelayTabControllers(chatListController: ChatListController) -> [ViewController] {
+        guard MattermostBackend.isEnabled else {
+            return []
+        }
+        let threadsController = mattermostThreadsTabController(context: self.context, selectedFolderId: { [weak chatListController] in
+            return chatListController?.selectedFolderId
+        })
+        let mentionsController = MattermostPostListController(context: self.context, kind: .mentions, isTab: true)
+        return [threadsController, mentionsController]
     }
     
     public func openChatsController(activateSearch: Bool, filter: ChatListSearchFilter = .chats, query: String? = nil) {

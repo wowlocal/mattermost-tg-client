@@ -36,9 +36,8 @@ extension MattermostFeatures {
     }
 }
 
-// MATTERMOST: icons of the Settings rows Recent Mentions and Saved Posts (Phase 3C). Mattermost saves posts with a
+// MATTERMOST: the icon of the Settings row Saved Posts (Phase 3C). Mattermost saves posts with a
 // flag ("flagged posts"), hence the flag.
 enum MattermostSettingsIcons {
-    static let mentions = renderSettingsIcon(name: "Item List/Icons/Messages", backgroundColors: [UIColor(rgb: 0xaf52de)])
     static let savedPosts = renderSettingsIcon(name: "Item List/Icons/Flag", backgroundColors: [UIColor(rgb: 0xff9500)])
 }

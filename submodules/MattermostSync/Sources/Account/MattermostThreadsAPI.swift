@@ -41,6 +41,23 @@ public extension MattermostSync {
         return self.sync(accountId: accountId)?.state.with { $0.teams.map { MattermostTeamInfo(id: $0.id, name: $0.displayName) } } ?? []
     }
 
+    /// The account's teams once its bootstrap has finished: the Threads tab is made at launch, before the account
+    /// syncs, so `teams(accountId:)` can still be empty then.
+    static func teamsWhenReady(accountId: AccountRecordId) -> Signal<[MattermostTeamInfo], NoError> {
+        return self.runningSync(accountId: accountId)
+        |> mapToSignal { sync -> Signal<[MattermostTeamInfo], NoError> in
+            guard let sync = sync else {
+                return .complete()
+            }
+            return sync.bootstrapped.get()
+            |> filter { $0 }
+            |> take(1)
+            |> map { _ -> [MattermostTeamInfo] in
+                return self.teams(accountId: accountId)
+            }
+        }
+    }
+
     /// The team of a team folder (chat list filter), see `writeTeamFolders`.
     static func teamId(accountId: AccountRecordId, chatListFilterId: Int32) -> String? {
         guard let sync = self.sync(accountId: accountId) else {
@@ -74,8 +91,9 @@ public extension MattermostSync {
         }
     }
 
-    /// Unread followed threads of a team (the threads button's badge); nil while collapsed reply threads are off.
-    static func threadsBadge(accountId: AccountRecordId, teamId: String) -> Signal<MattermostThreadsBadge?, NoError> {
+    /// Unread followed threads of all the account's teams (the Threads tab's badge); nil while collapsed reply
+    /// threads are off.
+    static func totalThreadsBadge(accountId: AccountRecordId) -> Signal<MattermostThreadsBadge?, NoError> {
         return self.runningSync(accountId: accountId)
         |> mapToSignal { sync -> Signal<MattermostThreadsBadge?, NoError> in
             guard let sync = sync else {
@@ -83,32 +101,19 @@ public extension MattermostSync {
             }
             return combineLatest(sync.threadsVersionPromise.get(), MattermostBackend.collapsedThreadsUpdates(accountPeerId: sync.ownPeerId))
             |> map { _, isOn -> MattermostThreadsBadge? in
-                return isOn ? sync.threadsBadge(teamId: teamId) : nil
+                guard isOn else {
+                    return nil
+                }
+                var unreadThreads = 0
+                var unreadMentions = 0
+                for teamId in sync.state.with({ $0.teams.map { $0.id } }) {
+                    let badge = sync.threadsBadge(teamId: teamId)
+                    unreadThreads += badge.unreadThreads
+                    unreadMentions += badge.unreadMentions
+                }
+                return MattermostThreadsBadge(unreadThreads: unreadThreads, unreadMentions: unreadMentions)
             }
             |> distinctUntilChanged
-        }
-    }
-
-    /// The threads badge of a team folder (`chatListFilterId`; nil: the first team), with the team: waits for
-    /// the account's bootstrap (which creates the folders). Nil while collapsed reply threads are off.
-    static func threadsBadge(accountId: AccountRecordId, chatListFilterId: Int32?) -> Signal<(teamId: String, badge: MattermostThreadsBadge)?, NoError> {
-        return self.runningSync(accountId: accountId)
-        |> mapToSignal { sync -> Signal<(teamId: String, badge: MattermostThreadsBadge)?, NoError> in
-            guard let sync = sync else {
-                return .single(nil)
-            }
-            return sync.bootstrapped.get()
-            |> filter { $0 }
-            |> take(1)
-            |> mapToSignal { _ -> Signal<(teamId: String, badge: MattermostThreadsBadge)?, NoError> in
-                guard let teamId = chatListFilterId.flatMap({ self.teamId(accountId: accountId, chatListFilterId: $0) }) ?? self.teams(accountId: accountId).first?.id else {
-                    return .single(nil)
-                }
-                return self.threadsBadge(accountId: accountId, teamId: teamId)
-                |> map { badge -> (teamId: String, badge: MattermostThreadsBadge)? in
-                    return badge.map { (teamId, $0) }
-                }
-            }
         }
     }
 

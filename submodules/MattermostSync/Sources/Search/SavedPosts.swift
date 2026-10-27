@@ -240,6 +240,17 @@ public final class MattermostPostList {
         }
     }
 
+    /// Reloads only a list whose first page failed (no connection when the Mentions tab was made); a loaded list
+    /// stays as it is, new mentions arrive live.
+    public func reloadIfFailed() {
+        let failed = self.contents.with { contents in
+            return contents.failed && contents.entries.isEmpty
+        }
+        if failed {
+            self.reload()
+        }
+    }
+
     /// Recent mentions (4F): new posts that mention the user arrive at the top while the list is open, as in
     /// Mattermost's Recent Mentions.
     private func observeNewMentions() {

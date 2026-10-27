@@ -300,6 +300,7 @@
 "Relay.Saved.EmptyTitle" = "No Saved Posts";
 "Relay.Saved.EmptyText" = "Save messages from their menu to find them here. Saved posts are the same on all your devices.";
 "Relay.Mentions.Title" = "Recent Mentions";
+"Relay.Mentions.Tab" = "Mentions";
 "Relay.Mentions.EmptyTitle" = "No Mentions";
 "Relay.Mentions.EmptyText" = "Messages that mention you or your mention keywords show up here.";
 "Relay.PostList.Loading" = "Loading…";

@@ -25,7 +25,7 @@ import MattermostUI
 // - `people` (`query`): the engine's people/channel search;
 // - `peerinfo-search` (`chat`, `pane`: files, links, music; `query`): the profile's media pane search;
 // - `chat-search` (`query`, `from` username): Search in the visible chat; `chat-search-step` (`dir`: earlier, later);
-// - `post-list` (`kind`: saved, mentions): the Settings screen; `post-list-items`, `post-list-tap` (`index`);
+// - `post-list` (`kind`: saved, mentions): the screen, pushed; `post-list-items`, `post-list-tap` (`index`);
 // - `save`, `unsave` (`post`): the message menu's Save Post / Remove from Saved; `saved-state` (`post`);
 // - `pin`, `unpin` (`post`): the message menu's Pin / Unpin in the visible chat; `pinned`: its pinned bar;
 //   `pinned-list`: the bar's list button (all pinned messages).

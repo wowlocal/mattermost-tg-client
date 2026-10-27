@@ -122,7 +122,7 @@ tools/relay-remote.py "$UDID" scroll to=top                       # scroll the v
 tools/relay-remote.py "$UDID" post post=<post id>                 # permalink: a reply opens its thread at it (CRT on)
 tools/relay-remote.py "$UDID" follow                              # Follow / Unfollow Thread in the visible thread
 tools/relay-remote.py "$UDID" menu post=<post id>                 # the message's context menu
-tools/relay-remote.py "$UDID" threads                             # the chat list's threads button (team=<id>)
+tools/relay-remote.py "$UDID" threads                             # the threads screen of a team, pushed (team=<id>)
 tools/relay-remote.py "$UDID" threads-list                        # what the threads screen lists (team=<id>)
 tools/relay-remote.py "$UDID" threads-row index=0                 # open a row of the threads screen
 tools/relay-remote.py "$UDID" check-thread post=<root id>         # load a thread and compare it with the server's

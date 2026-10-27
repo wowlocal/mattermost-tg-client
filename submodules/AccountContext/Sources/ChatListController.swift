@@ -31,6 +31,9 @@ public protocol ChatListController: ViewController {
     
     func activateEdit()
     func openEmojiStatusSetup()
+
+    // MATTERMOST: the selected chat folder (nil: All Chats); the Threads tab opens on its team.
+    var selectedFolderId: Int32? { get }
 }
 
 public protocol CommunityViewScreen: ViewController {

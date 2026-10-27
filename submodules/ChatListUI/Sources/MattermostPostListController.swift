@@ -14,12 +14,14 @@ import AnimationCache
 import MultiAnimationRenderer
 import AppBundle
 import MattermostSync
+import MattermostUI
 
 // MATTERMOST: finding things (Phase 3C). "Saved Posts" (Mattermost's flagged posts, not Telegram's Saved Messages)
 // and "Recent Mentions", opened from Settings. Rows are Telegram's search result rows (`ChatListItem` showing a
 // message: chat avatar and name, snippet, date; mentions highlighted); a tap opens the chat at the post (its thread
 // with collapsed reply threads), a long press previews it with "Show in Chat" and Save / Remove from Saved. The
-// saved list follows saves and unsaves from this device and other clients live.
+// saved list follows saves and unsaves from this device and other clients live. Recent Mentions is also the
+// Mentions tab of the root tab bar (`isTab`, TelegramRootController), made at launch and kept for the session.
 
 private enum MattermostPostListEntry: Comparable, Identifiable {
     case message(index: Int, message: EngineMessage, presentationData: ChatListPresentationData)
@@ -101,6 +103,7 @@ private enum MattermostPostListEntry: Comparable, Identifiable {
 public final class MattermostPostListController: ViewController {
     private let context: AccountContext
     public let kind: MattermostPostListKind
+    private let isTab: Bool
     public let list: MattermostPostList
     private var presentationData: PresentationData
     private var presentationDataDisposable: Disposable?
@@ -109,9 +112,10 @@ public final class MattermostPostListController: ViewController {
         return self.displayNode as! MattermostPostListControllerNode
     }
 
-    public init(context: AccountContext, kind: MattermostPostListKind) {
+    public init(context: AccountContext, kind: MattermostPostListKind, isTab: Bool = false) {
         self.context = context
         self.kind = kind
+        self.isTab = isTab
         self.list = MattermostSync.postList(accountId: context.account.id, kind: kind)
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
 
@@ -120,6 +124,7 @@ public final class MattermostPostListController: ViewController {
         self.statusBar.statusBarStyle = self.presentationData.theme.rootController.statusBarStyle.style
         self.title = kind == .saved ? self.presentationData.strings.Relay_Saved_Title : self.presentationData.strings.Relay_Mentions_Title
         self.navigationItem.backBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.Common_Back, style: .plain, target: nil, action: nil)
+        self.updateTabBarItem()
 
         self.presentationDataDisposable = (context.sharedContext.presentationData
         |> deliverOnMainQueue).startStrict(next: { [weak self] presentationData in
@@ -129,6 +134,7 @@ public final class MattermostPostListController: ViewController {
             self.presentationData = presentationData
             self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
             self.navigationBar?.updatePresentationData(NavigationBarPresentationData(presentationData: presentationData), transition: .immediate)
+            self.updateTabBarItem()
             if self.isNodeLoaded {
                 self.controllerNode.updatePresentationData(presentationData)
             }
@@ -151,6 +157,24 @@ public final class MattermostPostListController: ViewController {
     override public func loadDisplayNode() {
         self.displayNode = MattermostPostListControllerNode(context: self.context, controller: self, presentationData: self.presentationData)
         self.displayNodeDidLoad()
+    }
+
+    override public func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        if self.isTab {
+            // The tab is made at launch: its first page may have failed before the account was online.
+            self.list.reloadIfFailed()
+        }
+    }
+
+    private func updateTabBarItem() {
+        guard self.isTab else {
+            return
+        }
+        let icons = relayTabBarIcons(.mentions, theme: self.presentationData.theme)
+        self.tabBarItem.title = self.presentationData.strings.Relay_Mentions_Tab
+        self.tabBarItem.image = icons.image
+        self.tabBarItem.selectedImage = icons.selectedImage
     }
 
     override public func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {

@@ -233,11 +233,8 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 1, text: presentationData.strings.Settings_SavedMessages, icon: PresentationResourcesSettings.savedMessages, action: {
         interaction.openSettings(.savedMessages)
     }))
-    // MATTERMOST: Recent Mentions and Saved Posts (Phase 3C, `MattermostSettingsSections.swift`).
+    // MATTERMOST: Saved Posts (Phase 3C, `MattermostSettingsSections.swift`). Recent Mentions is a root tab.
     if MattermostBackend.isEnabled {
-        items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 101, text: presentationData.strings.Relay_Mentions_Title, icon: MattermostSettingsIcons.mentions, action: {
-            interaction.openSettings(.mattermostMentions)
-        }))
         items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 102, text: presentationData.strings.Relay_Saved_Title, icon: MattermostSettingsIcons.savedPosts, action: {
             interaction.openSettings(.mattermostSavedPosts)
         }))

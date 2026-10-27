@@ -215,9 +215,6 @@ extension PeerInfoScreenNode {
         case .about:
             // MATTERMOST: About Relay.
             push(relayAboutController(context: self.context))
-        case .mattermostMentions:
-            // MATTERMOST: Recent Mentions (Phase 3C).
-            push(MattermostPostListController(context: self.context, kind: .mentions))
         case .mattermostSavedPosts:
             // MATTERMOST: Saved Posts (Phase 3C).
             push(MattermostPostListController(context: self.context, kind: .saved))

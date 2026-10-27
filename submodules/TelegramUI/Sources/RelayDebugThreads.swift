@@ -19,7 +19,8 @@ import MattermostUI
 // - `post` (`post`): a permalink: the post's thread at it (a reply, collapsed threads on) or its chat at it;
 // - `replies` (`post`: a root, or `index`: the n-th visible root with a replies button, newest first): the
 //   "N replies" button's action (`openMessageReplies`);
-// - `threads` (`team`: a team id, default the first): the chat list's threads button;
+// - `threads` (`team`: a team id, default the first): the threads screen of a team, pushed (the Threads tab is the
+//   same screen);
 // - `follow`, `unfollow`: Follow / Unfollow Thread in the visible thread;
 // - `scroll` (`to`: `top` or `bottom`) in the visible chat;
 // - `visible`: the visible chat's messages (post ids, thread ids, reply buttons, texts);

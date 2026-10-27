@@ -110,7 +110,7 @@ details on debug. ★ = core set for the second server version. ● = device-mat
 | ID | Item | Steps → expected | How checked | Build |
 |---|---|---|---|---|
 | E1 ★● | Thread view | Channel shows roots with "N Replies" → tap → root + replies | OCR | R |
-| E2 ★ | Threads list | Chat list threads button (badge) → per-team tabs, "N UNREAD · M MENTIONS"; open an unread thread → it leaves the server's unread list | REST `/users/{id}/teams/{team}/threads?unread=true` | R |
+| E2 ★ | Threads list | Threads tab (badge: unread threads of all teams) → per-team tabs, follows the chat list's team folder, "N UNREAD · M MENTIONS"; open an unread thread → it leaves the server's unread list | REST `/users/{id}/teams/{team}/threads?unread=true` | R |
 | E3 | Follow | Root's menu → Unfollow Thread / Follow Thread → server followed list | REST | R |
 | E4 | Unread separator | A followed thread with unread replies opens at the first unread with "Unread Messages" | `replies post=…` + log | D |
 
@@ -135,7 +135,7 @@ details on debug. ★ = core set for the second server version. ● = device-mat
 |---|---|---|---|---|
 | H1 ★● | Search | Chat list search "deploy" → messages from all chats; tap → the chat at the post | OCR | R |
 | H2 | People and channels | Search "car" → Carol (people), channels | OCR | R |
-| H3 | Recent mentions | Settings → Recent Mentions → list; live while open | OCR | R |
+| H3 | Recent mentions | Mentions tab → list; live | OCR | R |
 | H4 | Saved posts | Message menu → Save Post → server `flagged_post`; Settings → Saved Posts lists it | REST preferences | R |
 | H5 | Pins | Message menu → Pin → "Pinned Message" bar → server `/channels/{id}/pinned` | REST | R |
 | H6 | Files | Chat profile → Files tab, its search | OCR; `peerinfo-search` | R/D |
@@ -205,7 +205,7 @@ details on debug. ★ = core set for the second server version. ● = device-mat
 | O2 | Storage | Settings → Data and Storage → Storage Usage → per-chat sizes, Clear | OCR | R |
 | O3 | Appearance | Themes, text size, chat background (local) | Screenshot | R |
 | O4 ● | About | Version `0.1.0 (<build>)`, Source Code (GitHub), Open Source Licenses (Telegram-iOS GPL …) | AXe | R |
-| O5 | No Telegram-only entry points | Tab bar Chats/Settings only; no stories, stickers, premium, calls, secret chats, phone/contacts; attach menu Gallery/File/Location/Audio/Contact; no voice-recording tip (fixed 4E); passcode texts without secret chats or wallets (fixed 4E) | Screenshots | R |
+| O5 | No Telegram-only entry points | Tab bar Chats/Threads/Mentions/Settings; no stories, stickers, premium, calls, secret chats, phone/contacts; attach menu Gallery/File/Location/Audio/Contact; no voice-recording tip (fixed 4E); passcode texts without secret chats or wallets (fixed 4E) | Screenshots | R |
 
 ## P · Accessibility, appearance, languages
 
