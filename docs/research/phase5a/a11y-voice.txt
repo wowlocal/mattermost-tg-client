@@ -1,0 +1,19 @@
+VoiceOver elements (debug remote ax-tree), Relay iPhone 17 Pro, debug build, 2026-10-27.
+
+alice, ~sandbox (voice messages by alice and one by bob, not played yet):
+   {"label": "Your voice message", "value": "Duration: four seconds\nOct 27, 2026 at 2:27 AM\n", "hint": "Double tap to play", "traits": []}
+   {"label": "Your voice message", "value": "Duration: five seconds\nOct 27, 2026 at 2:26 AM\n", "hint": "Double tap to play", "traits": []}
+   {"label": "Bob Brennan", "value": "5A voice thread root (reply with a voice message)\nOct 27, 2026 at 2:24 AM", "hint": null, "traits": []}
+   {"label": "Your voice message", "value": "Duration: eleven seconds\nOct 27, 2026 at 2:21 AM\n", "hint": "Double tap to play", "traits": []}
+   {"label": "Voice message, from: Bob Brennan", "value": "Duration: nine seconds, Not played\nOct 27, 2026 at 2:15 AM", "hint": "Double tap to play", "traits": []}
+   {"label": "Your voice message", "value": "Duration: five seconds\nOct 27, 2026 at 1:56 AM\n", "hint": "Double tap to play", "traits": []}
+   {"label": "Voice message", "value": null, "hint": "Double tap and hold to record a voice message. Slide up to lock the recording, slide left to cancel.", "traits": ["button"]}
+
+bob, ~sandbox (alice's voice messages: the 1:56 and 2:21 ones played on this device, newer ones not):
+   {"label": "Voice message, from: Alice Anderson", "value": "Duration: four seconds, Not played\nOct 27, 2026 at 2:27 AM", "hint": "Double tap to play", "traits": []}
+   {"label": "Voice message, from: Alice Anderson", "value": "Duration: five seconds, Not played\nOct 27, 2026 at 2:26 AM", "hint": "Double tap to play", "traits": []}
+   {"label": "Your message", "value": "5A voice thread root (reply with a voice message)\nOct 27, 2026 at 2:24 AM\n", "hint": null, "traits": []}
+   {"label": "Voice message, from: Alice Anderson", "value": "Duration: eleven seconds, Played\nOct 27, 2026 at 2:21 AM", "hint": "Double tap to play", "traits": []}
+   {"label": "Your voice message", "value": "Duration: nine seconds\nOct 27, 2026 at 2:15 AM\n", "hint": "Double tap to play", "traits": []}
+   {"label": "Voice message, from: Alice Anderson", "value": "Duration: five seconds, Played\nOct 27, 2026 at 1:56 AM", "hint": "Double tap to play", "traits": []}
+   {"label": "Voice message", "value": null, "hint": "Double tap and hold to record a voice message. Slide up to lock the recording, slide left to cancel.", "traits": ["button"]}

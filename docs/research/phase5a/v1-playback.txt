@@ -1,0 +1,23 @@
+Decision V1 (format) evidence, 2026-10-27.
+
+Mattermost 11.7.14 web app (bundle copied out of the dev server's container, /mattermost/client):
+  constants:  AUDIO_TYPES: ["mp3","wav","wma","m4a","flac","aac","ogg","m4r"]  (by file extension)
+  file preview modal: VIDEO or AUDIO -> <video key data-setup="{}" controls width height><source src=fileUrl></video>;
+                      a "error" event on <source> switches to the download view (canPlay: false).
+
+Test page: the same markup, once for metadata (loadedmetadata / source error), once with play() (muted, playsinline)
+waiting for currentTime > 1 s. Files: Relay's own upload (GET /files/anxoutca6jgq383yu5yg5za1rw: AAC-LC, 48 kHz,
+mono, 32.8 kbps, 11.69 s, 51,368 bytes) and an Ogg/Opus file made with ffmpeg (libopus, 24 kbps, 8.6 s).
+
+                                   m4a (AAC)                       ogg (Opus)
+Chrome 155 (headless, CDP)         metadata 11.75 s; played >1 s   metadata 8.62 s; played >1 s
+WebKit, macOS 27.0.1 (WKWebView)   metadata 11.69 s; played >1 s   metadata 8.84 s; clock did not move in 10 s
+Safari, iOS 26.5 simulator         metadata 8.61 s*; played >1 s   metadata 8.84 s; played >1 s
+  (* the metadata run used an earlier afconvert AAC file of the same speech)
+
+Not checked: the Mattermost desktop app (Electron), the official mobile apps, Safari on macOS itself, Firefox.
+
+Server: props kept for a regular user (11.7, POST /posts as alice with props.relay_voice, read back by alice and bob
+through GET /posts/{id} and GET /channels/{id}/posts); upload stored as mime_type "audio/mp4", extension "m4a".
+Mattermost 12.0.1 source (server/public/model/post.go, SanitizeProps): deletes add_channel_member, force/silent
+notification markers, from_webhook/from_bot/from_oauth_app/from_plugin and the override_* keys only.

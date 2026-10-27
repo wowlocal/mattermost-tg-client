@@ -4,7 +4,7 @@ Working log for the Mattermost client fork. Each work session reads this first a
 
 ## Current state
 
-- **Phase:** 0–3 done; Phase 4: 4A, 4B, 4C, 4E, 4F, 4G done on `main` (release candidate `0.1.0 (31844)` passed the regression checklist on Mattermost 11.7.14 and 12.0.1 and six simulators, [release/REGRESSION.md](release/REGRESSION.md); the push proxy now serves Mattermost 12's platform names too); next: 5A voice messages. 4D (TestFlight) is still blocked on the user's App Store Connect setup: the App Store Connect record, a distribution certificate and App Store profiles, D1/D6 and the GPL review (development signing with the user's team works, `tools/relay-device-build.sh`).
+- **Phase:** 0–3 done; Phase 4: 4A, 4B, 4C, 4E, 4F, 4G done on `main` (release candidate `0.1.0 (31844)` passed the regression checklist on Mattermost 11.7.14 and 12.0.1 and six simulators, [release/REGRESSION.md](release/REGRESSION.md); the push proxy now serves Mattermost 12's platform names too); Phase 5: 5A voice messages done (2026‑10‑27). 4D (TestFlight) is still blocked on the user's App Store Connect setup: the App Store Connect record, a distribution certificate and App Store profiles, D1/D6 and the GPL review (development signing with the user's team works, `tools/relay-device-build.sh`).
 - **Upstream pin:** Telegram‑iOS `5c20d095d1ab` (app 13.0.1, tag `upstream-pin`), the newest commit built with Xcode 27.0 (installed). Master needs Xcode 27.1.
 - **Working name:** "Relay" (`org.relaychat.Relay`, URL scheme `relay`). Placeholder until D6 is decided.
 - **Build:** commands in [BUILD.md](BUILD.md). Main simulator "Relay iPhone 17 Pro" (iOS 26.5). `main` is pushed to `origin` (github.com/wowlocal/mattermost-tg-client) after each merge.
@@ -91,7 +91,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 
 | # | Workstream | Status |
 |---|---|---|
-| 5A | Voice messages ([plan 05](plan/05-phases.md#5a--voice-messages-12-weeks)): Telegram's recorder and voice bubbles; sent as an ordinary audio attachment (Mattermost has no voice post type) with a `props` marker, so other clients play it as a file | Planned, after 4E (decision V1, default AAC `.m4a`) |
+| 5A | Voice messages ([plan 05](plan/05-phases.md#5a--voice-messages-12-weeks)): Telegram's recorder and voice bubbles; sent as an ordinary audio attachment (Mattermost has no voice post type) with a `props` marker, so other clients play it as a file | Done (main checkout, 2026‑10‑27): V1 taken (AAC `.m4a`, marked posts only, [plan 09](plan/09-risks-and-decisions.md#v1-outcome-phase-5a-2026-10-27)); design: mattermost-sync.md "Voice messages (5A)"; BUILD.md "Phase 5A" (fake microphone); evidence `docs/research/phase5a/`, screenshots `docs/research/phase5a-*.png` |
 
 ## Log
 
@@ -515,3 +515,89 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
     matrix simulators. "Relay iPhone 17 Pro" holds the final debug build with alice/bob/dave. The push proxy is
     untouched (still rendered from the old template). The Mac's pasteboard was overwritten by a Copy Link check.
 - **After 4E** (coordinator): the running push proxy was re-rendered from the 4E template and restarted; it now initializes `relay_apple`, `relay_apple_sandbox`, `apple_rn` and `apple_rnbeta` with the real APNs key, so Relay accounts on Mattermost 12 (registered as `apple_rnbeta`/`apple_rn`) get pushes through it. `infra/push-proxy/up.sh` now force-recreates the container (the rendered config is a bind mount, so a changed config alone never restarted a running proxy). Next: 5A voice messages.
+- **5A done** (main checkout). Voice messages with Telegram's recorder and voice bubbles. Design: mattermost-sync.md
+  "Voice messages (5A)"; decision V1 recorded in plan 09 ("V1 outcome"); BUILD.md "Phase 5A"; evidence
+  `docs/research/phase5a/`, screenshots `docs/research/phase5a-*.png`. Verified on "Relay iPhone 17 Pro" (debug build,
+  alice/bob/dave; REST as alice/bob), recordings fed by the new debug **fake microphone** (a `say` speech file through
+  `ManagedAudioRecorderContext`'s own encoder and preview; the Mac's microphone was never opened, no macOS prompt).
+  - **V1:** AAC `.m4a` (`audio/mp4`, AAC-LC, mono, 48 kHz, ~33 kbps; Telegram's own `convertOpusToAAC`, 19–57 ms per
+    recording on the simulator, files 10–16 % larger than the Opus recording), voice bubbles for marked posts only. The
+    11.7 web app's file preview is a plain `<video controls><source>` for `AUDIO_TYPES` (`m4a`, `ogg`, … by extension):
+    Relay's upload played there in Chrome 155, WebKit (macOS 27) and Safari (iOS 26.5); an Ogg/Opus file played in
+    Chrome and iOS Safari but only loaded metadata in the macOS WebKit view (`phase5a/v1-playback.txt`,
+    `phase5a-v1-ios-safari-playback.png`). Server: a regular user's `props.relay_voice` is kept (11.7, REST); 12.0.1's
+    `SanitizeProps` strips a fixed key list only (source). Desktop and official mobile apps not checked.
+  - **Recording and sending:** real taps (AXe) on the mic button: hold 5 s → sent on release
+    (`phase5a-hold-to-record.png`), slide left → cancelled, slide up → locked (`phase5a-locked.png`), Stop and preview →
+    preview with trim and waveform (`phase5a-preview.png`), Send → posted; remote-driven record/lock/pause/resume/
+    preview/send too (draft 7.1 s → resumed → 11.7 s). Channel (~sandbox), DM (alice → bob, bob → alice), GM (alice,
+    bob, carol), thread reply (bob's "5A voice thread root" → alice's voice reply with `root_id`) — each post had one
+    `Voice message 2026-10-27 HH.MM.m4a` (`audio/mp4`) and `props.relay_voice {v: 1, duration, waveform}` (REST).
+    **Offline:** the dev server stopped → the message stayed pending with the upload retrying, the app was restarted
+    while offline, the server started → posted (transcoded again after the restart). **Upload id across a restart**
+    (`RELAY_DEBUG_SEND_DELAY`): `reuses 1 file(s) uploaded before a restart`, the post's file id was the first upload's,
+    the sent message then downloaded the server's `.m4a` (22,068 bytes, not the Ogg recording).
+  - **Receiving:** bob's account (same app) got alice's posts live as voice bubbles with waveform and the "not played"
+    dot; catch-up after a relaunch (a marked post made while the app was closed) the same. A marked REST post without a
+    waveform got one computed from the audio (`voice: computed the waveform … (413632 samples) in 143 ms`). **Existing
+    data:** an older build had stored two marked posts as file bubbles (`phase5a-before-upgrade-file-bubbles.png`); the
+    new build's rich-content upgrade 2 → 3 re-rendered the newest pages and `voice: upgrade found 3 stored post(s)
+    with audio files, rewrote 2` (`phase5a-upgraded-voice-bubbles.png`). Bob's audio upload without a marker stayed a
+    file bubble (`phase5a-channel-voice-and-plain-audio.png`).
+  - **Playback:** Telegram's player plays the AAC file (FFmpeg `mov` + `aac_at`); playing the oldest voice message
+    auto-advanced to the next two (player `nextMessage`), rate 2× applied, playback continued with Relay in the
+    background (Settings in front: 1.7 → 8.8 → 14.0 s), the header player with the speed button
+    (`phase5a-playing-autoadvance.png`). No transcribe button on voice bubbles.
+  - **Listened state:** played messages lost their dot and stayed played across a relaunch and across a rewrite of the
+    post (pinned and unpinned through REST: `post_edited` → full rewrite); never sent anywhere (TelegramCore queues no
+    consume-contents operation under the Mattermost backend).
+  - **Gates:** mic button shown; a tap shows "Hold to record audio." (`phase5a-mic-tap-hint.png`), no video mode, no
+    view-once button; the archived channel `4e-rc-check` shows the read-only panel, no mic (`phase5a-archived-no-mic.png`).
+  - **Notifications:** with the push proxy's real APNs key the simulator received real pushes; the notification
+    service extension fetched each voice post (`nse: post … is a voice message`, ~50 ms after the ack) and showed
+    "Voice message" for the DM and the thread reply ("Reply in Sandbox → bob", `phase5a-thread-reply-push.png`);
+    `simulate-push` of a DM payload with a voice post id → "bob → alice: Voice message". Chat list row: "🎤 Voice Message"
+    (`phase5a-chatlist-preview.png`).
+  - **Search and media tabs:** the sandbox profile's Voice tab lists its 6 voice posts (thread reply included, the plain
+    audio file not; `phase5a-voice-tab.png`); the chat list search's Voice tab: 10 voice messages across the channel,
+    DMs and the GM (`search: … (files) page 0 → 10 message(s)`; `phase5a-search-voice-tab.png`) = the server's count.
+  - **Accessibility:** VoiceOver (`ax-tree`, `phase5a/a11y-voice.txt`): "Voice message, from: Bob Brennan" / "Duration:
+    nine seconds, Not played"; "… Played" after playing; "Your voice message"; the mic button "Voice message" with
+    Relay's hint (no video switch); in the preview "Delete" and "Record more" (both unlabelled upstream; "Delete" was
+    read as "Send media"). The hint tooltip is also posted as a VoiceOver announcement (not heard: VoiceOver can't run
+    on the simulator). Largest text size (accessibility XXXL): the bubbles' durations and times scale, nothing clipped
+    (`phase5a-largest-text.png`; text size restored to Large).
+  - **Checks:** parked Telegram requests 0 after the voice flows and after a 5-minute `tools/relay-session.py`
+    (footprint ~150 MB); MattermostKit 213 tests (5 skipped; 1 new), MattermostSyncCore 190 (9 new), MattermostPush
+    43 (1 new), MattermostShare 9 (1 skipped); `release_sim_arm64` of the final tree (`appstore-configuration.json`,
+    ~33 min): `tools/relay-release-audit.sh` (6 new 5A debug markers) 0 debug markers, no ATS exception for the app's
+    own connections, privacy manifests present, 0 closed-source/analytics markers; the voice code is in the release
+    binaries (`relay_voice`, the transcoding log line), the fake microphone is not, `NSMicrophoneUsageDescription` is
+    Relay's text. No new required-reason API category (the file-attribute reads are in the app's container, `C617.1`).
+  - **Gaps / not verified:** the Mattermost desktop and official mobile apps playing the `.m4a`; raise-to-listen and a
+    real microphone (device); the VoiceOver announcement heard; voice messages of other clients are voice bubbles only
+    with Relay's marker (V1); every incoming voice message is "not played" on a new device or after a re-login (no
+    server state); the preview's waveform area is an unlabelled VoiceOver element (upstream); after a restart between
+    upload and post the sent voice message downloads its file once; the notification extension makes one more request
+    per message push (the post); AXe's touches stopped reaching the app once until the simulator was rebooted.
+  - Upstream files touched (all `// MATTERMOST:`): TelegramCore `Mattermost/MattermostFeatures.swift` (voice messages
+    on), `TelegramEngine/Messages/MarkMessageContentAsConsumedInteractively.swift`; TelegramUI `ChatController.swift`
+    (hint text, announcement), `Chat/ChatControllerLoadDisplayNode.swift` (mic tap), `ManagedAudioRecorder.swift`
+    (debug fake microphone), `ChatTextInputPanelNode.swift` (view-once, labels), `ChatMessageItemView.swift` (played
+    state), `RelayDebugScreens.swift`, `RelayDebugSearch.swift`, `PeerInfoScreen/…/RelayDebugPeerInfoSearch.swift`
+    (debug); new `TelegramUI/Sources/RelayDebugVoice.swift` (debug); `Telegram/BUILD` and `en.lproj/InfoPlist.strings`
+    (microphone text), `Relay.strings` (5A block). Relay: MattermostSync (`Write/VoiceMessages.swift`, `PostSender`,
+    `OwnPosts`, `PostConverter`, `MediaConverter`, `PageWriter`, `MessageSearch`, `RichContent`, BUILD),
+    MattermostSyncCore (`Voice/VoiceMessage.swift`), MattermostKit (`JSONValue.foundationObject`), MattermostPush
+    (`MattermostPushTextBuilder(voiceMessage:)`), MattermostPushService (post fetch), MattermostUI (`MattermostAppHooks`);
+    `tools/relay-release-audit.sh` (5A markers).
+  - **State left behind:** dev server 11.7: in ~sandbox alice's REST-made marked post (fake 0…62 waveform) and Relay
+    voice posts by alice (2:21 11 s, 2:26 offline, 2:27 restart, 2:46), bob's REST marked posts without a waveform
+    (2:15, 2:52), bob's "5A voice thread root" with alice's voice reply, bob's "5A plain audio (no marker).m4a"; DM
+    alice↔bob: alice's 2:24 voice message, bob's 2:36 (real hold) and 2:37 (33 s, lock → preview → send); GM alice,
+    bob, carol: alice's 2:29 voice message; alice's 2:21 post pinned and unpinned again. The dev server was stopped
+    and started once (offline check); one simulated push acknowledged a made-up ack id. No server settings changed.
+    Simulator "Relay iPhone 17 Pro": the 5A debug build with alice/bob/dave; rebooted once; microphone permission
+    granted to Relay (`simctl privacy`); `Documents/relay-debug/speech48.wav` and a voice-DM push payload in the app's
+    container; text size back to Large. The push proxy untouched. Scratch: web app bundle copy, test audio and
+    browser profiles in the session's scratchpad.

@@ -66,7 +66,7 @@ Legend: **Keep** = reuse Telegram's feature, adapted to Mattermost data · **Hid
 | Saved posts, recent mentions screens | 3 |
 | Permalinks and deep links | 3 |
 | Managed app configuration (AppConfig/MDM) | 4 |
-| Voice messages: record, send as an audio attachment, voice bubble with waveform ([5A](05-phases.md#5a--voice-messages-12-weeks)) | 5 |
+| Voice messages: record, send as an audio attachment (AAC `.m4a` with a `props` marker), voice bubble with waveform for marked posts ([5A](05-phases.md#5a--voice-messages-12-weeks); done 2026‑10‑27; round video messages and voice‑to‑text stay hidden) | 5 |
 
 ## Later (after v1)
 

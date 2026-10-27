@@ -45,7 +45,7 @@ struct PostConversionContext {
     /// Voice messages (5A): whether the stored message (by local id) was played on this device. Mattermost keeps no
     /// listened state, so a rewrite of the post keeps the local one.
     var existingConsumed: (Int32) -> Bool? = { _ in nil }
-    /// Voice messages (5A): the waveform computed here for a file whose marker has none (`VoiceWaveforms`).
+    /// Voice messages (5A): the waveform computed here for a file whose marker has none (`computedVoiceWaveform`, `Write/VoiceMessages.swift`).
     var computedWaveform: (String) -> Data? = { _ in nil }
 }
 

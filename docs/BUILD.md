@@ -473,6 +473,53 @@ taps, and on a debug build only for the items that need the remote.
 
 If `simctl install` doesn't pick up a rebuilt binary (same build number), replace the installed bundle in place as described in the root `CLAUDE.md` ("Updating the running simulator after a rebuild"). This happened in 2D after a 30-second incremental build: compare the md5 of `Frameworks/TelegramUIFramework.framework/TelegramUIFramework` in the `.ipa` and in the installed app when a change seems missing.
 
+#### Phase 5A: voice messages (debug builds only)
+
+Recording on a simulator uses the Mac's microphone, which can raise a macOS privacy prompt nobody answers. Debug
+builds replace the microphone inside Telegram's recorder (`ManagedAudioRecorderContext`) with a **fake microphone**:
+a file or a tone fed in 20 ms blocks through the recorder's own encoder, waveform, preview and send path, with no audio
+session and no audio unit. Hold-to-record, slide to cancel, lock, pause/resume, preview and send then work with real
+taps (AXe) or the remote.
+
+```sh
+say -o speech.aiff "This is a Relay voice message test."               # any speech; ffmpeg or afconvert to 48 kHz mono
+ffmpeg -i speech.aiff -ar 48000 -ac 1 -c:a pcm_s16le speech48.wav
+DATA=$(xcrun simctl get_app_container "$UDID" org.relaychat.Relay data)
+mkdir -p "$DATA/Documents/relay-debug" && cp speech48.wav "$DATA/Documents/relay-debug/"
+xcrun simctl privacy "$UDID" grant microphone org.relaychat.Relay     # the iOS prompt; no Mac microphone is opened
+SIMCTL_CHILD_RELAY_DEBUG_FAKE_MIC=relay-debug/speech48.wav xcrun simctl launch "$UDID" org.relaychat.Relay
+                                                                      # or RELAY_DEBUG_FAKE_MIC=tone
+```
+
+Debug remote (TelegramUI `RelayDebugVoice.swift`, output in `extra`), each through the code path of the control it
+stands for:
+
+```sh
+tools/relay-remote.py "$UDID" fake-mic file=relay-debug/speech48.wav   # or tone=20, off=1
+tools/relay-remote.py "$UDID" voice do=record     # hold the mic button (beginMediaRecording)
+tools/relay-remote.py "$UDID" voice do=lock       # slide up
+tools/relay-remote.py "$UDID" voice do=pause      # stop into the preview (resume: do=resume)
+tools/relay-remote.py "$UDID" voice do=send       # release / the send button (cancel: do=cancel; state: do=state)
+tools/relay-remote.py "$UDID" voice-messages      # the visible chat's voice messages: post, duration, waveform, played
+tools/relay-remote.py "$UDID" voice-play index=0  # a tap on the newest one's play button (or post=<id>)
+tools/relay-remote.py "$UDID" player rate=2       # the player: state, next message, rate (do=pause|play|next|stop)
+tools/relay-remote.py "$UDID" peerinfo-pane chat=sandbox pane=voice   # the profile's Voice tab
+tools/relay-remote.py "$UDID" search filter=voice                    # the chat list search's Voice tab
+```
+
+- **Real gestures** with AXe on the mic button (`tools/relay-axe.py "$UDID" find "Voice message"` gives its frame):
+  `axe touch -x <x> -y <y> --down --up --delay 5` records 5 s and sends on release; `axe swipe` left from the button
+  cancels, up from it (`--duration 2 --delta 5`) locks; "Stop and preview" and Send then take ordinary touches. If AXe's
+  touches stop reaching the app (taps do nothing, `describe-ui` still answers), reboot the simulator (`simctl shutdown`,
+  `boot`): seen once in 5A.
+- **Interop**: `GET /posts/{id}` shows `props.relay_voice`; `GET /files/{id}` is the `.m4a` (`ffprobe`: AAC-LC, 48 kHz,
+  mono, ~33 kbps). The Mattermost web app's file preview is a plain `<video controls><source src=…>` (11.7 bundle,
+  `AUDIO_TYPES` by extension); a page with that markup checks a file in Chrome (`--headless=new --dump-dom
+  --virtual-time-budget=8000`), in WebKit (a `WKWebView` in an off-screen window) and in the simulator's Safari.
+- **Pushes**: with the push proxy's real APNs key the simulator gets real pushes and the notification service extension
+  runs (`nse: post … is a voice message` in the `[Relay]` log); `simulate-push` with a payload whose `post_id` is a voice
+  post runs the same code in the app.
+
 ### Push notifications on the simulator (Phase 3A)
 
 Simulator builds (`--disableProvisioningProfiles`) get `aps-environment: development`, communication notifications and, for the notification service extension, the app group (`TelegramSimulatorEntitlements` / `NotificationServiceSimulatorEntitlements` in `Telegram/BUILD`). On Apple silicon the simulator then gets a real APNs **sandbox** token; the app logs it (`[Relay] push: APNs sandbox token …`) and every account attaches it to its session as `relay_apple_sandbox:<token>` (check with `infra/push-proxy/configure-dev-server.py --sessions alice`).

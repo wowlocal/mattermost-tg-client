@@ -21,7 +21,7 @@ enum MediaConverter {
     }
 
     /// `voice` (5A): the post is a Relay voice message (`VoiceMessageFile.isVoicePost`), shown as Telegram's voice
-    /// bubble; `waveform` replaces a missing one of the marker (computed here, `VoiceWaveforms`).
+    /// bubble; `waveform` replaces a missing one of the marker (computed on the device, `MattermostAccountSync.computedVoiceWaveform`).
     static func media(for file: FileInfo, mediaId: Int64, voice: VoiceMessageMarker? = nil, waveform: Data? = nil) -> Converted {
         if let voice = voice {
             let telegramFile = TelegramMediaFile(

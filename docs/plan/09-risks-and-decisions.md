@@ -56,7 +56,25 @@ Mattermost:
 | D10 | Source hosting (GPL) | Public repo · source on request | Public repo at each released commit | Before first external build |
 | D11 | Deleted posts display | Remove · "deleted" placeholder | Placeholder (matches Mattermost) | Phase 2 |
 | D12 | DM "seen" checks | Off · derived from `last_viewed_at` | Off (matches Mattermost) | Phase 2 |
-| V1 | Voice message format and detection | AAC `.m4a` (transcoded) · Ogg/Opus as recorded; voice bubbles for Relay's marked posts only · also short audio files from other clients | AAC, marked posts only, after checking playback in the web, desktop and official mobile apps | Phase 5A |
+| V1 | Voice message format and detection | AAC `.m4a` (transcoded) · Ogg/Opus as recorded; voice bubbles for Relay's marked posts only · also short audio files from other clients | **Taken in 5A (2026‑10‑27): AAC `.m4a`, marked posts only** (see "V1 outcome" below) | Phase 5A |
+
+### V1 outcome (Phase 5A, 2026‑10‑27)
+
+- **Format: AAC‑LC in `.m4a`** (`audio/mp4`, mono, 48 kHz, ~32 kbps), transcoded on the device with Telegram's own
+  `convertOpusToAAC`. Evidence: the Mattermost 11.7 web app (its bundle in the dev server's container) classifies
+  attachments by extension (`AUDIO_TYPES`: `mp3 wav wma m4a flac aac ogg m4r`) and plays audio in its file preview with a
+  plain `<video controls><source src=…>`, switching to a download view when the browser can't decode the file. With
+  that markup Relay's `.m4a` played in Chrome 155, WebKit on macOS 27 (a `WKWebView`) and Safari on iOS 26.5; an
+  Ogg/Opus file played in Chrome and iOS Safari but in the macOS WebKit view only loaded its metadata (its clock did not
+  move in 10 s). AAC is also the format the platforms' own media frameworks decode (AVFoundation can't read Ogg/Opus).
+  The Mattermost desktop and official mobile apps, Safari on macOS and Firefox were **not** checked
+  ([evidence](../research/phase5a/v1-playback.txt)). Cost: 19–57 ms per recording on the simulator, files 10–16 % larger
+  than the Opus recording.
+- **Detection: marked posts only.** A voice bubble needs the `props.relay_voice` marker (`{v, duration, waveform}`) and
+  exactly one audio file; other audio files (other clients, Relay's own file sends) stay files. The server keeps a
+  regular user's custom `props` (11.7, checked through REST as alice and read back by bob in `GET /posts/{id}` and a
+  channel page; 12.0.1's `SanitizeProps` removes only a fixed list of integration and notification keys — source read,
+  not run).
 
 ## Staffing
 

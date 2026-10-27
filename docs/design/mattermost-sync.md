@@ -366,6 +366,42 @@ go only with Clear for all chats or the cache size limit.
 | Diagnostics | MetricKit payloads → `DiagnosticReportStore` (app container, 30 days / 40 / 4 MB); Settings → About Relay → Diagnostics: Telegram's file log switch, export = summary (versions, servers, passcode/managed keys) + reports + the newest logs (≤ 12 MB, `DiagnosticsRedactor`) zipped with `NSFileCoordinator(.forUploading)` → share sheet. | MattermostSyncCore `Diagnostics/`; MattermostUI `RelayDiagnostics` |
 | DM delete permission | `LimitsConfiguration.canRemoveIncomingMessagesInPrivateChats` = `delete_others_posts` of the system roles (written after the roles load); `maxMessageRevokeIntervalInPrivateChats` = forever. | `ChannelAccess.writeDirectMessageDeletePermission` |
 
+## Voice messages (5A)
+
+Mattermost has no voice-message post type (11.7 and 12.0), so a Relay voice message is an ordinary post with **one
+audio file and no text**, marked in `props` so Relay shows it as Telegram's voice bubble; every other client shows an
+audio file with its own player (decision V1 in [plan 09](../plan/09-risks-and-decisions.md#open-decisions)).
+
+```json
+"props": {"relay_voice": {"v": 1, "duration": 12, "waveform": "<base64 of Telegram's packed waveform>"}}
+```
+
+| Step | How | Where |
+|---|---|---|
+| Recording | Telegram's recorder and composer unchanged: hold the mic button, slide left to cancel, slide up to lock, pause/resume, preview with trimming, send. `MattermostFeatures.voiceMessages` is on (the mic button); round video messages stay off (a tap on the mic shows "Hold to record audio." instead of switching to video), view-once is hidden. | `ChatTextInputPanelNode`, `ChatController`, `ChatControllerLoadDisplayNode` (`// MATTERMOST:`) |
+| Upload | `PostSender.upload` transcodes the recording (Telegram's Ogg/Opus `audio/ogg`) with Telegram's own `convertOpusToAAC` (FFmpeg decode, AVAssetWriter AAC-LC, mono, 48 kHz, 32 kbps) into a temporary `.m4a`, uploaded as `audio/mp4` named `Voice message 2026-10-27 14.05.m4a` (the recording's time in the device's time zone; the prefix is `Relay.VoiceMessage.FileName`, set by MattermostUI). A failed transcoding sends the Ogg/Opus file as `.ogg`, still marked. A forwarded voice message (already the server's file) goes as it is. | `Write/VoiceMessages.swift`, `PostSender` |
+| Post | `outgoingDraft` adds the marker from the local file's `.Audio(isVoice: true, duration, waveform)` (the recorder's 100 × 5-bit waveform, 63 bytes). Offline sends queue like any other (transient errors retried, the uploaded file id kept with the pending row, 4F). After the post, the AAC file (not the Ogg recording) is moved to the sent message's `MattermostFileResource`; after a restart between upload and post the sent message downloads it instead. | `OwnPosts` |
+| Receiving | `PostConverter.voiceMarker`: the marker **and exactly one audio file** (`audio/*` or an audio extension) → `TelegramMediaFile` with `.Audio(isVoice: true, duration, waveform)` + the file name, tag `.voiceOrInstantVideo` (the Voice tab, the playlist that plays the next voice message). A marker on anything else is ignored; audio files without a marker stay files (V1). Same converter for live events, pages, hole fills, catch-up and search results. | `Converters/PostConverter.swift`, `MediaConverter.swift` |
+| Missing waveform | A marked post without a usable waveform (another client's marker): the file is downloaded and decoded (`SoftwareAudioSource`, FFmpeg: m4a, Ogg/Opus, mp3, wav) and Telegram's recorder normalisation applied (`VoiceWaveform.fromPCM`); stored in `sync.sqlite` (`voice_waveform:<file id>`) so rewrites keep it, and written into the message. One at a time. | `Write/VoiceMessages.swift` |
+| Listened state | Incoming voice messages carry `ConsumableContentMessageAttribute` (Telegram's "not played" dot), set to played by Telegram's player. Local only: never sent anywhere (TelegramCore no longer queues `SynchronizeConsumeMessageContents` operations while the Mattermost backend is on, `MarkMessageContentAsConsumedInteractively.swift`); every rewrite of a post keeps the stored value (`PostConversionContext.existingConsumed`). Outgoing voice messages have no dot (Mattermost can't tell whether the other side played it). | `PageWriter.writeMessages` |
+| Existing data | Rich-content version 3: an upgrade re-renders the newest page of every chat and rewrites every **stored** post that has an audio file (`POST /teams/{id}/files/search` with audio extensions, then `POST /posts/ids`), so voice messages stored as files by an older build become voice bubbles. | `Sync/RichContent.swift` |
+| Search | The Voice tabs (chat list search, a chat's profile) search audio files (`ext:m4a ext:ogg …`) and keep the messages with the voice tag; the profile's tab also fills from the channel file search (`HoleFiller.loadChannelFiles`). | `Search/MessageSearch.swift` |
+| Notifications | A file-only post's push says "attached a file." (any push contents mode) and carries no `props`. The notification service extension fetches the post (`GET /posts/{id}`, in parallel with the acknowledgement and the avatar, ~50 ms on the dev server) and, for a marked post without text, shows "Voice message" (`Relay.Push.VoiceMessage`, read from the app bundle's strings: the extension has none). The first, network-free version still says "attached a file." if time runs out. | `MattermostPushServiceHandler`, `MattermostPushTextBuilder(voiceMessage:)` |
+| Previews | The chat list, reply panels and VoiceOver use Telegram's own texts for a voice file ("Voice Message"). VoiceOver adds "Played" / "Not played" for received voice messages; the preview's Delete and Record more buttons got labels. | `ChatMessageItemView`, `ChatTextInputPanelNode` |
+
+**Format (V1).** AAC in MP4 rather than the recorded Ogg/Opus: checked 2026-10-27, the Mattermost 11.7 web app previews
+`AUDIO_TYPES` (`mp3 wav wma m4a flac aac ogg m4r`, by extension) in its file preview with a plain `<video controls>`
+element and falls back to a download view when the browser can't decode it. In that markup Relay's `.m4a` played in
+Chrome 155, WebKit on macOS 27 and Safari on iOS 26.5; an Ogg/Opus file played in Chrome and iOS Safari but not in the
+macOS WebKit view (metadata only). AAC is also the format the platforms' own media frameworks decode (AVFoundation can't
+read Ogg/Opus; Telegram itself converts a voice message to AAC before handing it to Apple's speech recognizer); the
+official mobile and desktop apps were not checked ([evidence](../research/phase5a/v1-playback.txt)). Cost: 19–57 ms to transcode 4–12 s on the simulator; the AAC file is
+10–16 % larger than Telegram's Opus recording.
+
+**Debug hooks** (BUILD.md "Phase 5A"): `RelayDebugFakeMicrophone` replaces the microphone inside
+`ManagedAudioRecorderContext` (debug builds only) with a file or a tone, so the recorder's own encoding, waveform,
+preview and send paths run on a simulator without opening the Mac's microphone.
+
 ## Media resources
 
 `MattermostFileResource(fileId, variant)`, `MattermostAvatarResource(userId, lastPictureUpdate)`, `MattermostURLImageResource(url)` (attachment images, webhook icons, link preview images: on the server directly, elsewhere only through the server's image proxy, see "Rich content and links (3E)"; flattened onto white because Telegram draws photos opaque), `MattermostIconResource(url, round)` (4F: attachment icons as inline custom-emoji WebP images, transparent), all `TelegramMediaResource` + `PostboxCoding`, registered in `mattermostDeclareEncodables()` (app and every extension; R§6). Type names are part of the storage format: never rename them. Fetched through the auxiliary `fetchResource` hook with a `URLSession` that adds the bearer token and supports byte ranges.

@@ -15,6 +15,13 @@ Mattermost server ──▶ push proxy (whoever operates it) ──▶ Apple APN
 - Everything the app sends goes to the Mattermost server address the user typed at login (or a link into a
   signed-in server). The server belongs to the user or their organisation; it is not the developer's and not a
   "third-party partner" of the developer in Apple's sense.
+- **Voice messages (Phase 5A)** are recorded only while the user holds (or has locked) the record button, kept on the
+  device until sent, and sent like any file: an audio attachment (`.m4a`) on the user's own Mattermost server, with
+  the recording's duration and a 100-point loudness outline (the waveform drawn in the bubble) in the post's
+  properties. Recordings are never sent anywhere else and never transcribed (Telegram's voice-to-text stays off). A
+  push for a voice message carries the server's "attached a file." like any file post; the notification service
+  extension then fetches the post from the user's server to say "Voice message". Whether a voice message was played
+  is kept on the device only.
 - Link previews never contact the linked site from the device: preview images load from the server or through
   the server's image proxy (Phase 3E). The map in a shared location uses Apple's MapKit.
 - **Push notifications** are the one path through infrastructure that may be the publisher's: a Mattermost server
@@ -62,6 +69,8 @@ not collected by the developer.
 **Proposed answer: "Data Not Collected"**, on these conditions (each must stay true):
 
 1. The app contains no analytics/crash/ads SDK (true today; re-check before each release, see "Checks" below).
+   Recorded audio (voice messages, 5A) goes only to the user's own server, like photos and files, so it is not
+   "Audio Data" collected by the developer.
    Diagnostics (MetricKit reports, the optional log) leave the device only when the user exports them and picks
    where to send them, so they are not "collected" in Apple's sense; if the publisher ever asks users to send
    exports to a support address and keeps them, declare **Diagnostics → Crash Data / Performance Data / Other
@@ -124,4 +133,8 @@ Run on the release build's `Payload/Telegram.app` (see `docs/release/RELEASE.md`
 
 Relay asks for: camera, microphone, photo library (read/add), contacts (only when sharing a contact), location
 (only when sharing a location), Face ID (passcode unlock), motion (location sharing). All are requested at the
-moment of use, never at launch. Wording lives in `Telegram/BUILD` (`TelegramInfoPlist`).
+moment of use, never at launch. Wording lives in `Telegram/BUILD` (`TelegramInfoPlist`) and
+`Telegram/Telegram-iOS/en.lproj/InfoPlist.strings`. The microphone (asked the first time the record button is held,
+5A): "Relay uses the microphone to record voice messages and videos with sound. A recording is sent to your Mattermost
+server only when you send it." Voice messages add no required-reason API category (the recorder, AVFoundation's
+AAC encoder and FFmpeg were already in the binaries), so the privacy manifest is unchanged.
