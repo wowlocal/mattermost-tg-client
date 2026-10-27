@@ -209,3 +209,53 @@ extension ChatControllerNode {
         return true
     }
 }
+
+/// MATTERMOST: a message that passed the `@channel` confirmation (4H), sent again without asking.
+private var mattermostConfirmedChannelMentionText: String?
+
+extension ChatControllerNode {
+    /// MATTERMOST: `@all`, `@channel` or `@here` in a channel with more than 5 members asks first, as Mattermost's
+    /// clients do ("Confirm sending notifications to entire channel", with the number of people and, when members
+    /// have them, time zones). The check needs the server (member count, the user's `use_channel_mentions`), so the
+    /// send stops here and `resend` runs it again once confirmed; the composer keeps the text meanwhile. Messages
+    /// without such a mention are sent at once.
+    func mattermostConfirmChannelWideMention(text: String, controller: ChatControllerImpl?, resend: @escaping () -> Void) -> Bool {
+        guard MattermostBackend.isEnabled, let peerId = self.chatLocation.peerId, MattermostComposer.containsChannelWideMention(text) else {
+            return false
+        }
+        if mattermostConfirmedChannelMentionText == text {
+            mattermostConfirmedChannelMentionText = nil
+            return false
+        }
+        let context = self.context
+        weak let controller = controller
+        let _ = (MattermostComposer.channelMentionConfirmation(accountId: context.account.id, peerId: peerId, text: text)
+        |> deliverOnMainQueue).startStandalone(next: { confirmation in
+            guard let confirmation else {
+                mattermostConfirmedChannelMentionText = text
+                resend()
+                return
+            }
+            guard let controller else {
+                return
+            }
+            let strings = context.sharedContext.currentPresentationData.with { $0 }.strings
+            let people = "\(confirmation.memberCount)"
+            let message: String
+            if confirmation.timezoneCount > 0 {
+                let zones = confirmation.timezoneCount == 1 ? strings.Relay_ChannelMention_Timezone : strings.Relay_ChannelMention_Timezones("\(confirmation.timezoneCount)").string
+                message = confirmation.isHereOnly ? strings.Relay_ChannelMention_HereTimezones(people, zones).string : strings.Relay_ChannelMention_AllTimezones(people, zones).string
+            } else {
+                message = confirmation.isHereOnly ? strings.Relay_ChannelMention_Here(people).string : strings.Relay_ChannelMention_All(people).string
+            }
+            controller.present(textAlertController(context: context, title: strings.Relay_ChannelMention_Title, text: message, actions: [
+                TextAlertAction(type: .genericAction, title: strings.Common_Cancel, action: {}),
+                TextAlertAction(type: .defaultAction, title: strings.Relay_ChannelMention_Confirm, action: {
+                    mattermostConfirmedChannelMentionText = text
+                    resend()
+                })
+            ]), in: .window(.root))
+        })
+        return true
+    }
+}

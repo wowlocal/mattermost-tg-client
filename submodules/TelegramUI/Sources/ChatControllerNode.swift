@@ -5253,6 +5253,13 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
             if self.mattermostRunSlashCommand(text: effectiveInputText.string, controller: self.controller, completion: completion) {
                 return
             }
+            // MATTERMOST: `@channel` in a large channel asks first (4H, MattermostComposerQueries.swift).
+            if self.mattermostConfirmChannelWideMention(text: effectiveInputText.string, controller: self.controller, resend: { [weak self] in
+                self?.sendCurrentMessage(silentPosting: silentPosting, scheduleTime: scheduleTime, repeatPeriod: repeatPeriod, postpone: postpone, messageEffect: messageEffect, sendWithoutFormatting: sendWithoutFormatting, completion: completion)
+            }) {
+                self.lastSendTimestamp = 0.0
+                return
+            }
             let peerId = effectivePresentationInterfaceState.chatLocation.peerId
             if peerId?.namespace != Namespaces.Peer.SecretChat, let interactiveEmojis = self.interactiveEmojis, interactiveEmojis.emojis.contains(trimmedInputText), effectiveInputText.attribute(ChatTextInputAttributes.customEmoji, at: 0, effectiveRange: nil) == nil {
                 messages.append(.message(text: "", attributes: [], inlineStickers: [:], mediaReference: AnyMediaReference.standalone(media: TelegramMediaDice(emoji: trimmedInputText)), threadId: self.chatLocation.threadId, replyToMessageId: self.chatPresentationInterfaceState.interfaceState.replyMessageSubject?.subjectModel, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: []))
