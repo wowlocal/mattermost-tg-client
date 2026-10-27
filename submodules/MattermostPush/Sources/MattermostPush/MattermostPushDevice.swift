@@ -16,28 +16,44 @@ public enum MattermostPushEnvironment: String, Equatable, Sendable {
 /// official Mattermost apps use `apple_rn` / `apple_rnbeta` with their own topics, so Relay can't use
 /// Mattermost's hosted push proxy. No `-v<N>` suffix: the proxy reads one as an app version and strips
 /// it; version 1 (the default) keeps the server's badge on `clear` pushes.
+///
+/// Mattermost 12 checks the platform (`model.IsValidDeviceId`): only the official apps' `apple_rn`,
+/// `apple_rnbeta` and `android_rn` (each with an optional `-v<N>`) pass, anything else is refused with 400
+/// `api.context.invalid_body_param.app_error` (11.7 takes any platform). On such a server Relay registers with
+/// the official names instead (`compatible`), which Relay's push proxy maps to Relay's topic too (Phase 4E).
 public enum MattermostPushDevice {
     public static let productionPlatform = "relay_apple"
     public static let sandboxPlatform = "relay_apple_sandbox"
+    /// The platforms for servers that refuse Relay's own (Mattermost 12 and newer).
+    public static let compatibleProductionPlatform = "apple_rn"
+    public static let compatibleSandboxPlatform = "apple_rnbeta"
+    /// The server's answer to a device id whose platform it doesn't accept.
+    public static let invalidDeviceIdErrorId = "api.context.invalid_body_param.app_error"
     /// `platform` of `POST /notifications/ack`. The server special-cases `"ios"` (it re-enables pushes for a
     /// session whose device had them turned off).
     public static let ackPlatform = "ios"
 
-    public static func platform(_ environment: MattermostPushEnvironment) -> String {
+    public static func platform(_ environment: MattermostPushEnvironment, compatible: Bool = false) -> String {
         switch environment {
         case .sandbox:
-            return self.sandboxPlatform
+            return compatible ? self.compatibleSandboxPlatform : self.sandboxPlatform
         case .production:
-            return self.productionPlatform
+            return compatible ? self.compatibleProductionPlatform : self.productionPlatform
         }
+    }
+
+    /// Whether a registered device id uses the compatible platform (the server refused Relay's own before).
+    public static func isCompatible(deviceId: String) -> Bool {
+        let platform = deviceId.split(separator: ":", maxSplits: 1).first.map(String.init) ?? ""
+        return platform == self.compatibleProductionPlatform || platform == self.compatibleSandboxPlatform
     }
 
     public static func hexToken(_ token: Data) -> String {
         return token.map { String(format: "%02x", $0) }.joined()
     }
 
-    public static func deviceId(token: Data, environment: MattermostPushEnvironment) -> String {
-        return "\(self.platform(environment)):\(self.hexToken(token))"
+    public static func deviceId(token: Data, environment: MattermostPushEnvironment, compatible: Bool = false) -> String {
+        return "\(self.platform(environment, compatible: compatible)):\(self.hexToken(token))"
     }
 
     /// The environment from the `aps-environment` of an embedded provisioning profile. Without a profile

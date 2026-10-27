@@ -6,7 +6,7 @@ model.PushNotification as JSON). This bridge stands in for that URL:
 
 1. it forwards every request unchanged to the real push proxy (--proxy, default http://127.0.0.1:8066), so
    the proxy's logs show the server → proxy leg, and its acknowledgements (POST /api/v1/ack) as well;
-2. for pushes to Relay's platforms (relay_apple, relay_apple_sandbox) it builds the APNs payload exactly as
+2. for pushes to Relay's platforms (relay_apple, relay_apple_sandbox; apple_rn, apple_rnbeta from Mattermost 12+) it builds the APNs payload exactly as
    mattermost-push-proxy 6.6.0 does (server/apple_notification_server.go, SendNotification) and delivers it
    to the simulator (real ack ids, post ids, server id):
    - `--deliver simctl` (default): `xcrun simctl push <udid> org.relaychat.Relay`. iOS shows the server's
@@ -41,7 +41,8 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 BUNDLE_ID = "org.relaychat.Relay"
-RELAY_PLATFORMS = {"relay_apple", "relay_apple_sandbox"}
+# Mattermost 12+ servers refuse Relay's own platforms; Relay registers there as apple_rn / apple_rnbeta (4E).
+RELAY_PLATFORMS = {"relay_apple", "relay_apple_sandbox", "apple_rn", "apple_rnbeta"}
 
 
 def log(text):

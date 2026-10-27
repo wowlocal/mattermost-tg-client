@@ -26,6 +26,26 @@
             "AppleAuthKeyFile": "/mattermost-push-proxy/certs/AuthKey.p8",
             "AppleAuthKeyID": "__APNS_KEY_ID__",
             "AppleTeamID": "__APNS_TEAM_ID__"
+        },
+        {
+            "Type": "apple_rn",
+            "ApplePushUseDevelopment": false,
+            "ApplePushCertPrivate": "",
+            "ApplePushCertPassword": "",
+            "ApplePushTopic": "__APNS_TOPIC__",
+            "AppleAuthKeyFile": "/mattermost-push-proxy/certs/AuthKey.p8",
+            "AppleAuthKeyID": "__APNS_KEY_ID__",
+            "AppleTeamID": "__APNS_TEAM_ID__"
+        },
+        {
+            "Type": "apple_rnbeta",
+            "ApplePushUseDevelopment": true,
+            "ApplePushCertPrivate": "",
+            "ApplePushCertPassword": "",
+            "ApplePushTopic": "__APNS_TOPIC__",
+            "AppleAuthKeyFile": "/mattermost-push-proxy/certs/AuthKey.p8",
+            "AppleAuthKeyID": "__APNS_KEY_ID__",
+            "AppleTeamID": "__APNS_TEAM_ID__"
         }
     ],
     "AndroidPushSettings": [],

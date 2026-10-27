@@ -89,12 +89,15 @@ extension MattermostAccountSync {
             self.store.setCursor(MattermostSync.ownUsernameCursor, username)
         }
         let environment = MattermostPushDevice.currentEnvironment()
-        let deviceId = MattermostPushDevice.deviceId(token: token, environment: environment)
+        let previous = MattermostPushRegistrationRecord(encoded: self.store.cursor(MattermostSync.pushRegistrationCursor))
+        // A server that refused Relay's own platform before (Mattermost 12+) gets the compatible one again.
+        var compatible = previous.map { MattermostPushDevice.isCompatible(deviceId: $0.deviceId) } ?? false
+        var deviceId = MattermostPushDevice.deviceId(token: token, environment: environment, compatible: compatible)
         let appVersion = MattermostAccountSync.appVersion
         let session = MattermostPushRegistrationRecord.sessionTag(token: self.client.token ?? "")
         let now = Date().timeIntervalSince1970
-        if let record = MattermostPushRegistrationRecord(encoded: self.store.cursor(MattermostSync.pushRegistrationCursor)), !record.needsRegistration(session: session, deviceId: deviceId, appVersion: appVersion, now: now) {
-            MMLog.log("push: account \(self.account.id.int64): device \(MattermostPushDevice.platform(environment)) already registered")
+        if let record = previous, !record.needsRegistration(session: session, deviceId: deviceId, appVersion: appVersion, now: now) {
+            MMLog.log("push: account \(self.account.id.int64): device \(MattermostPushDevice.platform(environment, compatible: compatible)) already registered")
             return
         }
         var attempt = 0
@@ -103,8 +106,13 @@ extension MattermostAccountSync {
                 try await self.client.attachDevice(deviceId: deviceId)
                 let record = MattermostPushRegistrationRecord(session: session, deviceId: deviceId, appVersion: appVersion, registeredAt: Date().timeIntervalSince1970)
                 self.store.setCursor(MattermostSync.pushRegistrationCursor, record.encoded)
-                MMLog.log("push: account \(self.account.id.int64): registered device \(MattermostPushDevice.platform(environment)):\(MattermostPushDevice.hexToken(token).prefix(8))… with \(self.server.url)")
+                MMLog.log("push: account \(self.account.id.int64): registered device \(MattermostPushDevice.platform(environment, compatible: compatible)):\(MattermostPushDevice.hexToken(token).prefix(8))… with \(self.server.url)")
                 return
+            } catch MattermostError.server(let appError) where !compatible && appError.id == MattermostPushDevice.invalidDeviceIdErrorId {
+                // Mattermost 12+ accepts only the official apps' platforms (`MattermostPushDevice`).
+                compatible = true
+                deviceId = MattermostPushDevice.deviceId(token: token, environment: environment, compatible: true)
+                MMLog.log("push: account \(self.account.id.int64): the server refuses platform \(MattermostPushDevice.platform(environment)); registering as \(MattermostPushDevice.platform(environment, compatible: true))")
             } catch let error as MattermostError where error.isTransient {
                 attempt += 1
                 let delay = min(60.0, pow(2.0, Double(min(attempt, 6))))

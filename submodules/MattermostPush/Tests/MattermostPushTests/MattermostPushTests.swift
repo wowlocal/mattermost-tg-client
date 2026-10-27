@@ -389,6 +389,18 @@ final class MattermostPushDeviceTests: XCTestCase {
         XCTAssertFalse(MattermostPushDevice.productionPlatform.contains("-v"))
     }
 
+    /// Mattermost 12 refuses Relay's platforms; the compatible ones are the official apps' names (no "-v<N>").
+    func testCompatibleDeviceId() {
+        let token = Data([0x00, 0x01, 0xab, 0xff])
+        XCTAssertEqual(MattermostPushDevice.deviceId(token: token, environment: .sandbox, compatible: true), "apple_rnbeta:0001abff")
+        XCTAssertEqual(MattermostPushDevice.deviceId(token: token, environment: .production, compatible: true), "apple_rn:0001abff")
+        XCTAssertTrue(MattermostPushDevice.isCompatible(deviceId: "apple_rnbeta:0001abff"))
+        XCTAssertTrue(MattermostPushDevice.isCompatible(deviceId: "apple_rn:0001abff"))
+        XCTAssertFalse(MattermostPushDevice.isCompatible(deviceId: "relay_apple_sandbox:0001abff"))
+        XCTAssertFalse(MattermostPushDevice.isCompatible(deviceId: "apple_rn-v2:0001abff"))
+        XCTAssertFalse(MattermostPushDevice.isCompatible(deviceId: ""))
+    }
+
     func testEnvironmentFromProfile() {
         let development = Data("garbage<plist><dict><key>Entitlements</key><dict><key>aps-environment</key>\n<string>development</string></dict></dict></plist>garbage".utf8)
         let production = Data("<key>aps-environment</key><string>production</string>".utf8)
