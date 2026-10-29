@@ -7,8 +7,9 @@ import MattermostSyncCore
 
 // Phase 3D-2: directory and membership. The user directory (compose, add members), DMs and group messages,
 // browsing, joining and creating channels, channel settings (name, purpose, header, archive, privacy) and member
-// management (add, remove, channel admin). MattermostUI's screens call these; every change goes to the server
-// first and reaches Postbox through the normal sync path (`refreshChannel`, the WebSocket events).
+// management (add, remove, channel admin). Invite People brings people into a team (its invite link, adding users
+// who have an account, email invitations; `TeamInvites.swift`). MattermostUI's screens call these; every change
+// goes to the server first and reaches Postbox through the normal sync path (`refreshChannel`, the WebSocket events).
 
 /// Why a directory request failed, for the screens' alerts.
 public enum MattermostDirectoryError: Error, Equatable {
@@ -107,6 +108,22 @@ public struct MattermostChannelSettings: Equatable {
     public let access: MattermostChannelAccess
     /// `<server>/<team>/channels/<name>`.
     public let link: String
+}
+
+/// How the user can bring people into a team (Invite People), from the team, the server's settings and the user's
+/// roles (`TeamInviteRules`).
+public struct MattermostTeamInvite: Equatable {
+    public let teamId: String
+    public let teamDisplayName: String
+    /// `<server>/signup_user_complete/?id=<invite_id>`; nil when the user can't share one.
+    public let inviteLink: String?
+    /// New people can create an account through the link (`EnableUserCreation`); otherwise only people who already
+    /// have an account on the server can join with it.
+    public let allowsSignUp: Bool
+    /// Users who have an account on the server can be added (`add_user_to_team`).
+    public let canAddMembers: Bool
+    /// Invitations can be emailed (`EnableEmailInvitations`, `invite_user`).
+    public let canInviteByEmail: Bool
 }
 
 /// The Mattermost profile of a user (the profile screen's rows).
@@ -228,11 +245,11 @@ public enum MattermostDirectory {
 
     /// A page of the user directory: everyone the user may message (the server's `RestrictDirectMessage`:
     /// the whole server, or the user's teams' members), without the user and deactivated users. With
-    /// `notInChannel`, the members of that channel's team who are not in it (Add Members). A non-empty `query`
-    /// searches names (one page).
-    public static func users(accountId: AccountRecordId, query: String, page: Int, notInChannel channelPeerId: PeerId? = nil) -> Signal<MattermostUserPage, MattermostDirectoryError> {
+    /// `notInChannel`, the members of that channel's team who are not in it (Add Members); with `notInTeam`, the
+    /// users of the server who are not in that team (Invite People). A non-empty `query` searches names (one page).
+    public static func users(accountId: AccountRecordId, query: String, page: Int, notInChannel channelPeerId: PeerId? = nil, notInTeam teamId: String? = nil) -> Signal<MattermostUserPage, MattermostDirectoryError> {
         return self.run(accountId: accountId) { sync in
-            return try await sync.directoryUsers(query: query, page: page, notInChannelPeerId: channelPeerId)
+            return try await sync.directoryUsers(query: query, page: page, notInChannelPeerId: channelPeerId, notInTeamId: teamId)
         }
     }
 
@@ -352,6 +369,30 @@ public enum MattermostDirectory {
         }
     }
 
+    // MARK: Teams (Invite People)
+
+    /// How the user can bring people into a team: `GET /teams/{id}` (its invite id), the client config, the roles.
+    public static func teamInvite(accountId: AccountRecordId, teamId: String) -> Signal<MattermostTeamInvite, MattermostDirectoryError> {
+        return self.run(accountId: accountId) { sync in
+            return try await sync.teamInvite(teamId: teamId)
+        }
+    }
+
+    /// Adds users who have an account on the server to a team; returns the users the server refused, with its
+    /// message.
+    public static func addTeamMembers(accountId: AccountRecordId, teamId: String, userPeerIds: [PeerId]) -> Signal<[(PeerId, String)], MattermostDirectoryError> {
+        return self.run(accountId: accountId) { sync in
+            return try await sync.addTeamMembers(teamId: teamId, userPeerIds: userPeerIds)
+        }
+    }
+
+    /// Emails invitations to join a team; returns the addresses the server didn't invite, with its message.
+    public static func inviteByEmail(accountId: AccountRecordId, teamId: String, emails: [String]) -> Signal<[(String, String)], MattermostDirectoryError> {
+        return self.run(accountId: accountId) { sync in
+            return try await sync.inviteByEmail(teamId: teamId, emails: emails)
+        }
+    }
+
     // MARK: Running
 
     static func run<T>(accountId: AccountRecordId, _ body: @escaping (MattermostAccountSync) async throws -> T) -> Signal<T, MattermostDirectoryError> {
@@ -431,7 +472,7 @@ extension MattermostAccountSync {
         return scope.isEmpty ? nil : scope
     }
 
-    func directoryUsers(query: String, page: Int, notInChannelPeerId: PeerId?) async throws -> MattermostUserPage {
+    func directoryUsers(query: String, page: Int, notInChannelPeerId: PeerId?, notInTeamId: String? = nil) async throws -> MattermostUserPage {
         let perPage = 60
         var teamId: String?
         var notInChannelId: String?
@@ -439,20 +480,21 @@ extension MattermostAccountSync {
             let channelState = try self.channelStateOrThrow(channelPeerId)
             teamId = self.teamId(for: channelState)
             notInChannelId = channelState.channel.id
-        } else {
+        } else if notInTeamId == nil {
+            // Invite People (`notInTeamId`) lists the whole server, whatever `RestrictDirectMessage` says.
             teamId = await self.directoryTeamScope()
         }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let found: [User]
         let hasMore: Bool
         if trimmed.isEmpty {
-            found = try await self.client.users(UserListOptions(inTeamId: teamId, notInChannelId: notInChannelId, active: true, page: page, perPage: perPage))
+            found = try await self.client.users(UserListOptions(inTeamId: teamId, notInTeamId: notInTeamId, notInChannelId: notInChannelId, active: true, page: page, perPage: perPage))
             hasMore = found.count == perPage
         } else {
             if page > 0 {
                 return MattermostUserPage(users: [], hasMore: false)
             }
-            found = try await self.client.searchUsers(UserSearchOptions(term: trimmed, teamId: teamId, notInChannelId: notInChannelId, allowInactive: false, limit: 100))
+            found = try await self.client.searchUsers(UserSearchOptions(term: trimmed, teamId: teamId, notInTeamId: notInTeamId, notInChannelId: notInChannelId, allowInactive: false, limit: 100))
             hasMore = false
         }
         let users = found.filter { $0.id != self.ownUserId && !$0.isDeactivated }

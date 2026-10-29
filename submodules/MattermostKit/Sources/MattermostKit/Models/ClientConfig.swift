@@ -60,6 +60,13 @@ extension ClientConfig {
     /// Bytes. Only in the logged-in config.
     public var maxFileSize: Int64? { int64("MaxFileSize") }
 
+    /// Team invitations by email can be sent (`POST /teams/{id}/invite/email`).
+    public var enableEmailInvitations: Bool { bool("EnableEmailInvitations") ?? false }
+    /// New accounts can be created (sign-up, including through a team's invite link).
+    public var enableUserCreation: Bool { bool("EnableUserCreation") ?? true }
+    /// Anyone can sign up, not only people with an invitation.
+    public var enableOpenServer: Bool { bool("EnableOpenServer") ?? false }
+
     /// Missing on servers without collapsed reply threads; treated as `.disabled`.
     public var collapsedThreads: CollapsedThreadsSetting {
         guard let raw = self["CollapsedThreads"], !raw.isEmpty else { return .disabled }

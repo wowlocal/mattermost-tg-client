@@ -66,6 +66,26 @@ final class RequestBuildingTests: StubbedClientTestCase {
         await check({ _ = try await $0.teamsUnread(userId: "u1", excludeTeamId: "t1") }, response: "[]", method: "GET", path: "/api/v4/users/u1/teams/unread", query: ["exclude_team": "t1"])
     }
 
+    func testTeamInvites() async {
+        await check({ _ = try await $0.team(id: "t1") }, response: #"{"id":"t1"}"#, method: "GET", path: "/api/v4/teams/t1")
+        await check(
+            { _ = try await $0.addTeamMembers(teamId: "t1", userIds: ["u1", "u2"]) },
+            response: "[]",
+            method: "POST",
+            path: "/api/v4/teams/t1/members/batch",
+            query: ["graceful": "true"],
+            body: [["team_id": "t1", "user_id": "u1"], ["team_id": "t1", "user_id": "u2"]]
+        )
+        await check(
+            { _ = try await $0.inviteToTeam(teamId: "t1", emails: ["dana@example.com", "eve@example.com"]) },
+            response: "[]",
+            method: "POST",
+            path: "/api/v4/teams/t1/invite/email",
+            query: ["graceful": "true"],
+            body: ["dana@example.com", "eve@example.com"]
+        )
+    }
+
     func testPreferenceWrites() async {
         let preference = Preference(userId: "u1", category: "favorite_channel", name: "c1", value: "true")
         let expected: JSONValue = [["user_id": "u1", "category": "favorite_channel", "name": "c1", "value": "true"]]

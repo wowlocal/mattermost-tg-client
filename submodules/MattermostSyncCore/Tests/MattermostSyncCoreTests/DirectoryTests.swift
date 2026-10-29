@@ -132,3 +132,65 @@ final class ChannelAccessRulesTests: XCTestCase {
         XCTAssertEqual(ChannelAccessRules.roleNames("system_user", "team_user team_admin", "", "channel_user  channel_admin"), ["system_user", "team_user", "team_admin", "channel_user", "channel_admin"])
     }
 }
+
+final class TeamInviteRulesTests: XCTestCase {
+    /// `team_user` on the 11.7 dev server.
+    private let teamUser: Set<String> = ["add_user_to_team", "invite_user", "list_team_channels", "view_team"]
+
+    func testTeamMember() {
+        let result = TeamInviteRules.evaluate(permissions: teamUser, inviteId: "7hskmz6zcjd9djf5xhfpy3de4c", groupConstrained: false, emailInvitationsEnabled: true)
+        XCTAssertTrue(result.canShareLink)
+        XCTAssertTrue(result.canAddMembers)
+        XCTAssertTrue(result.canInviteByEmail)
+        // The dev server's setting.
+        let noEmail = TeamInviteRules.evaluate(permissions: teamUser, inviteId: "7hskmz6zcjd9djf5xhfpy3de4c", groupConstrained: false, emailInvitationsEnabled: false)
+        XCTAssertFalse(noEmail.canInviteByEmail)
+        XCTAssertTrue(noEmail.allowsAnything)
+    }
+
+    func testWithoutPermissions() {
+        // A scheme that takes inviting away: the server leaves the invite id out.
+        let result = TeamInviteRules.evaluate(permissions: ["view_team"], inviteId: "", groupConstrained: false, emailInvitationsEnabled: true)
+        XCTAssertEqual(result, TeamInviteRules.Result())
+        XCTAssertFalse(result.allowsAnything)
+        // Adding existing users without inviting.
+        let addOnly = TeamInviteRules.evaluate(permissions: ["add_user_to_team"], inviteId: "", groupConstrained: false, emailInvitationsEnabled: true)
+        XCTAssertTrue(addOnly.canAddMembers)
+        XCTAssertFalse(addOnly.canInviteByEmail)
+        XCTAssertTrue(TeamInviteRules.evaluate(permissions: ["manage_system"], inviteId: "i", groupConstrained: false, emailInvitationsEnabled: true).canInviteByEmail)
+    }
+
+    func testUnknownRolesLeaveItToTheServer() {
+        let result = TeamInviteRules.evaluate(permissions: nil, inviteId: "", groupConstrained: false, emailInvitationsEnabled: true)
+        XCTAssertFalse(result.canShareLink)
+        XCTAssertTrue(result.canAddMembers)
+        XCTAssertTrue(result.canInviteByEmail)
+    }
+
+    func testGroupSyncedTeam() {
+        let result = TeamInviteRules.evaluate(permissions: teamUser, inviteId: "i", groupConstrained: true, emailInvitationsEnabled: true)
+        XCTAssertFalse(result.canShareLink)
+        XCTAssertTrue(result.canAddMembers)
+        XCTAssertFalse(result.canInviteByEmail)
+    }
+
+    func testInviteLink() {
+        XCTAssertEqual(TeamInviteRules.inviteLink(serverURL: "https://chat.example.com/", inviteId: "abc"), "https://chat.example.com/signup_user_complete/?id=abc")
+        XCTAssertEqual(TeamInviteRules.inviteLink(serverURL: "https://example.com/mattermost", inviteId: "abc"), "https://example.com/mattermost/signup_user_complete/?id=abc")
+    }
+
+    func testEmailAddresses() {
+        let result = TeamInviteRules.emailAddresses(" dana@example.com, eve@example.org;frank@example.net\nDana@Example.com  not-an-address x@y ")
+        XCTAssertEqual(result.valid, ["dana@example.com", "eve@example.org", "frank@example.net"])
+        XCTAssertEqual(result.invalid, ["not-an-address", "x@y"])
+        XCTAssertTrue(TeamInviteRules.emailAddresses("   ,, ").valid.isEmpty)
+        XCTAssertTrue(TeamInviteRules.emailAddresses("   ,, ").invalid.isEmpty)
+    }
+
+    func testPastedAddresses() {
+        let result = TeamInviteRules.emailAddresses("Dana Scully <dana@example.com>, \"Mulder, Fox\" <fox@example.com>, mailto:skinner@example.com, <walter@example.com>")
+        XCTAssertEqual(result.valid, ["dana@example.com", "fox@example.com", "skinner@example.com", "walter@example.com"])
+        XCTAssertEqual(result.invalid, [])
+        XCTAssertEqual(TeamInviteRules.emailAddresses("a@@example.com @example.com a@.example.com a@example.").invalid, ["a@@example.com", "@example.com", "a@.example.com", "a@example."])
+    }
+}

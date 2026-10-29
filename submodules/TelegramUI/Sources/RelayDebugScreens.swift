@@ -20,6 +20,7 @@ import ChatMessageItemView
 // - `privacy`, `data`, `notifications`, `appearance`, `about`, `devices`, `openlinks` (Open Links In),
 //   `reaction-notifications`: Settings sub-screens;
 // - `compose`: the New Message screen;
+// - `invite`: New Message → Invite People (the first team; `directory-do do=team team=<name>` switches);
 // - `peerinfo`, `attach`: the profile of / the attach menu in the chat that the Spike A hook opened
 //   (combine with `SIMCTL_CHILD_RELAY_DEBUG_OPEN_CHAT=dm|ios-team|…`);
 // - `authorinfo`: the profile of the newest message's author in that chat;
@@ -62,6 +63,11 @@ extension TelegramRootController {
             }
         case "compose":
             self.openRootCompose()
+        case "invite":
+            guard let context = self.chatListController?.context else {
+                return
+            }
+            self.pushViewController(mattermostInvitePeopleController(context: context, teamId: nil))
         case "privacy", "data", "notifications", "appearance", "about", "devices", "openlinks", "reaction-notifications", "passcode", "diagnostics":
             guard let context = self.chatListController?.context else {
                 return

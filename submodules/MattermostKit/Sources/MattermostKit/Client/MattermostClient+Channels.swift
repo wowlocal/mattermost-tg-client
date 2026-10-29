@@ -21,9 +21,35 @@ extension MattermostClient {
         return try await send(APIRequest(.get, apiPath("users", userId, "teams", "unread"), query: query.items))
     }
 
-    /// `GET /teams/{team_id}`.
+    /// `GET /teams/{team_id}`. `inviteId` is only filled for users who may invite people (`invite_user`) or
+    /// manage the team.
     public func team(id: String) async throws -> Team {
         try await send(APIRequest(.get, apiPath("teams", id)))
+    }
+
+    private struct TeamMemberBody: Encodable {
+        var teamId: String
+        var userId: String
+
+        enum CodingKeys: String, CodingKey {
+            case teamId = "team_id"
+            case userId = "user_id"
+        }
+    }
+
+    /// `POST /teams/{team_id}/members/batch?graceful=true`: adds existing users to a team (`add_user_to_team`).
+    /// One result per user; the users the server refuses (e.g. a group-synced team) carry its error, the others
+    /// are added. An unknown user fails the whole request.
+    public func addTeamMembers(teamId: String, userIds: [String]) async throws -> [TeamMemberWithError] {
+        let body = userIds.map { TeamMemberBody(teamId: teamId, userId: $0) }
+        return try await send(APIRequest.json(.post, apiPath("teams", teamId, "members", "batch"), body: body, query: [URLQueryItem(name: "graceful", value: "true")]))
+    }
+
+    /// `POST /teams/{team_id}/invite/email?graceful=true`: emails an invitation to join the team to each address
+    /// (`EnableEmailInvitations`, `invite_user` and `add_user_to_team`). One result per address; the server's
+    /// 501 `api.team.invite_members.disabled.app_error` when email invitations are off.
+    public func inviteToTeam(teamId: String, emails: [String]) async throws -> [EmailInviteWithError] {
+        try await send(APIRequest.json(.post, apiPath("teams", teamId, "invite", "email"), body: emails, query: [URLQueryItem(name: "graceful", value: "true")]))
     }
 }
 

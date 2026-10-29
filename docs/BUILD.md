@@ -210,6 +210,10 @@ tools/relay-remote.py "$UDID" directory-do do=tap name=<channel name>    # Brows
 tools/relay-remote.py "$UDID" directory-do do=join                       # the preview's Join Channel
 tools/relay-remote.py "$UDID" directory-do do=set field=name value="Ops" # New Channel / Channel Settings fields: name, url, purpose, header, private
 tools/relay-remote.py "$UDID" directory-do do=archive                    # Channel Settings: archive / unarchive / convert (confirmed); confirm-archive shows the alert
+tools/relay-remote.py "$UDID" directory-do do=invite                     # New Message → Invite People (or launch with RELAY_DEBUG_OPEN_SCREEN=invite)
+tools/relay-remote.py "$UDID" directory-do do=copy                       # Invite People: Copy Link (also: share, team team=design)
+tools/relay-remote.py "$UDID" directory-do do=add                        # Invite People → Add to Team (then tap username=…, submit)
+tools/relay-remote.py "$UDID" directory-do do=set value="a@x.com, b@y.com"  # Invite People: the email field; do=send sends
 tools/relay-remote.py "$UDID" peerinfo                                   # the profile of the chat on top
 tools/relay-remote.py "$UDID" info-state                                 # its access bits, members and their actions
 tools/relay-remote.py "$UDID" info-edit                                  # the Edit button (Channel Settings)

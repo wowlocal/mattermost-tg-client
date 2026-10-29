@@ -13,11 +13,12 @@ import MattermostSync
 /// path of the tap it stands for (`tools/relay-remote.py`, docs/BUILD.md "Phase 3D-2"):
 /// - `new-message`: the chat list's compose button (`ChatListController.activateCompose`);
 /// - `directory`: the visible directory screen (compose, group message, add members, browse, preview, new channel,
-///   channel settings) and its state;
+///   channel settings, invite people, add to team) and its state;
 /// - `directory-do` (`do`, plus its arguments): a tap on that screen — `search` (`text`), `tap` (`username` or
 ///   channel `name`), `submit` (Create / Add / Save), `more` (next page), `new-group`, `new-channel`, `browse`,
-///   `archived` (`value`), `team` (`team`), `join`, `set` (`field`: name/url/purpose/header/private, `value`),
-///   `convert`, `archive`, `unarchive`, `confirm-archive`;
+///   `invite`, `archived` (`value`), `team` (`team`), `join`, `set` (`field`: name/url/purpose/header/private, `value`;
+///   on Invite People only `value`, the addresses), `convert`, `archive`, `unarchive`, `confirm-archive`, and on
+///   Invite People `share`, `copy`, `add` (Add to Team), `send`;
 /// - `alert` (`do`: `confirm` or `cancel`): a button of the confirmation alert these screens showed;
 /// - `info-*` (`peerinfo`, `info-edit`, `info-add-member`, `info-member` (`username`, `do`: menu/promote/remove/remove-confirmed),
 ///   `info-leave`, `info-state`): the profile of the visible chat, registered by PeerInfoScreen

@@ -22,6 +22,8 @@ import MattermostSync
 //   the channel, several at once.
 // - "Browse Channels" (`mattermostBrowseChannelsController`): a team's public (or archived) channels, with search;
 //   a channel the user isn't in opens a preview with Join.
+// - "Invite People" (`mattermostInvitePeopleController`): a team's invite link (share, copy), adding people who have
+//   an account on the server ("Add to Team", the directory of users not in the team), email invitations.
 // The chats themselves arrive through the normal sync path; these screens only wait for their peer to exist.
 
 // MARK: - Shared
@@ -76,6 +78,8 @@ enum MattermostUserDirectoryMode: Equatable {
     case groupMessage
     /// Add Members to a channel: select people, then Add.
     case addMembers(channelPeerId: PeerId)
+    /// Invite People → Add to Team: select people on the server who aren't in the team, then Add.
+    case addToTeam(teamId: String, teamName: String)
 
     var isSelecting: Bool {
         if case .compose = self {
@@ -92,14 +96,16 @@ private final class UserDirectoryArguments {
     let newGroupMessage: () -> Void
     let newChannel: () -> Void
     let browseChannels: () -> Void
+    let invitePeople: () -> Void
 
-    init(context: AccountContext, updateQuery: @escaping (String) -> Void, openUser: @escaping (MattermostDirectoryUser) -> Void, newGroupMessage: @escaping () -> Void, newChannel: @escaping () -> Void, browseChannels: @escaping () -> Void) {
+    init(context: AccountContext, updateQuery: @escaping (String) -> Void, openUser: @escaping (MattermostDirectoryUser) -> Void, newGroupMessage: @escaping () -> Void, newChannel: @escaping () -> Void, browseChannels: @escaping () -> Void, invitePeople: @escaping () -> Void) {
         self.context = context
         self.updateQuery = updateQuery
         self.openUser = openUser
         self.newGroupMessage = newGroupMessage
         self.newChannel = newChannel
         self.browseChannels = browseChannels
+        self.invitePeople = invitePeople
     }
 }
 
@@ -108,6 +114,7 @@ private enum UserDirectoryEntry: ItemListNodeEntry {
     case newGroupMessage(String)
     case newChannel(String)
     case browseChannels(String)
+    case invitePeople(String)
     case info(String)
     case header(String)
     case user(index: Int, user: MattermostDirectoryUser, text: String, selected: Bool?)
@@ -117,7 +124,7 @@ private enum UserDirectoryEntry: ItemListNodeEntry {
         switch self {
         case .search:
             return 0
-        case .newGroupMessage, .newChannel, .browseChannels, .info:
+        case .newGroupMessage, .newChannel, .browseChannels, .invitePeople, .info:
             return 1
         case .header, .user, .status:
             return 2
@@ -134,10 +141,12 @@ private enum UserDirectoryEntry: ItemListNodeEntry {
             return 2
         case .browseChannels:
             return 3
-        case .info:
+        case .invitePeople:
             return 4
-        case .header:
+        case .info:
             return 5
+        case .header:
+            return 6
         case let .user(index, _, _, _):
             return 100 + index
         case .status:
@@ -153,7 +162,7 @@ private enum UserDirectoryEntry: ItemListNodeEntry {
         switch (lhs, rhs) {
         case let (.search(a, b), .search(c, d)):
             return a == c && b == d
-        case let (.newGroupMessage(a), .newGroupMessage(b)), let (.newChannel(a), .newChannel(b)), let (.browseChannels(a), .browseChannels(b)), let (.info(a), .info(b)), let (.header(a), .header(b)), let (.status(a), .status(b)):
+        case let (.newGroupMessage(a), .newGroupMessage(b)), let (.newChannel(a), .newChannel(b)), let (.browseChannels(a), .browseChannels(b)), let (.invitePeople(a), .invitePeople(b)), let (.info(a), .info(b)), let (.header(a), .header(b)), let (.status(a), .status(b)):
             return a == b
         case let (.user(a, b, c, d), .user(e, f, g, h)):
             return a == e && b == f && c == g && d == h
@@ -180,6 +189,10 @@ private enum UserDirectoryEntry: ItemListNodeEntry {
         case let .browseChannels(title):
             return ItemListPeerActionItem(presentationData: presentationData, systemStyle: .glass, icon: UIImage(bundleImageName: "Contact List/LinkActionIcon")?.withRenderingMode(.alwaysTemplate), title: title, sectionId: self.section, height: .generic, editing: false, action: {
                 arguments.browseChannels()
+            })
+        case let .invitePeople(title):
+            return ItemListPeerActionItem(presentationData: presentationData, systemStyle: .glass, icon: UIImage(bundleImageName: "Contact List/AddMemberIcon")?.withRenderingMode(.alwaysTemplate), title: title, sectionId: self.section, height: .generic, editing: false, action: {
+                arguments.invitePeople()
             })
         case let .info(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
@@ -232,8 +245,14 @@ func mattermostUserDirectoryController(context: AccountContext, mode: Mattermost
     var dismissImpl: (() -> Void)?
 
     var channelPeerId: PeerId?
-    if case let .addMembers(peerId) = mode {
+    var notInTeamId: String?
+    switch mode {
+    case let .addMembers(peerId):
         channelPeerId = peerId
+    case let .addToTeam(teamId, _):
+        notInTeamId = teamId
+    case .compose, .groupMessage:
+        break
     }
 
     // Loads the next page of the current query (a new query starts at page 0 after a short pause).
@@ -258,7 +277,7 @@ func mattermostUserDirectoryController(context: AccountContext, mode: Mattermost
         let pause: Double = reset && !query.isEmpty ? 0.25 : 0.0
         loadDisposable.set((Signal<Void, MattermostDirectoryError>.single(Void()) |> delay(pause, queue: .mainQueue())
         |> mapToSignal { _ in
-            return MattermostDirectory.users(accountId: accountId, query: query, page: page, notInChannel: channelPeerId)
+            return MattermostDirectory.users(accountId: accountId, query: query, page: page, notInChannel: channelPeerId, notInTeam: notInTeamId)
         }
         |> deliverOnMainQueue).start(next: { result in
             updateState { state in
@@ -316,7 +335,7 @@ func mattermostUserDirectoryController(context: AccountContext, mode: Mattermost
                 // Offline: open the chat anyway; the first message creates the DM (2A).
                 mattermostOpenChat(context: context, navigationController: navigationControllerImpl?(), peerId: user.peer.id)
             }))
-        case .groupMessage, .addMembers:
+        case .groupMessage, .addMembers, .addToTeam:
             updateState { state in
                 var state = state
                 if let index = state.selected.firstIndex(of: user.peer.id) {
@@ -354,8 +373,17 @@ func mattermostUserDirectoryController(context: AccountContext, mode: Mattermost
                 }
                 mattermostPresentError(error, context: context, present: presentImpl)
             }))
-        case let .addMembers(channelPeerId):
-            actionDisposable.set((MattermostDirectory.addMembers(accountId: accountId, channelPeerId: channelPeerId, userPeerIds: state.selected)
+        case .addMembers, .addToTeam:
+            let request: Signal<[(PeerId, String)], MattermostDirectoryError>
+            switch mode {
+            case let .addToTeam(teamId, _):
+                request = MattermostDirectory.addTeamMembers(accountId: accountId, teamId: teamId, userPeerIds: state.selected)
+            case let .addMembers(channelPeerId):
+                request = MattermostDirectory.addMembers(accountId: accountId, channelPeerId: channelPeerId, userPeerIds: state.selected)
+            case .compose, .groupMessage:
+                return
+            }
+            actionDisposable.set((request
             |> deliverOnMainQueue).start(next: { failed in
                 updateState { state in
                     var state = state
@@ -402,6 +430,8 @@ func mattermostUserDirectoryController(context: AccountContext, mode: Mattermost
         pushImpl?(mattermostCreateChannelController(context: context, teamId: nil))
     }, browseChannels: {
         pushImpl?(mattermostBrowseChannelsController(context: context, teamId: nil))
+    }, invitePeople: {
+        pushImpl?(mattermostInvitePeopleController(context: context, teamId: nil))
     })
 
     let signal = combineLatest(context.sharedContext.presentationData, statePromise.get())
@@ -419,6 +449,7 @@ func mattermostUserDirectoryController(context: AccountContext, mode: Mattermost
                 entries.append(.newGroupMessage(strings.Relay_Compose_NewGroupMessage))
                 entries.append(.newChannel(strings.Relay_Compose_NewChannel))
                 entries.append(.browseChannels(strings.Relay_Compose_BrowseChannels))
+                entries.append(.invitePeople(strings.Relay_Compose_InvitePeople))
             }
             if state.busy {
                 rightButton = ItemListNavigationButton(content: .none, style: .activity, enabled: true, action: {})
@@ -433,9 +464,14 @@ func mattermostUserDirectoryController(context: AccountContext, mode: Mattermost
                     submit()
                 })
             }
-        case .addMembers:
-            title = strings.Relay_AddMembers_Title
-            entries.append(.info(strings.Relay_AddMembers_Info))
+        case .addMembers, .addToTeam:
+            if case let .addToTeam(_, teamName) = mode {
+                title = strings.Relay_Invite_AddTitle
+                entries.append(.info(strings.Relay_Invite_AddInfo(teamName).string))
+            } else {
+                title = strings.Relay_AddMembers_Title
+                entries.append(.info(strings.Relay_AddMembers_Info))
+            }
             if state.busy {
                 rightButton = ItemListNavigationButton(content: .none, style: .activity, enabled: true, action: {})
             } else {
@@ -475,6 +511,8 @@ func mattermostUserDirectoryController(context: AccountContext, mode: Mattermost
             return "group-message"
         case .addMembers:
             return "add-members"
+        case .addToTeam:
+            return "add-to-team"
         }
     }()
     #endif
@@ -533,6 +571,9 @@ func mattermostUserDirectoryController(context: AccountContext, mode: Mattermost
         },
         "browse": { _ in
             arguments.browseChannels()
+        },
+        "invite": { _ in
+            arguments.invitePeople()
         }
     ]
     #endif

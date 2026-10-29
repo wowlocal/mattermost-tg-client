@@ -48,5 +48,9 @@ public enum PermissionName {
     public static let createPrivateChannel = "create_private_channel"
     public static let createGroupChannel = "create_group_channel"
     public static let joinPublicChannels = "join_public_channels"
+    /// Add existing users to a team (Invite People).
+    public static let addUserToTeam = "add_user_to_team"
+    /// Invite people to a team: its invite link, email invitations.
+    public static let inviteUser = "invite_user"
     public static let manageSystem = "manage_system"
 }

@@ -160,6 +160,55 @@ public struct TeamMember: Codable, Sendable, Equatable {
     }
 }
 
+/// One user of `POST /teams/{team_id}/members/batch?graceful=true`: the membership, or why the server refused
+/// to add that user (the others are added).
+public struct TeamMemberWithError: Codable, Sendable, Equatable {
+    public var userId: String
+    public var member: TeamMember?
+    public var error: AppError?
+
+    public init(userId: String, member: TeamMember? = nil, error: AppError? = nil) {
+        self.userId = userId
+        self.member = member
+        self.error = error
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case member
+        case error
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        userId = c.string(.userId)
+        member = c.lenient(TeamMember.self, .member)
+        error = c.lenient(AppError.self, .error)
+    }
+}
+
+/// One address of `POST /teams/{team_id}/invite/email?graceful=true`: `error` when the server didn't invite it.
+public struct EmailInviteWithError: Codable, Sendable, Equatable {
+    public var email: String
+    public var error: AppError?
+
+    public init(email: String, error: AppError? = nil) {
+        self.email = email
+        self.error = error
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case email
+        case error
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        email = c.string(.email)
+        error = c.lenient(AppError.self, .error)
+    }
+}
+
 /// Unread totals for one team (`GET /users/{user_id}/teams/unread`).
 public struct TeamUnread: Codable, Sendable, Equatable {
     public var teamId: String

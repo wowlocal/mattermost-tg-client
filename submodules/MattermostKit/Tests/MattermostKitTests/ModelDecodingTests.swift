@@ -129,6 +129,36 @@ final class ModelDecodingTests: XCTestCase {
         XCTAssertEqual(unread[0].threadMentionCount, 1)
     }
 
+    /// Invite People: graceful batch results as the 11.7 dev server returns them (an added member, `error: null`),
+    /// a refused user and an address that wasn't invited; the invitation settings of the client config.
+    func testTeamInviteResults() throws {
+        let members = try decode([TeamMemberWithError].self, """
+        [{"user_id": "goj9h13iafbxm88y75radun1yh", "member": {"team_id": "adnf1q5793b95egpgq6pbt7y7h", "user_id": "goj9h13iafbxm88y75radun1yh", "roles": "team_user", "delete_at": 0, "scheme_guest": false, "scheme_user": true, "scheme_admin": false, "explicit_roles": ""}, "error": null},
+         {"user_id": "u2", "member": null, "error": {"id": "api.team.add_members.user_denied", "message": "This team is managed by groups. This user is not in a group that is synced to this team.", "status_code": 403}}]
+        """)
+        XCTAssertEqual(members.count, 2)
+        XCTAssertNil(members[0].error)
+        XCTAssertEqual(members[0].member?.teamId, "adnf1q5793b95egpgq6pbt7y7h")
+        XCTAssertEqual(members[1].userId, "u2")
+        XCTAssertNil(members[1].member)
+        XCTAssertEqual(members[1].error?.id, "api.team.add_members.user_denied")
+        XCTAssertEqual(members[1].error?.statusCode, 403)
+
+        let invites = try decode([EmailInviteWithError].self, #"[{"email": "dana@example.com", "error": null}, {"email": "x@blocked.example", "error": {"id": "api.team.invite_members.invalid_email.app_error", "message": "The following email addresses do not belong to an accepted domain: x@blocked.example."}}]"#)
+        XCTAssertEqual(invites.map(\.email), ["dana@example.com", "x@blocked.example"])
+        XCTAssertNil(invites[0].error)
+        XCTAssertEqual(invites[1].error?.id, "api.team.invite_members.invalid_email.app_error")
+
+        let config = try decode(ClientConfig.self, #"{"EnableEmailInvitations": "false", "EnableUserCreation": "true", "EnableOpenServer": "true"}"#)
+        XCTAssertFalse(config.enableEmailInvitations)
+        XCTAssertTrue(config.enableUserCreation)
+        XCTAssertTrue(config.enableOpenServer)
+        let empty = try decode(ClientConfig.self, "{}")
+        XCTAssertFalse(empty.enableEmailInvitations)
+        XCTAssertTrue(empty.enableUserCreation)
+        XCTAssertFalse(empty.enableOpenServer)
+    }
+
     // MARK: Channels
 
     func testChannels() throws {
