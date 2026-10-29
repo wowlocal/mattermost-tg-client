@@ -558,12 +558,20 @@ public final class MattermostAccountSync: @unchecked Sendable {
                 // Phase 3C: Mattermost pins posts in DMs and the self-DM too (the message menu's Pin).
                 .withUpdatedCanPinMessages(true)
         })
-        self.state.with { state in
+        let changedUsernames = self.state.with { state -> Set<String> in
+            var changed = Set<String>()
             for user in users {
+                // What a group message's title and picture show of a member (DisplayNames.swift).
+                if let previous = state.users[user.id], previous.username == user.username, previous.firstName == user.firstName, previous.lastName == user.lastName, previous.nickname == user.nickname, previous.lastPictureUpdate == user.lastPictureUpdate {
+                } else {
+                    changed.insert(user.username.lowercased())
+                }
                 state.users[user.id] = user
                 state.userIdByUsername[user.username.lowercased()] = user.id
             }
+            return changed
         }
+        self.refreshGroupMessages(changedUsernames: changedUsernames, transaction: transaction)
         if users.contains(where: { $0.customStatus?.expiryDate != nil }) {
             self.scheduleCustomStatusExpiry()
         }
@@ -622,10 +630,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
                 return nil
             }
             peerId = MattermostPeerIds.channelPeerId(peer.peerId)
-            // 4H: a group message is titled with its other members' display names, as Mattermost's clients do.
-            let title = channel.type == .groupMessage ? self.groupMessageTitle(channel) : (channel.displayName.isEmpty ? channel.name : channel.displayName)
             let access = self.channelAccess(channel: channel, member: member, teamId: teamId)
-            updatePeersCustom(transaction: transaction, peers: [PeerConverter.channel(channel, title: title, peerId: peerId, access: access)], update: { _, updated in
+            updatePeersCustom(transaction: transaction, peers: [self.channelPeer(channel, peerId: peerId, access: access)], update: { _, updated in
                 return updated
             })
             let about = channel.purpose.isEmpty ? channel.header : channel.purpose

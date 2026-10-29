@@ -135,15 +135,62 @@ extension MattermostAccountSync {
         MMLog.log("names: \(users.count) user(s) and \(groupMessages.count) group message(s) renamed as \(format2) (was \(written ?? "none"), \(reason)) in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
     }
 
+    /// Writes a group message's peer again when its title or picture (its members' names and pictures) changed.
     func retitleGroupMessage(_ channelState: ChannelState, transaction: Transaction) {
-        let title = self.groupMessageTitle(channelState.channel)
-        guard let current = transaction.getPeer(channelState.peerId) as? TelegramChannel, current.title != title else {
+        let access = self.channelAccess(channel: channelState.channel, member: channelState.member, teamId: channelState.teamId)
+        let peer = self.channelPeer(channelState.channel, peerId: channelState.peerId, access: access)
+        guard let current = transaction.getPeer(channelState.peerId) as? TelegramChannel, current.title != peer.title || current.photo != peer.photo else {
             return
         }
-        let access = self.channelAccess(channel: channelState.channel, member: channelState.member, teamId: channelState.teamId)
-        updatePeersCustom(transaction: transaction, peers: [PeerConverter.channel(channelState.channel, title: title, peerId: channelState.peerId, access: access)], update: { _, updated in
+        updatePeersCustom(transaction: transaction, peers: [peer], update: { _, updated in
             return updated
         })
+    }
+
+    /// The peer of a channel the user is in. 4H: a group message is titled with its other members' display names, as
+    /// Mattermost's clients do, and pictured with their pictures (`MattermostGroupAvatar`; Mattermost has no picture
+    /// for channels or group messages).
+    func channelPeer(_ channel: Channel, peerId: PeerId, access: MattermostChannelAccess) -> TelegramChannel {
+        if channel.type == .groupMessage {
+            return PeerConverter.channel(channel, title: self.groupMessageTitle(channel), peerId: peerId, access: access, photo: MattermostGroupAvatar.photo(members: self.groupMessageAvatarMembers(channel)))
+        }
+        return PeerConverter.channel(channel, title: channel.displayName.isEmpty ? channel.name : channel.displayName, peerId: peerId, access: access)
+    }
+
+    /// A group message's other members as its picture shows them, in the title's order: their own picture, or the
+    /// letter and colour of their initials avatar (a member the sync doesn't know yet: the username's).
+    func groupMessageAvatarMembers(_ channel: Channel) -> [MattermostGroupAvatarResource.Member] {
+        let ownUsername = self.ownUsername.lowercased()
+        let usernames = UserDisplayName.groupUsernames(displayName: channel.displayName).filter { $0.lowercased() != ownUsername }
+        return usernames.prefix(4).map { username -> MattermostGroupAvatarResource.Member in
+            let user = self.state.with { state -> User? in
+                return state.userIdByUsername[username.lowercased()].flatMap { state.users[$0] }
+            }
+            guard let user else {
+                let hash = UInt64(username.lowercased().persistentHashString, radix: 16) ?? 0
+                return MattermostGroupAvatarResource.Member(userId: "", pictureUpdate: 0, letter: String(username.prefix(1)).uppercased(), colorIndex: Int32(hash % 7))
+            }
+            let name = self.displayName(of: user)
+            let letter = String((name.isEmpty ? user.username : name).prefix(1)).uppercased()
+            // The colour Telegram gives the member's own initials avatar: the peer id's value modulo the gradients.
+            let colorIndex = self.store.allocatePeer(mattermostId: user.id, kind: .user, teamId: nil).map { Int32(abs(MattermostPeerIds.userPeerId($0.peerId).id._internalGetInt64Value()) % 7) } ?? 0
+            return MattermostGroupAvatarResource.Member(userId: user.id, pictureUpdate: user.hasCustomPicture ? user.lastPictureUpdate : 0, letter: letter, colorIndex: colorIndex)
+        }
+    }
+
+    /// After users are written: the group messages with a member whose name or picture changed (or who wasn't known
+    /// before) get their title and picture again.
+    func refreshGroupMessages(changedUsernames: Set<String>, transaction: Transaction) {
+        if changedUsernames.isEmpty {
+            return
+        }
+        let groupMessages = self.state.with { state in state.channels.values.filter { $0.channel.type == .groupMessage } }
+        for channelState in groupMessages {
+            let usernames = UserDisplayName.groupUsernames(displayName: channelState.channel.displayName).map { $0.lowercased() }
+            if usernames.contains(where: { changedUsernames.contains($0) }) {
+                self.retitleGroupMessage(channelState, transaction: transaction)
+            }
+        }
     }
 
     /// A Mattermost id (26 lowercase letters and digits), as opposed to the override peers' keys.

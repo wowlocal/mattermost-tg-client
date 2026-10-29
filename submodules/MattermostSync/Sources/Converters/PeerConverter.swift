@@ -60,13 +60,14 @@ enum PeerConverter {
     /// peers have none. `access` (`MattermostChannelAccess`, Phase 3D-2) is what the user may do with the channel;
     /// it goes into `version`, which Telegram's UI doesn't read for these peers. `participationStatus` is `.left` for
     /// a public channel the user hasn't joined (a search result, Phase 3C).
-    static func channel(_ channel: Channel, title: String, peerId: PeerId, username: String? = nil, access: MattermostChannelAccess = [], participationStatus: TelegramChannelParticipationStatus = .member) -> TelegramChannel {
+    /// `photo`: a group message's members' pictures (`MattermostGroupAvatar`); Mattermost channels have none.
+    static func channel(_ channel: Channel, title: String, peerId: PeerId, username: String? = nil, access: MattermostChannelAccess = [], participationStatus: TelegramChannelParticipationStatus = .member, photo: [TelegramMediaImageRepresentation] = []) -> TelegramChannel {
         return TelegramChannel(
             id: peerId,
             accessHash: .personal(0),
             title: title,
             username: username,
-            photo: [],
+            photo: photo,
             creationDate: mmSeconds(channel.createAt),
             version: access.rawValue,
             participationStatus: participationStatus,

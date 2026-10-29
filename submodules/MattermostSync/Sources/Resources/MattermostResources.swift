@@ -218,6 +218,7 @@ private var mattermostDeclaredEncodables: Void = {
     declareEncodable(MattermostAvatarResource.self, f: { MattermostAvatarResource(decoder: $0) })
     declareEncodable(MattermostURLImageResource.self, f: { MattermostURLImageResource(decoder: $0) })
     declareEncodable(MattermostIconResource.self, f: { MattermostIconResource(decoder: $0) })
+    declareEncodable(MattermostGroupAvatarResource.self, f: { MattermostGroupAvatarResource(decoder: $0) })
     return
 }()
 
@@ -288,6 +289,9 @@ public func mattermostFetchResource(postbox: Postbox, resource: MediaResource) -
     }
     if let resource = resource as? MattermostURLImageResource {
         return fetchURLImage(postbox: postbox, url: resource.url, resourceId: resource.id.stringRepresentation, transform: flattenedImageData)
+    }
+    if let resource = resource as? MattermostGroupAvatarResource {
+        return MattermostGroupAvatar.fetch(postbox: postbox, resource: resource)
     }
     if let resource = resource as? MattermostIconResource {
         let round = resource.round

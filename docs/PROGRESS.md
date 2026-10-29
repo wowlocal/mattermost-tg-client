@@ -762,3 +762,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
     invitations (when the server allows them). Verified on the dev server except email (no mail server there).
   - **Group photos:** not possible. Mattermost has no picture for channels or group messages (`/channels/{id}/image`
     is 404 on 11.7); only teams have an icon. Relay offers no photo change for channels, as before.
+  - **Group message pictures** (requested after the photo question): a group message shows its other members'
+    pictures composed on the device (halves, a half and two quarters, or quarters; letter tiles in Telegram's colours
+    for members without a picture), rewritten when a member's picture or name changes. Verified on the simulator with
+    "bob, carol" (two halves) and a new test group "bob, dave, l4b0002" (a picture and two letter tiles).

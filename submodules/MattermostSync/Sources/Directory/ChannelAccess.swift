@@ -203,9 +203,7 @@ extension MattermostAccountSync {
                 if current.version == access.rawValue {
                     continue
                 }
-                let channel = channelState.channel
-                let title = channel.displayName.isEmpty ? channel.name : channel.displayName
-                updatePeersCustom(transaction: transaction, peers: [PeerConverter.channel(channel, title: title, peerId: channelState.peerId, access: access)], update: { _, updated in
+                updatePeersCustom(transaction: transaction, peers: [self.channelPeer(channelState.channel, peerId: channelState.peerId, access: access)], update: { _, updated in
                     return updated
                 })
                 count += 1
