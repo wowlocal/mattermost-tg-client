@@ -228,8 +228,14 @@ private func makeThreadsController(context: AccountContext, initialTeamId: Strin
         selectedTeam.set(teamId)
         MattermostSync.reloadThreads(accountId: accountId, teamId: teamId)
     }
-    if selectedFolderId != nil && teamsValue.isEmpty {
-        // The Threads tab, made before the account synced: pick the first team once it has.
+    // The Threads tab, made before the account synced: pick the first team once it has. Started with the
+    // controller's state (below): `actionsDisposable` is disposed only when that ends, and a tab bar whose
+    // Threads tab was never opened never starts it (a debug build then trapped on the leaked subscription
+    // when the tab bar went away, at every login and logout of a new account).
+    let waitForTeams: () -> Void = {
+        guard selectedFolderId != nil && teamsValue.isEmpty else {
+            return
+        }
         actionsDisposable.add((MattermostSync.teamsWhenReady(accountId: accountId)
         |> deliverOnMainQueue).startStrict(next: { value in
             teamsValue = value
@@ -268,6 +274,9 @@ private func makeThreadsController(context: AccountContext, initialTeamId: Strin
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: title, leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .plain, animateChanges: true)
         return (controllerState, (listState, arguments))
+    }
+    |> beforeStarted {
+        waitForTeams()
     }
     |> afterDisposed {
         actionsDisposable.dispose()
