@@ -16,6 +16,7 @@ import MultiAnimationRenderer
 import ShimmerEffect
 import GenerateStickerPlaceholderImage
 import EntityKeyboard
+import WebPBinding
 
 private func generateBubbleImage(foreground: UIColor, diameter: CGFloat, shadowBlur: CGFloat) -> UIImage? {
     return generateImage(CGSize(width: diameter + shadowBlur * 2.0, height: diameter + shadowBlur * 2.0), rotatedContext: { size, context in
@@ -132,6 +133,30 @@ private final class StarsButtonEffectLayer: SimpleLayer {
     }
 }
 
+// MATTERMOST: decoded static reaction images (see `ReactionNode.staticImageFile`), shared by every reaction bar of
+// the process, so a bar opened again draws its reactions at once.
+private enum StaticReactionImages {
+    private static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 400
+        return cache
+    }()
+    
+    /// The image, decoded from the stored file if needed (a 160 px WebP takes about a millisecond); nil while the
+    /// file is not stored yet.
+    static func image(context: AccountContext, resourceId: EngineMediaResource.Id) -> UIImage? {
+        let key = resourceId.stringRepresentation as NSString
+        if let image = self.cache.object(forKey: key) {
+            return image
+        }
+        guard let path = context.engine.resources.completedResourcePath(id: resourceId), let data = try? Data(contentsOf: URL(fileURLWithPath: path), options: .mappedIfSafe), let image = WebP.convert(fromWebP: data) else {
+            return nil
+        }
+        self.cache.setObject(image, forKey: key)
+        return image
+    }
+}
+
 public final class ReactionNode: ASDisplayNode, ReactionItemNode {
     let context: AccountContext
     let theme: PresentationTheme
@@ -141,6 +166,15 @@ public final class ReactionNode: ASDisplayNode, ReactionItemNode {
     private let isLocked: Bool
     private let hasAppearAnimation: Bool
     private let useDirectRendering: Bool
+
+    // MATTERMOST: a reaction whose image is a static picture (Relay's reactions are static WebP custom-emoji
+    // files rendered on the device, MattermostReactionImages) is drawn from a decoded image kept in memory
+    // (`StaticReactionImages`), not through two AnimatedStickerNodes. Those read and decode the file again
+    // every time the bar opens and show it only after the "appear" animation has played, so the bar opened
+    // empty for most of a second, and its reactions could not be tapped until then (`isAnimationLoaded`).
+    private let staticImageFile: TelegramMediaFile?
+    private var staticImage: UIImage?
+    private var staticImageDisposable: Disposable?
     
     let selectionTintView: UIView?
     let selectionView: UIView?
@@ -175,11 +209,11 @@ public final class ReactionNode: ASDisplayNode, ReactionItemNode {
     }
     
     var currentFrameImage: UIImage? {
-        return self.staticAnimationNode.currentFrameImage
+        return self.staticImage ?? self.staticAnimationNode.currentFrameImage
     }
     
     var isAnimationLoaded: Bool {
-        return self.staticAnimationNode.currentFrameImage != nil
+        return self.staticImage != nil || self.staticAnimationNode.currentFrameImage != nil
     }
     
     public init(context: AccountContext, theme: PresentationTheme, item: ReactionItem, icon: EmojiPagerContentComponent.Item.Icon, animationCache: AnimationCache, animationRenderer: MultiAnimationRenderer, loopIdle: Bool, isLocked: Bool, hasAppearAnimation: Bool = true, useDirectRendering: Bool = false) {
@@ -189,7 +223,9 @@ public final class ReactionNode: ASDisplayNode, ReactionItemNode {
         self.icon = icon
         self.loopIdle = loopIdle
         self.isLocked = isLocked
-        self.hasAppearAnimation = hasAppearAnimation
+        let stillFile = item.stillAnimation._parse()
+        self.staticImageFile = stillFile.isStaticEmoji ? stillFile : nil
+        self.hasAppearAnimation = hasAppearAnimation && self.staticImageFile == nil
         self.useDirectRendering = useDirectRendering
         
         self.selectionTintView = UIView()
@@ -200,7 +236,7 @@ public final class ReactionNode: ASDisplayNode, ReactionItemNode {
         
         self.staticAnimationNode = self.useDirectRendering ? DirectAnimatedStickerNode(lottieSettings: self.context.lottieRenderingSettings) : DefaultAnimatedStickerNodeImpl(lottieSettings: self.context.lottieRenderingSettings)
     
-        if hasAppearAnimation {
+        if self.hasAppearAnimation {
             self.staticAnimationNode.isHidden = true
             self.animateInAnimationNode = self.useDirectRendering ? DirectAnimatedStickerNode(lottieSettings: self.context.lottieRenderingSettings) : DefaultAnimatedStickerNodeImpl(lottieSettings: self.context.lottieRenderingSettings)
         }
@@ -264,11 +300,44 @@ public final class ReactionNode: ASDisplayNode, ReactionItemNode {
                 }
             }
         }
+
+        if let staticImageFile = self.staticImageFile {
+            // MATTERMOST: the image node exists from the start, so the layout never sets up the animated nodes.
+            let customContentsNode = ASDisplayNode()
+            customContentsNode.isUserInteractionEnabled = false
+            self.customContentsNode = customContentsNode
+            self.addSubnode(customContentsNode)
+
+            let resourceId = EngineMediaResource.Id(staticImageFile.resource.id)
+            if let image = StaticReactionImages.image(context: context, resourceId: resourceId) {
+                self.setStaticImage(image)
+            } else {
+                self.staticImageDisposable = (context.engine.resources.data(id: resourceId)
+                |> filter { $0.isComplete }
+                |> take(1)
+                |> deliverOn(Queue.concurrentDefaultQueue())
+                |> map { _ -> UIImage? in
+                    return StaticReactionImages.image(context: context, resourceId: resourceId)
+                }
+                |> deliverOnMainQueue).start(next: { [weak self] image in
+                    guard let self, let image else {
+                        return
+                    }
+                    self.setStaticImage(image)
+                })
+            }
+        }
     }
     
     deinit {
         self.fetchStickerDisposable?.dispose()
         self.fetchFullAnimationDisposable?.dispose()
+        self.staticImageDisposable?.dispose()
+    }
+
+    private func setStaticImage(_ image: UIImage) {
+        self.staticImage = image
+        self.customContentsNode?.contents = image.cgImage
     }
     
     var maskNode: ASDisplayNode? {
@@ -276,12 +345,20 @@ public final class ReactionNode: ASDisplayNode, ReactionItemNode {
     }
     
     func willAppear(animated: Bool) {
-        
+        // MATTERMOST: a static image waits for `appear` too, as the animated ones wait for their appear animation.
+        if animated, self.staticImageFile != nil {
+            self.customContentsNode?.isHidden = true
+        }
     }
     
     func appear(animated: Bool) {
+        if self.staticImageFile != nil {
+            self.customContentsNode?.isHidden = false
+        }
         if animated {
-            if self.item.isCustom {
+            if self.staticImageFile != nil {
+                self.layer.animateSpring(from: 0.01 as NSNumber, to: 1.0 as NSNumber, keyPath: "transform.scale", duration: 0.4)
+            } else if self.item.isCustom {
                 self.layer.animateSpring(from: 0.01 as NSNumber, to: 1.0 as NSNumber, keyPath: "transform.scale", duration: 0.4)
                 
                 if self.animationNode == nil {

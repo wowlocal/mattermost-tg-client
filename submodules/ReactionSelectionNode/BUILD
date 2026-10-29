@@ -42,6 +42,7 @@ swift_library(
         "//submodules/Markdown",
         "//submodules/TelegramUI/Components/Premium/PremiumStarComponent",
         "//submodules/TelegramUI/Components/GlassBackgroundComponent",
+        "//submodules/WebPBinding:WebPBinding",
     ],
     visibility = [
         "//visibility:public",
