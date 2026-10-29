@@ -744,3 +744,21 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
     push server's `REMOVE` is sticky per session (`last_removed_device_id`; a new login clears it). iPad simulators
     (iOS 26.5) stop delivering synthetic touches once the main UI is up; the real iPad works (screenshots taken through
     the debug remote).
+
+### 2026‑10‑29
+
+- **TestFlight feedback on `31874`** (reported by the user from the phone):
+  - **Reaction picker slow every time:** the context menu's reaction bar drew Relay's static WebP reactions through
+    Telegram's animated-sticker nodes, decoding each again per opening and showing it after the appear animation:
+    the bar opened empty for about 0.7 s on the simulator (longer on a phone) and could not be tapped meanwhile.
+    Now drawn from decoded images kept in memory (`80e29c4555`); on the simulator the reactions show in the bar's
+    first frame.
+  - **Sticky mention badges** (`e198886ced`): a read made while the previous read was being pushed was dropped
+    (`ReadStatePusher` confirmed unconditionally), replayed `posted` events counted mentions again, and read
+    mentions kept their tag (the @ button jumped to old mentions). Verified with the new debug `read` action reading
+    two posts in a row: "read further meanwhile, pushing again", server `mention_count` 0, no tags at or below
+    the read id.
+  - **Invite People** (`f1b8822788`): invite link (share, copy), add users who have an account to a team, email
+    invitations (when the server allows them). Verified on the dev server except email (no mail server there).
+  - **Group photos:** not possible. Mattermost has no picture for channels or group messages (`/channels/{id}/image`
+    is 404 on 11.7); only teams have an icon. Relay offers no photo change for channels, as before.
