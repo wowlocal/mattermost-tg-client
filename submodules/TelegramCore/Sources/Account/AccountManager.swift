@@ -391,6 +391,86 @@ public func logoutFromAccount(id: AccountRecordId, accountManager: AccountManage
     }
 }
 
+private let accountDirectoryReservations = Atomic<[AccountRecordId: Int]>(value: [:])
+// Serial: on a concurrent queue `deliverOn` can run a value after the completion that follows it,
+// and sweeps started by successive record changes would delete the same tree at once.
+private let accountDirectoryCleanupQueue = Queue(name: "AccountDirectoryCleanup", qos: .utility)
+
+/// MATTERMOST: keeps `managedCleanupAccounts` off the directory of an account that has no record yet,
+/// until the returned disposable is disposed, which must happen after the record is committed. For
+/// code that writes an account's files before its record exists (the record cannot come first: it
+/// loads as an unauthorized account and is removed). An account that starts as the auth record needs
+/// none, the auth record covers its directory.
+public func reserveAccountDirectory(id: AccountRecordId) -> Disposable {
+    let _ = accountDirectoryReservations.modify { reservations in
+        var reservations = reservations
+        reservations[id, default: 0] += 1
+        return reservations
+    }
+    return ActionDisposable {
+        let _ = accountDirectoryReservations.modify { reservations in
+            var reservations = reservations
+            if let count = reservations[id], count > 1 {
+                reservations[id] = count - 1
+            } else {
+                reservations.removeValue(forKey: id)
+            }
+            return reservations
+        }
+    }
+}
+
+/// MATTERMOST: deletes the `account-*` directories in `rootPath` that belong to no account. They are
+/// listed first and judged after, against the records, the auth record and the reservations as they
+/// are then. Anything listed was created after its record or reservation, so a live account's
+/// directory is always recognised, and a directory created after the listing is not touched.
+///
+/// Judging against the records view that triggered the sweep (as Telegram does) deleted the
+/// directory of an account created in between, under its open database: SQLite then failed the new
+/// postbox's first write (TestFlight 1.0.0 (31868), a trap in `SqliteValueBox.insertOrReplaceStatement`
+/// from `openPostbox` while the sweep was still removing the tree).
+func cleanupStaleAccountDirectories(accountManager: AccountManager<TelegramAccountManagerTypes>, rootPath: String) -> Signal<Never, NoError> {
+    let currentTemporarySessionId = accountManager.temporarySessionId
+    let directories = Signal<[URL], NoError> { subscriber in
+        let files = (try? FileManager.default.contentsOfDirectory(at: URL(fileURLWithPath: rootPath), includingPropertiesForKeys: [], options: [])) ?? []
+        subscriber.putNext(files.filter { $0.lastPathComponent.hasPrefix("account-") })
+        subscriber.putCompletion()
+        return EmptyDisposable
+    }
+    |> runOn(accountDirectoryCleanupQueue)
+    return directories
+    |> mapToSignal { directories -> Signal<Never, NoError> in
+        if directories.isEmpty {
+            return .complete()
+        }
+        return accountManager.transaction { transaction -> Set<String> in
+            var validPaths = Set<String>()
+            for record in transaction.getRecords() {
+                if let temporarySessionId = record.temporarySessionId, temporarySessionId != currentTemporarySessionId {
+                    continue
+                }
+                validPaths.insert(accountRecordIdPathName(record.id))
+            }
+            if let record = transaction.getCurrentAuth() {
+                validPaths.insert(accountRecordIdPathName(record.id))
+            }
+            // Read in the transaction: a reservation is released only after its record is committed,
+            // so one of the two is always seen.
+            for id in accountDirectoryReservations.with({ $0.keys }) {
+                validPaths.insert(accountRecordIdPathName(id))
+            }
+            return validPaths
+        }
+        |> deliverOn(accountDirectoryCleanupQueue)
+        |> mapToSignal { validPaths -> Signal<Never, NoError> in
+            for url in directories where !validPaths.contains(url.lastPathComponent) {
+                try? FileManager.default.removeItem(at: url)
+            }
+            return .complete()
+        }
+    }
+}
+
 public func managedCleanupAccounts(networkArguments: NetworkInitializationArguments, accountManager: AccountManager<TelegramAccountManagerTypes>, rootPath: String, auxiliaryMethods: AccountAuxiliaryMethods, encryptionParameters: ValueBoxEncryptionParameters) -> Signal<Void, NoError> {
     let currentTemporarySessionId = accountManager.temporarySessionId
     return Signal { subscriber in
@@ -452,29 +532,10 @@ public func managedCleanupAccounts(networkArguments: NetworkInitializationArgume
                 Logger.shared.log("managedCleanupAccounts", "cleanup \(id), current is \(String(describing: view.currentRecord?.id))")
                 disposable.set(cleanupAccount(networkArguments: networkArguments, accountManager: accountManager, id: id, encryptionParameters: encryptionParameters, attributes: attributes, rootPath: rootPath, auxiliaryMethods: auxiliaryMethods).start())
             }
-            
-            var validPaths = Set<String>()
-            for record in view.records {
-                if let temporarySessionId = record.temporarySessionId, temporarySessionId != currentTemporarySessionId {
-                    continue
-                }
-                validPaths.insert("\(accountRecordIdPathName(record.id))")
-            }
-            if let record = view.currentAuthAccount {
-                validPaths.insert("\(accountRecordIdPathName(record.id))")
-            }
-            
-            DispatchQueue.global(qos: .utility).async {
-                if let files = try? FileManager.default.contentsOfDirectory(at: URL(fileURLWithPath: rootPath), includingPropertiesForKeys: [], options: []) {
-                    for url in files {
-                        if url.lastPathComponent.hasPrefix("account-") {
-                            if !validPaths.contains(url.lastPathComponent) {
-                                try? FileManager.default.removeItem(at: url)
-                            }
-                        }
-                    }
-                }
-            }
+
+            // MATTERMOST: the view only says that the records changed. Which directories are stale is
+            // decided after they are listed (`cleanupStaleAccountDirectories`), never from this view.
+            let _ = cleanupStaleAccountDirectories(accountManager: accountManager, rootPath: rootPath).start()
         })
         
         return ActionDisposable {

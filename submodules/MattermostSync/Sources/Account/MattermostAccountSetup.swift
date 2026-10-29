@@ -294,6 +294,7 @@ public enum MattermostAccountSetup {
 
         let id: AccountRecordId
         let basePath: String
+        var directoryReservation: Disposable?
         switch target {
         case let .authorization(account):
             id = account.id
@@ -301,6 +302,12 @@ public enum MattermostAccountSetup {
         case let .newAccount(rootPath, _):
             id = generateAccountRecordId()
             basePath = rootPath + "/" + accountRecordIdPathName(id)
+            // The account's files are written before its record exists; until then `managedCleanupAccounts`
+            // would delete them. Released when this function returns: after the record, or on failure.
+            directoryReservation = reserveAccountDirectory(id: id)
+        }
+        defer {
+            directoryReservation?.dispose()
         }
 
         // A fresh store: an earlier attempt on the same auth record may have left one behind.
