@@ -735,6 +735,9 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
     account directory deleted under its open database by `managedCleanupAccounts` (upstream race since 2022,
     reported as TelegramMessenger/Telegram-iOS#2416; `docs/design/mattermost-sync.md`, "Account directories").
     Public TestFlight group (Beta App Review approved) and the App Store version.
+  - **`1.0.0 (31874)`** (2026-10-29, tag `relay-1.0.0-31874`, TestFlight only so the App Store review of `31872`
+    keeps its place): photos shared from the Photos app are posted (`scaledImageData`); before, they were left
+    out and a share without a comment showed success with nothing posted. Public group, Beta App Review approved.
   - **Review server:** team "Relay Demo" on the user's server with a reviewer account and two demo users (passwords
     outside the repo); push notifications for Relay through a push router there (operator's infrastructure repo).
   - **Found:** Mattermost 11.10 already refuses Relay's own push platforms (Relay registers as `apple_rn*`), and a
