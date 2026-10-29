@@ -168,6 +168,10 @@ extension MattermostAccountSync {
         // (`ChatObserver`), not for every chat at every launch (Phase 4B: one request per chat).
         self.state.with { $0.isBootstrapped = true }
         self.bootstrapped.set(true)
+        // Channel pictures: members chosen again once a day (`ChannelPictures.swift`).
+        self.addTask(Task { [weak self] in
+            await self?.refreshChannelPictures(reason: "bootstrap")
+        })
         MMLog.log("bootstrap: structure written in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms: \(teams.count) teams, \(included.count) chats, \(users.count) users, \(favoriteChannelIds.count) favorites")
 
         if !isFirstSync {

@@ -89,8 +89,8 @@ enum MattermostGroupAvatar {
     }
 
     /// The fetch: each member's picture from the media box (where their own avatar is stored once shown) or the
-    /// server, then the composed PNG. A picture that can't be loaded fails the fetch, so it is tried again later
-    /// instead of keeping a letter tile for good.
+    /// server, then the composed PNG. A network failure fails the fetch, so it is tried again later instead of keeping
+    /// a letter tile for good; a picture the server refuses (404, 403) or that can't be decoded is a letter tile.
     static func fetch(postbox: Postbox, resource: MattermostGroupAvatarResource) -> Signal<MediaResourceDataFetchResult, MediaResourceDataFetchError> {
         let resourceId = resource.id.stringRepresentation
         return MattermostResourceClients.shared.client(postbox: postbox)
@@ -110,9 +110,23 @@ enum MattermostGroupAvatar {
                                 images.append(image)
                                 continue
                             }
-                            let data = try await client.data(for: .userImage(userId: member.userId, lastPictureUpdate: member.pictureUpdate))
+                            let data: Data
+                            do {
+                                data = try await client.data(for: .userImage(userId: member.userId, lastPictureUpdate: member.pictureUpdate))
+                            } catch let error as MattermostError {
+                                switch error {
+                                case .notFound, .forbidden:
+                                    // The server won't give this picture (a deleted user, no access): the letter tile,
+                                    // not a picture that never loads.
+                                    images.append(nil)
+                                    continue
+                                default:
+                                    throw error
+                                }
+                            }
                             guard let image = UIImage(data: data) else {
-                                throw URLError(.cannotDecodeContentData)
+                                images.append(nil)
+                                continue
                             }
                             // Kept as the member's own avatar too (their chats and profile).
                             postbox.mediaBox.storeResourceData(avatar.id, data: data)

@@ -766,3 +766,8 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
     pictures composed on the device (halves, a half and two quarters, or quarters; letter tiles in Telegram's colours
     for members without a picture), rewritten when a member's picture or name changes. Verified on the simulator with
     "bob, carol" (two halves) and a new test group "bob, dave, l4b0002" (a picture and two letter tiles).
+  - **Channel pictures** (the user's "group chats" are channels): public and private channels show up to four
+    members the same way, chosen once a day (members with pictures first, by username) and cached in the sync store;
+    a channel without two such members or anyone with a picture keeps its letter. On the simulator 29–44 channels per
+    account were checked in about 160 ms at launch. A member picture the server refuses no longer fails the whole
+    picture.

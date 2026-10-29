@@ -101,6 +101,9 @@ public final class MattermostAccountSync: @unchecked Sendable {
         var nameFormat: String = UserDisplayName.usernameFormat
         /// 4H: the server's `EnableConfirmNotificationsToChannel` (`ChannelMentions.swift`).
         var confirmChannelMentions = true
+        /// The members each public or private channel's picture shows, and when they were chosen (`ChannelPictures.swift`).
+        var channelPictureUserIds: [String: [String]] = [:]
+        var channelPicturesCheckedAt: [String: Int64] = [:]
     }
 
     let state = MMLocked(SyncState())
@@ -197,6 +200,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
         self.restoreRichContent()
         // 4H: users named as last known.
         self.restoreNameFormat()
+        // Channel pictures as last chosen, so the bootstrap writes the channels with them.
+        self.restoreChannelPictures()
         self.account.network.mattermostSetConnectionState(isConnected: false, isNetworkAvailable: true)
 
         // Write path: sending/editing through PendingMessageManager, then the operation consumers.
@@ -558,20 +563,21 @@ public final class MattermostAccountSync: @unchecked Sendable {
                 // Phase 3C: Mattermost pins posts in DMs and the self-DM too (the message menu's Pin).
                 .withUpdatedCanPinMessages(true)
         })
-        let changedUsernames = self.state.with { state -> Set<String> in
-            var changed = Set<String>()
+        let changed = self.state.with { state -> (ids: Set<String>, usernames: Set<String>) in
+            var changed: (ids: Set<String>, usernames: Set<String>) = ([], [])
             for user in users {
-                // What a group message's title and picture show of a member (DisplayNames.swift).
+                // What a group message's or channel's title and picture show of a member (ChannelPictures.swift).
                 if let previous = state.users[user.id], previous.username == user.username, previous.firstName == user.firstName, previous.lastName == user.lastName, previous.nickname == user.nickname, previous.lastPictureUpdate == user.lastPictureUpdate {
                 } else {
-                    changed.insert(user.username.lowercased())
+                    changed.ids.insert(user.id)
+                    changed.usernames.insert(user.username.lowercased())
                 }
                 state.users[user.id] = user
                 state.userIdByUsername[user.username.lowercased()] = user.id
             }
             return changed
         }
-        self.refreshGroupMessages(changedUsernames: changedUsernames, transaction: transaction)
+        self.refreshPicturedChats(changedUserIds: changed.ids, changedUsernames: changed.usernames, transaction: transaction)
         if users.contains(where: { $0.customStatus?.expiryDate != nil }) {
             self.scheduleCustomStatusExpiry()
         }
