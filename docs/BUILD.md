@@ -300,7 +300,7 @@ tools/relay-remote.py "$UDID" chats-tab                                # back to
 **The real share extension.** Simulator taps reach neither Relay's windows nor Photos' share sheet on this setup
 (AXe's touches only work on SpringBoard alerts), so the extension can't be driven from Photos. Instead the app hosts
 its own extension the way `UIActivityViewController` does (`NSExtension` + `instantiateViewControllerWithInputItems:`,
-MattermostUI `MattermostShareExtensionDebug.swift`) with generated items (text, URL, JPEG and text files as file URLs):
+MattermostUI `MattermostShareExtensionDebug.swift`) with generated items (text, URL, JPEGs as the Photos app shares them, an image type over a file URL, and text files as file URLs):
 the extension runs in its own process with its own Keychain access, Postbox and uploads. Its picker can't be tapped
 either, so a debug file in the app group names the chat: `{"peerId": <PeerId.toInt64()>, "comment": "…", "delay": 6}`
 in `<group container>/telegram-data/relay-debug/share-auto.json` (`xcrun simctl get_app_container "$UDID"

@@ -46,7 +46,10 @@ enum MattermostShareExtensionDebug {
             if let data = image.jpegData(compressionQuality: 0.8) {
                 let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("relay-share-\(index + 1).jpg")
                 try? data.write(to: fileURL)
-                attachments.append(NSItemProvider(item: fileURL as NSURL, typeIdentifier: UTType.fileURL.identifier))
+                // As the Photos app shares a photo: an image type whose item is the file's URL. This takes the
+                // extension's image path (`scaledImageData`); a `fileURL` provider takes the file path instead,
+                // which hid that photos were dropped (reported from TestFlight).
+                attachments.append(NSItemProvider(item: fileURL as NSURL, typeIdentifier: UTType.jpeg.identifier))
             }
         }
         for index in 0 ..< fileCount {

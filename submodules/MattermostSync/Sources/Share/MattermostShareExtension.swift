@@ -23,6 +23,8 @@ public enum MattermostShareError: Error, Equatable {
     case failed(String)
     /// A file is larger than the server's `MaxFileSize`.
     case fileTooBig(Int64)
+    /// None of the shared items could be read, and there is no comment.
+    case nothingToShare
 }
 
 public enum MattermostShareStatus: Equatable {
@@ -79,20 +81,38 @@ public enum MattermostShareExtension {
         }
     }
 
-    /// The other app's items as Mattermost content: texts and links, images (JPEG), files, videos and audio as
-    /// files. `items` are the dictionaries of `TGItemProviderSignals` (`text`, `url`, `image`, `data` + `fileName`
-    /// + `mimeType`, `video`, `audio`).
+    /// The other app's items as Mattermost content: texts and links, images, files, videos and audio as files.
+    /// `items` are the dictionaries of `TGItemProviderSignals` (`text`, `url`, `scaledImageData`, `image`, `data` +
+    /// `fileName` + `mimeType`, `video`, `audio`). An item of another kind is logged and left out.
     public static func content(items: [[String: Any]]) -> MattermostShareContent {
         var content = MattermostShareContent()
         var imageIndex = 0
+        let addImage: (Data, String, String) -> Void = { data, mimeType, fileExtension in
+            imageIndex += 1
+            content.files.append(MattermostShareFile(fileName: (imageIndex == 1 ? "image" : "image-\(imageIndex)") + fileExtension, mimeType: mimeType, content: .data(data)))
+        }
         for item in items {
             if let text = item["text"] as? String {
                 content.texts.append(text)
             } else if let url = item["url"] as? URL {
                 content.texts.append(url.absoluteString)
+            } else if let data = item["scaledImageData"] as? Data {
+                // A photo shared as a file (the Photos app): `TGItemProviderSignals` hands it over as a JPEG it
+                // scaled down to 1280 px.
+                addImage(data, "image/jpeg", ".jpg")
             } else if let image = item["image"] as? UIImage, let data = image.jpegData(compressionQuality: 0.9) {
-                imageIndex += 1
-                content.files.append(MattermostShareFile(fileName: imageIndex == 1 ? "image.jpg" : "image-\(imageIndex).jpg", mimeType: "image/jpeg", content: .data(data)))
+                addImage(data, "image/jpeg", ".jpg")
+            } else if let data = item["image"] as? Data {
+                // An app that hands over the image's bytes: JPEG and PNG as they are, anything else (HEIC) as JPEG.
+                if data.starts(with: [0xFF, 0xD8, 0xFF]) {
+                    addImage(data, "image/jpeg", ".jpg")
+                } else if data.starts(with: [0x89, 0x50, 0x4E, 0x47]) {
+                    addImage(data, "image/png", ".png")
+                } else if let jpeg = UIImage(data: data)?.jpegData(compressionQuality: 0.9) {
+                    addImage(jpeg, "image/jpeg", ".jpg")
+                } else {
+                    self.log("left out an image the system can't decode (\(data.count) bytes)")
+                }
             } else if let data = item["data"] as? Data {
                 let mimeType = (item["mimeType"] as? String) ?? "application/octet-stream"
                 var fileName = (item["fileName"] as? String) ?? ""
@@ -105,6 +125,8 @@ public enum MattermostShareExtension {
                 content.files.append(MattermostShareFile(fileName: url.lastPathComponent.isEmpty ? "video.mp4" : url.lastPathComponent, mimeType: url.pathExtension.lowercased() == "mov" ? "video/quicktime" : "video/mp4", content: .file(url)))
             } else if let url = item["audio"] as? URL {
                 content.files.append(MattermostShareFile(fileName: url.lastPathComponent, mimeType: (item["mimeType"] as? String) ?? "audio/mpeg", content: .file(url)))
+            } else {
+                self.log("left out an item with \(item.keys.sorted())")
             }
         }
         return content
@@ -173,7 +195,9 @@ public enum MattermostShareExtension {
         }
         let posts = MattermostSharePlanner.posts(comment: comment, content: content)
         if posts.isEmpty {
-            return
+            // Nothing the other app shared could be read. Finishing here showed the share sheet's success with
+            // nothing posted (photos from the Photos app, before `scaledImageData` was read).
+            throw MattermostShareError.nothingToShare
         }
         let sender = MattermostShareSender(client: client, userId: account.userId)
         for (index, peerId) in peerIds.enumerated() {
