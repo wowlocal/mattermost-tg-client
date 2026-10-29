@@ -152,6 +152,7 @@ Use users nobody else is using for these (carol for MFA, dave for revocation): o
 | `image\|<chat>\|<caption>` / `file\|<chat>\|<name>\|<content>` | `enqueueMessages` with local media, as the media picker |
 | `react\|<chat>\|<msg>\|<emoji>` / `unreact\|…` | `updateMessageReactionsInteractively` |
 | `edit\|<chat>\|<msg>\|<text>` | `account.pendingUpdateMessageManager.add` |
+| `read\|<chat>\|<msg>[\|<msg>…]` | `engine.messages.applyMaxReadIndexInteractively`, as the chat marks what it shows read (pushed by `ReadStatePusher`); several messages are read one after another with no pause, as scrolling down does while the first read is still being pushed |
 | `delete\|<chat>\|<msg>` | `deleteMessagesInteractively(.forEveryone)` |
 | `resend\|<chat>` | `resendMessages` on the chat's failed messages |
 | `typing\|<chat>[\|<msg in thread>]` | `account.updateLocalInputActivity(.typingText)` |

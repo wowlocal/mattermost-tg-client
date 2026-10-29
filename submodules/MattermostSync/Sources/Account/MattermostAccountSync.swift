@@ -668,6 +668,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
             count: readState.unreadCount,
             markedUnread: false
         )]])
+        // Before the count: removing a tag lowers the stored count.
+        self.clearReadMentionTags(peerId: channelState.peerId, maxReadId: readState.maxIncomingReadId, transaction: transaction)
         self.applyMentionCount(channelState.mentionCount, peerId: channelState.peerId, transaction: transaction)
     }
 
@@ -681,6 +683,20 @@ public final class MattermostAccountSync: @unchecked Sendable {
         // `maxId` at the top of the id space: tagged messages added later don't count themselves again; live
         // mentions update the count explicitly.
         transaction.replaceMessageTagSummary(peerId: peerId, threadId: nil, tagMask: .unseenPersonalMessage, namespace: Namespaces.Message.Cloud, customTag: nil, count: showsBadge ? max(0, count) : 0, maxId: Int32.max - 1)
+    }
+
+    /// Read mentions stop being mentions. Telegram drops the tag when a mention is consumed
+    /// (`ConsumablePersonalMentionMessageAttribute`), which Relay's messages don't carry, so a tag stayed for good
+    /// and the chat's @ button jumped to the oldest mention ever received instead of the first unread one.
+    func clearReadMentionTags(peerId: PeerId, maxReadId: Int32, transaction: Transaction) {
+        let readIds = transaction.getMessageIndicesWithTag(peerId: peerId, threadId: nil, namespace: Namespaces.Message.Cloud, tag: .unseenPersonalMessage).map(\.id).filter { $0.id <= maxReadId }
+        for id in readIds {
+            transaction.updateMessage(id, update: { current in
+                var tags = current.tags
+                tags.remove(.unseenPersonalMessage)
+                return .update(StoreMessage.mmCopy(of: current, id: current.id, threadId: current.threadId, attributes: current.attributes, tags: tags))
+            })
+        }
     }
 
     /// Context for converting posts of `channelId` inside a transaction.

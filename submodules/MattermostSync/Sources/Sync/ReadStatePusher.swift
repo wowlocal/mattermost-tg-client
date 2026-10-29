@@ -88,17 +88,27 @@ extension MattermostAccountSync {
             }
             let member = try await self.client.channelMember(channelId: channelId)
             let mentionCount = self.memberMentionCount(member)
-            await self.postbox.mmTransaction { transaction in
+            let current: Bool = await self.postbox.mmTransaction { transaction in
                 self.state.with { state in
                     state.channels[channelId]?.member = member
                     state.channels[channelId]?.mentionCount = mentionCount
                 }
+                // More was read while the server calls ran (scrolling down a long unread run): the operation now
+                // stands for the newer read, so it stays queued and is pushed next. Confirming it here dropped
+                // that read, and the server's count for the older position (the mention below it still unread)
+                // stayed on the badge, with nothing left to push.
+                guard let states = transaction.getPeerReadStates(peerId), let cloud = states.first(where: { $0.0 == Namespaces.Message.Cloud })?.1, case let .idBased(maxIncomingReadId, _, _, count, _) = cloud, maxIncomingReadId == target.maxRead, count == target.count else {
+                    return false
+                }
                 transaction.confirmSynchronizedIncomingReadState(peerId)
+                // Before the count: removing a tag lowers the stored count.
+                self.clearReadMentionTags(peerId: peerId, maxReadId: target.maxRead, transaction: transaction)
                 if let channelState = self.channelState(channelId) {
                     self.applyMentionCount(channelState.mentionCount, peerId: peerId, transaction: transaction)
                 }
+                return true
             }
-            MMLog.log("read: pushed \(channelId) read up to local id \(target.maxRead) (\(target.count) unread left, server last_viewed_at \(member.lastViewedAt))")
+            MMLog.log("read: pushed \(channelId) read up to local id \(target.maxRead) (\(target.count) unread left, server last_viewed_at \(member.lastViewedAt))\(current ? "" : "; read further meanwhile, pushing again")")
             return true
         } catch {
             MMLog.log("read: push for \(channelId) failed: \(error)")

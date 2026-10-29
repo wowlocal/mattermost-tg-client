@@ -284,6 +284,8 @@ extension MattermostAccountSync {
             for channelState in channels {
                 let readState = transaction.getCombinedPeerReadState(channelState.peerId)
                 let mentions = transaction.getMessageTagSummary(peerId: channelState.peerId, threadId: nil, tagMask: .unseenPersonalMessage, namespace: Namespaces.Message.Cloud, customTag: nil)?.count ?? 0
+                // Messages still tagged as unseen mentions (the @ button's targets): none at or below the read id.
+                let taggedIds = transaction.getMessageIndicesWithTag(peerId: channelState.peerId, threadId: nil, namespace: Namespaces.Message.Cloud, tag: .unseenPersonalMessage).map { Int($0.id.id) }
                 let muted: Bool
                 if let settings = transaction.getPeerNotificationSettings(id: channelState.peerId) as? TelegramPeerNotificationSettings, case .muted = settings.muteState {
                     muted = true
@@ -310,6 +312,13 @@ extension MattermostAccountSync {
                     "peerId": "\(channelState.peerId)",
                     "unread": Int(readState?.count ?? -1),
                     "mentions": Int(mentions),
+                    "mentionTaggedIds": taggedIds,
+                    "maxReadId": readState.flatMap { state -> Int? in
+                        if case let .idBased(maxIncomingReadId, _, _, _, _)? = state.states.first(where: { $0.0 == Namespaces.Message.Cloud })?.1 {
+                            return Int(maxIncomingReadId)
+                        }
+                        return nil
+                    } ?? -1,
                     "muted": muted,
                     "group": group,
                     "pinned": pinned.contains(.peer(channelState.peerId))

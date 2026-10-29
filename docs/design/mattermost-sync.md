@@ -84,6 +84,14 @@ Order matters (R§3.5: read state must exist before messages are added).
    - Remove chat‑list holes for `.root` and archive (R§3.7).
    - `resetIncomingReadStates` with `.idBased(...)` for every peer (counts from Mattermost; max IDs resolved once posts are known, see below).
    - Mention badges with `replaceMessageTagSummary(.unseenPersonalMessage)`.
+     The badge is the server's mention count, never Postbox's count of tagged messages, so three rules keep it
+     from sticking: `ReadStatePusher` confirms a read only while the read state is still the one it sent (a read
+     made while the server calls ran stays queued and is pushed next; confirming it dropped that read and left the
+     server's count for the older position on the badge); a live `posted` counts a mention only for a post not yet
+     stored and newer than `last_viewed_at` (a replayed event put the badge back); and the tag leaves every message at
+     or below the read id (`clearReadMentionTags`, before the count, since removing a tag lowers the stored count):
+     Relay's messages have no `ConsumablePersonalMentionMessageAttribute`, so nothing else removes it and the @ button
+     jumped to a mention read long ago.
    - Favorites → `setPinnedItemIds`.
    - Team folders → `ChatListFiltersState` (local only; Telegram's filter sync is never started).
 3. **Latest page per channel**, prioritized: unread channels first, then by `last_post_at`, concurrency ~4. Each page goes through the normal page‑write path (below) with `location: .UpperHistoryBlock`, which clears the hole above the oldest loaded post (R§3.3).

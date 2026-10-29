@@ -24,6 +24,7 @@ import MattermostSyncCore
 /// | `album\|<chat>\|<count>\|<caption>` (generated JPEGs, one grouping key) | `enqueueMessages` as the media picker's album |
 /// | `files\|<chat>\|<count>\|<caption>` (text files, one grouping key, caption on the last) | `enqueueMessages` as grouped files |
 /// | `react\|<chat>\|<msg>\|<emoji>` / `unreact\|…` | `updateMessageReactionsInteractively` (as a reaction tap) |
+/// | `read\|<chat>\|<msg>[\|<msg>…]` (one after another, no pause) | `engine.messages.applyMaxReadIndexInteractively` (as the chat marks what it shows read) |
 /// | `edit\|<chat>\|<msg>\|<text>` | `account.pendingUpdateMessageManager.add` (as the edit panel) |
 /// | `delete\|<chat>\|<msg>` | `engine.messages.deleteMessagesInteractively(.forEveryone)` |
 /// | `typing\|<chat>[\|<msg in a thread>]` | `account.updateLocalInputActivity(.typingText)` (as the composer) |
@@ -168,6 +169,18 @@ enum MattermostDebugWriter {
             }
             let _ = await signalValue(updateMessageReactionsInteractively(account: account, messageIds: [target.id], reactions: reactions, isLarge: false, storeAsRecentlyUsed: false) |> map { _ -> Void in })
             return "ok (\(target.id), wanted \(reactions.map { $0.reaction }))"
+        case "read":
+            // As the chat marks what it shows read (ChatHistoryListNode's max read index). Several messages are
+            // read one after another without a pause, as scrolling down does while the first read is pushed.
+            var readIds: [Int32] = []
+            for selector in fields.dropFirst(2) {
+                guard let target = await message(selector, peerId: peerId, sync: sync) else {
+                    return "no message \(selector)"
+                }
+                let _ = await signalValue(engine.messages.applyMaxReadIndexInteractively(index: target.index))
+                readIds.append(target.id.id)
+            }
+            return "ok (read up to \(readIds.map(String.init).joined(separator: ", then ")))"
         case "edit":
             guard let target = await message(field(2), peerId: peerId, sync: sync) else {
                 return "no message \(field(2))"

@@ -202,8 +202,12 @@ extension MattermostAccountSync {
         let mentionsMe = !isOwn && countsInChat && (posted.mentions.contains(self.ownUserId) || self.channelState(post.channelId)?.kind == .direct)
         let marksRead = isOwn && countsInChat
         let result: PageWriteResult = await self.postbox.mmTransaction { transaction in
+            // An event replayed after a WebSocket reconnect, or a post a page load stored first: it is in the
+            // counters already. Counting its mention again put the badge back after the chat had been read.
+            let isNew = !self.isMapped(post.id, channelId: post.channelId)
+            var countsMention = false
             self.state.with { state in
-                guard var channelState = state.channels[post.channelId] else {
+                guard isNew, var channelState = state.channels[post.channelId] else {
                     return
                 }
                 channelState.channel.totalMsgCount += 1
@@ -218,8 +222,9 @@ extension MattermostAccountSync {
                     channelState.member.msgCountRoot = channelState.channel.totalMsgCountRoot
                     channelState.member.lastViewedAt = max(channelState.member.lastViewedAt, post.createAt)
                     channelState.mentionCount = 0
-                } else if mentionsMe {
+                } else if mentionsMe && post.createAt > channelState.member.lastViewedAt {
                     channelState.mentionCount += 1
+                    countsMention = true
                 }
                 state.channels[post.channelId] = channelState
             }
@@ -229,9 +234,9 @@ extension MattermostAccountSync {
                 self.bumpThreadRoot(of: post, transaction: transaction)
             }
             if let channelState = self.channelState(post.channelId) {
-                if marksRead {
+                if marksRead && isNew {
                     self.applyServerReadState(channelId: post.channelId, transaction: transaction)
-                } else if mentionsMe {
+                } else if countsMention {
                     self.applyMentionCount(channelState.mentionCount, peerId: channelState.peerId, transaction: transaction)
                 }
             }
