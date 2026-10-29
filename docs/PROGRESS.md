@@ -729,8 +729,12 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   - **App Store version 1.0.0:** description, keywords (no third-party trademarks), subtitle, promo text, URLs,
     categories Business/Productivity, age rating (messaging and user-generated content), free, all territories but
     mainland China, App Privacy "Data Not Collected", content rights, manual release, build attached, review contact
-    and demo account; screenshots (iPhone 6.9", iPad 13") in `docs/release/appstore-screenshots/`. Not submitted:
-    waiting for the user's go.
+    and demo account; screenshots (iPhone 6.9", iPad 13") in `docs/release/appstore-screenshots/`. Submitted for
+    App Review on 2026-10-29 with `1.0.0 (31872)` (manual release).
+  - **`1.0.0 (31872)`** (2026-10-29, tag `relay-1.0.0-31872`): fixes the TestFlight crash on login in `31868`, an
+    account directory deleted under its open database by `managedCleanupAccounts` (upstream race since 2022,
+    reported as TelegramMessenger/Telegram-iOS#2416; `docs/design/mattermost-sync.md`, "Account directories").
+    Public TestFlight group (Beta App Review approved) and the App Store version.
   - **Review server:** team "Relay Demo" on the user's server with a reviewer account and two demo users (passwords
     outside the repo); push notifications for Relay through a push router there (operator's infrastructure repo).
   - **Found:** Mattermost 11.10 already refuses Relay's own push platforms (Relay registers as `apple_rn*`), and a
