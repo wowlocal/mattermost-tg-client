@@ -488,6 +488,27 @@ public final class AccountStateManager {
             }
         }
         
+        // MATTERMOST: in-app notifications for Mattermost posts (the macOS client: no push; Telegram's state
+        // manager never runs). The same notify decision as Telegram's own (`messagesForNotification`: mute, the
+        // chat's settings), on the notification pipe the app already listens to.
+        func mattermostNotifyMessages(ids: [MessageId]) {
+            let _ = (self.postbox.transaction { transaction -> [([Message], PeerGroupId, Bool, MessageHistoryThreadData?)] in
+                var list: [([Message], PeerGroupId, Bool, MessageHistoryThreadData?)] = []
+                for id in ids {
+                    let (messages, notify, _, _, threadData) = messagesForNotification(transaction: transaction, id: id, alwaysReturnMessage: false)
+                    if !messages.isEmpty {
+                        list.append((messages, .root, notify, threadData))
+                    }
+                }
+                return list
+            }
+            |> deliverOn(self.queue)).start(next: { [weak self] list in
+                if !list.isEmpty {
+                    self?.notificationMessagesPipe.putNext(list)
+                }
+            })
+        }
+
         func addUpdates(_ updates: Api.Updates) {
             self.queue.async {
                 self.updateService?.addUpdates(updates)
@@ -1931,6 +1952,13 @@ public final class AccountStateManager {
         }
     }
     
+    // MATTERMOST: see `mattermostNotifyMessages` in the impl.
+    public func mattermostNotifyMessages(ids: [MessageId]) {
+        self.impl.with { impl in
+            impl.mattermostNotifyMessages(ids: ids)
+        }
+    }
+
     public var notificationMessages: Signal<[([Message], PeerGroupId, Bool, MessageHistoryThreadData?)], NoError> {
         return self.impl.signalWith { impl, subscriber in
             return impl.notificationMessages.start(next: subscriber.putNext, error: subscriber.putError, completed: subscriber.putCompletion)

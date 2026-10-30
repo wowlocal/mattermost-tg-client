@@ -243,6 +243,16 @@ extension MattermostAccountSync {
             return result
         }
         MMLog.log("live: posted \(post.id) in \(post.channelId) → \(result.writtenCount) message(s) written \(Int((CFAbsoluteTimeGetCurrent() - received) * 1000)) ms after the event (create_at \(post.createAt))")
+        #if os(macOS)
+        // macOS has no push: a new post by someone else goes to Telegram's in-app notifications (muted chats and
+        // the notification settings decide there).
+        if !isOwn, result.insertedCount > 0, !post.type.hasPrefix("system_") {
+            let ids = await self.postMessageIds(of: [post], tags: nil).map { $0.messageId }
+            if !ids.isEmpty {
+                self.account.stateManager.mattermostNotifyMessages(ids: ids)
+            }
+        }
+        #endif
         // Recent Mentions (4F): a post with one of the user's mention keys joins an open list.
         if !isOwn, !post.type.hasPrefix("system_"), let me = self.state.with({ $0.me }), SearchQuery.textMentions(post.message, keys: SearchQuery.mentionKeys(username: me.username, firstName: me.firstName, notifyProps: me.notifyProps)) {
             let entries = await self.postMessageIds(of: [post], tags: nil)
