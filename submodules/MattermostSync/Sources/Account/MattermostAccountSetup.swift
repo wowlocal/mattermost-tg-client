@@ -364,15 +364,25 @@ public enum MattermostAccountSetup {
             let _ = await account.postbox.transaction { transaction -> Void in
                 writeState(transaction)
             }.awaitValue()
-        case let .newAccount(rootPath, encryptionParameters):
+        case let .newAccount(_, encryptionParameters):
             isAuthorization = false
-            let written = await (accountTransaction(rootPath: rootPath, id: id, encryptionParameters: encryptionParameters, isReadOnly: false, transaction: { _, transaction -> Bool in
-                writeState(transaction)
-                return true
-            })
-            |> `catch` { error -> Signal<Bool, NoError> in
-                MMLog.log("login: could not open the account postbox: \(error)")
-                return .single(false)
+            // Opened as the database's owner (read-write, not temporary, `removeDatabaseOnError`), as the app opens
+            // it afterwards: `accountTransaction` connects as a temporary non-owner, and a non-owner never sets up a
+            // new database's encryption, so it doesn't open. The directory is new, nothing can be lost.
+            let written = await (openPostbox(basePath: basePath + "/postbox", seedConfiguration: telegramPostboxSeedConfiguration, encryptionParameters: encryptionParameters, timestampForAbsoluteTimeBasedOperations: Int32(CFAbsoluteTimeGetCurrent() + NSTimeIntervalSince1970), isMainProcess: true, isTemporary: false, isReadOnly: false, useCopy: false, useCaches: false, removeDatabaseOnError: true)
+            |> mapToSignal { result -> Signal<Bool, NoError> in
+                switch result {
+                case let .postbox(postbox):
+                    return postbox.transaction { transaction -> Bool in
+                        writeState(transaction)
+                        return true
+                    }
+                case .error:
+                    MMLog.log("login: could not open the account postbox")
+                    return .single(false)
+                default:
+                    return .complete()
+                }
             }).awaitValue()
             if written != true {
                 MattermostKeychain.removeToken(accountId: id.int64)

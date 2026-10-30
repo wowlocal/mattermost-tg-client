@@ -14,13 +14,22 @@ Relay for macOS is Telegram for macOS (TelegramMessenger/telegram-macos) with th
 - `submodules/telegram-ios` is a worktree of this repository on the `macos` branch. Its nested submodules are
   cloned from the main checkout (`git -c protocol.file.allow=always submodule update --init …`); only the ones the
   macOS build uses: td, dav1d, libvpx, webrtc, wallet-engine, mtproto-engine, tgcalls, rlottie, tlottie.
-- `submodules/tgcalls` is pinned to this fork's tgcalls (`a024eaa`): `d19f811484` pins a tgcalls commit that is not
-  public.
+- `submodules/tgcalls` is the public `6926af0` (2026-05-16), the commit telegram-macos `master` pins:
+  `d19f811484` pins one that is not public, and this fork's tgcalls (`a024eaa`) carries the wasm call core, whose
+  WAMR headers the macOS package has no path to (and its `tools/` testbench has a `main()` SwiftPM reads as an
+  executable target).
 - Xcode 27: `scripts/xcode27.sh apply` (deployment target 12.0 in the library projects, `ImplicitStrongCapture` a
   warning in TelegramCore, Metal shaders compiled), and the abseil `ABSL_ATTRIBUTE_LIFETIME_BOUND` patch in tg_owt
   that `scripts/setup_build_env.sh` applies. Homebrew no longer has `openssl@1.1`; the libraries build without it.
 - Native libraries: `scripts/configure_frameworks.sh` with `PATH` including `/opt/homebrew/opt/rustup/bin` (cargo
-  from Homebrew's rustup) and `CMAKE_POLICY_VERSION_MINIMUM=3.5`.
+  from Homebrew's rustup), `RUSTUP_TOOLCHAIN=1.96.1` and `CMAKE_POLICY_VERSION_MINIMUM=3.5`. Three traps:
+  - The engines' build scripts run the pinned toolchain's `cargo` directly, so `rustc` comes from the rustup proxy,
+    which picks the default toolchain in a dependency's directory; proc macros built by another rustc fail with
+    "can't find crate for `zeroize_derive`". `RUSTUP_TOOLCHAIN` makes both the same.
+  - Inside Xcode's environment the wallet engine's proc-macro dylibs don't load ("mis-aligned LINKEDIT string
+    pool"); its standalone script outside Xcode builds it (INSTALL.md "Rebuilding only the wallet engine"), and the
+    frameworks script then adopts the output.
+  - `scripts/xcode27.sh` doesn't know `core-xprojects/mtproto-engine`: its deployment target goes to 12.0 by hand.
 
 ## Modules on macOS
 
