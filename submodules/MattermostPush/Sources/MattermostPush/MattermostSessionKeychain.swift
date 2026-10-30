@@ -15,7 +15,10 @@ import Security
 /// (`errSecMissingEntitlement`), tokens are stored app-only and the extension can't read them: it then shows
 /// notifications without acknowledging them.
 public enum MattermostSessionKeychain {
-    public static let service = "org.relaychat.mattermost.session"
+    /// The macOS app keeps one data set per build channel (debug, stable, …) and sets a service per channel at launch,
+    /// before any token is read: with one service, a channel's launch cleanup (`accountIdsWithTokens` against its own
+    /// accounts) removed the other channels' tokens.
+    public static var service = "org.relaychat.mattermost.session"
 
     public enum Location: Equatable {
         case shared
