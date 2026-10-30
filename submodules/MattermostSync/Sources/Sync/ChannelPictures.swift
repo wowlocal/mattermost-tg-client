@@ -6,15 +6,20 @@ import MattermostSyncCore
 
 /// Channel pictures. Mattermost has no picture for channels, so a public or private channel shows up to four of its
 /// members (`MattermostGroupAvatar`, as group messages do). The members are chosen once a day per channel, stable
-/// rather than "who posted last" so a chat keeps its look in the list: the first active members by username who
-/// have a picture of their own, then others (letter tiles), never the user or bots. A channel without at least two
-/// such members, or without anyone with a picture, keeps its letter.
+/// rather than "who posted last" so a chat keeps its look in the list: active members other than the user who have a
+/// picture of their own, people before bots, each by username. Bots count because a channel is often someone's room
+/// with an assistant bot (the user and one bot, the bot's picture is the channel's face); members without a picture
+/// don't, so a new member or a test account doesn't put a letter tile into every channel. A channel where nobody else
+/// has a picture keeps its letter; one with a single such member shows that member's picture.
 ///
-/// The choice (user ids) and when it was made are kept in the sync store (`channel_pictures` cursor), so the
+/// The choice (user ids) and when it was made are kept in the sync store (`channel_pictures_2` cursor), so the
 /// pictures show at launch before the network is up; the users themselves are written as peers, and a member's new
 /// picture or name rewrites the channel's peer like a group message's (`refreshPicturedChats`).
 extension MattermostAccountSync {
-    static let channelPicturesCursor = "channel_pictures"
+    /// `_2`: the choice changed (bots, pictured members only), so choices kept by the first version are dropped
+    /// rather than waiting out their day.
+    static let channelPicturesCursor = "channel_pictures_2"
+    private static let legacyChannelPicturesCursors = ["channel_pictures"]
     /// A channel's members are looked up again after this long (joins, leaves, new pictures of others).
     static let channelPicturesMaxAge: Int64 = 24 * 60 * 60
 
@@ -25,6 +30,9 @@ extension MattermostAccountSync {
 
     /// The last known choice, before anything is written (the bootstrap writes the channel peers with it).
     func restoreChannelPictures() {
+        for key in MattermostAccountSync.legacyChannelPicturesCursors where self.store.cursor(key) != nil {
+            self.store.setCursor(key, nil)
+        }
         guard let text = self.store.cursor(MattermostAccountSync.channelPicturesCursor), let stored = try? JSONDecoder().decode(StoredChannelPictures.self, from: Data(text.utf8)) else {
             return
         }
@@ -90,13 +98,8 @@ extension MattermostAccountSync {
                     failed += 1
                     continue
                 }
-                let candidates = users.filter { $0.id != ownUserId && !$0.isBot && $0.deleteAt == 0 }
-                let pictured = candidates.filter { $0.hasCustomPicture }
-                if candidates.count < 2 || pictured.isEmpty {
-                    chosen[channelId] = []
-                } else {
-                    chosen[channelId] = Array((pictured + candidates.filter { !$0.hasCustomPicture }).prefix(4))
-                }
+                let pictured = users.filter { $0.id != ownUserId && $0.deleteAt == 0 && $0.hasCustomPicture }
+                chosen[channelId] = Array((pictured.filter { !$0.isBot } + pictured.filter { $0.isBot }).prefix(4))
             }
         }
         let changed: Int = await self.postbox.mmTransaction { transaction in

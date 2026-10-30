@@ -771,3 +771,8 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
     a channel without two such members or anyone with a picture keeps its letter. On the simulator 29–44 channels per
     account were checked in about 160 ms at launch. A member picture the server refuses no longer fails the whole
     picture.
+  - **Channel pictures, second rule:** the user's channels are the user, one AI agent bot and sometimes one more
+    person, so excluding bots and requiring two members left every one a letter. Now only members with a picture
+    count (people before bots, bots included), one such member is enough, and a member without a picture is never a
+    tile, so a new member doesn't put a letter tile into every channel. The first version's cached choices are dropped
+    (`channel_pictures_2`). Checked with a test account added to every channel of the user's server.
