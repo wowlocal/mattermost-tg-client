@@ -57,6 +57,7 @@ Mostly as in this repository's iOS app, at the matching places of the macOS app:
 - Hidden with the shared `MattermostFeatures` flags: Contacts and Calls tabs (the tab indices follow from the
   flags), call buttons, Telegram's settings rows (premium, stars, stories, wallet, proxy, privacy, sessions,
   language packs, stickers, Passport, support), the attach menu's polls, checklists, location, gifts and rich text.
+- A Threads tab after Chats (`RelayThreadsController` on `MattermostSync.threadList`, as the iOS tab).
 - The chat list's compose menu is New Message (people search, opens a DM), New Channel and Browse Channels
   (`RelayUI` on `MattermostDirectory`).
 - Own identity: Relay.app (`org.relaychat.RelayMac`, the Swift module keeps the name Telegram), version 1.0.0,
@@ -68,7 +69,7 @@ Threads: reply counts show on posts, and opening replies builds the thread locat
 
 Notifications: macOS has no push, so MattermostSync hands a new post by someone else (live, not a system post) to `AccountStateManager.mattermostNotifyMessages`, which runs Telegram's own notify decision (`messagesForNotification`: mute and chat settings) and puts the result on the notification pipe the app listens to. The app's notification manager combined that pipe with Telegram's reaction notifications, which never emit with Mattermost, so it starts them empty.
 
-Not done: localization of the Relay screens, a Threads list (iOS has a tab), Mattermost-specific chat and profile
+Not done: localization of the Relay screens (Relay is English-only, as on iOS), Mattermost-specific chat and profile
 screens, notifications while Relay isn't running (no push on macOS), sharing, voice transcoding. The emoji panel shows emoji only (no sticker or GIF tabs).
 
 ## Building, signing, checking
@@ -88,7 +89,7 @@ screens, notifications while Relay isn't running (no push on macOS), sharing, vo
 - Debug remote (debug builds): `tools/relay-mac-remote.swift` posts a command on the distributed notification
   `org.relaychat.RelayMac.debug.command` and prints the answer from `relay-debug/result.json`: `state`, `login
   server= login= [password=|RELAY_REMOTE_PASSWORD]`, `login-state`, `open-chat query=`, `send text=`, `thread`, `notifications`, `screen
-  name=new-message|new-channel|browse|settings|chats`, `snapshot`. Screen captures need a permission the agent's
+  name=new-message|new-channel|browse|settings|chats|threads`, `snapshot`. Screen captures need a permission the agent's
   terminal lacks, and neither `layer.render` nor `cacheDisplay` draws TGUIKit's content, so `snapshot` writes each
   window's view tree with TGUIKit `TextView` text (`relay-debug/window-N.txt`); that is how the screens were checked.
 - Checked on the dev server: login through the screen (bob) and the debug login (alice), bootstrap of 2 teams and
