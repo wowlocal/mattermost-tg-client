@@ -36,19 +36,52 @@ Relay for macOS is Telegram for macOS (TelegramMessenger/telegram-macos) with th
 | Module | macOS |
 |---|---|
 | MattermostKit, MattermostSyncCore, MattermostPush, MattermostShare | SwiftPM manifests already (macOS 13) |
-| MattermostSync | `Package.swift` for SwiftPM; iOS-only parts (WebP via WebPBinding, voice transcoding via ConvertOpusToAAC and UniversalMediaPlayer, UIKit drawing of group pictures and reactions) behind `#if os(iOS)` or redone with CoreGraphics/ImageIO |
+| MattermostSync | `Package.swift` for SwiftPM. Drawing (group pictures, reaction images, flattened photos) goes through `MattermostPlatformImage` (UIKit on iOS, AppKit and the macOS app's libwebp on macOS); voice transcoding and waveform decoding are iOS-only for now (macOS sends the Ogg recording) |
 | TelegramCore hooks (`Sources/Mattermost`, `MattermostBackend`, `NullNetworkEngine`) | compiled with the app's TelegramCore package |
 | MattermostUI and TelegramUI patches | redone in the macOS app |
 
 The macOS app needs macOS 13 (the Mattermost packages' minimum).
 
-## Phases
+## In the app (relay-mac, branch `relay`)
 
-1. The app builds against this fork (native libraries, TelegramCore with the hooks).
-2. MattermostSync builds for macOS and is linked into the app.
-3. Wiring: `MattermostBackend` enabled, `MattermostSync.startLifecycle`/`startAccount`, the resource fetch hook in
-   `telegramAccountAuxiliaryMethods`, `mattermostDeclareEncodables`, a login screen (server, credentials, MFA)
-   instead of AuthUI that calls `MattermostAccountSetup.probe/login/createAccount`.
-4. Telegram-only features hidden (premium, stars, stories, calls, secret chats, wallet, phone and contacts),
-   teams as folders, threads, reactions, mentions.
-5. Branding (name, icon, bundle id, no Sparkle feed or AppCenter), signing and distribution.
+Mostly as in this repository's iOS app, at the matching places of the macOS app:
+
+- `SharedAccountContext` starts `MattermostSync.startAccount` instead of Telegram's state management and
+  `MattermostSync.startLifecycle` at launch; debug builds log in from `RELAY_DEBUG_MM_URL`/`_LOGIN`/`_PASSWORD`.
+- `UnauthorizedApplicationContext` shows `RelayLoginController` (package `RelayUI`: server, login id, password, MFA
+  code), which creates the account on the auth record with `MattermostAccountSetup`.
+- Mattermost files and avatars load through `relayFetchResource` in TelegramMediaUtils' fetch hook;
+  `mattermostDeclareEncodables` runs at launch.
+- The connection status, the chat header and the wakeup manager read `Account.externalIsUpdating` (Telegram's state
+  manager never runs). Sparkle never checks Telegram's feeds.
+- Hidden with the shared `MattermostFeatures` flags: Contacts and Calls tabs (the tab indices follow from the
+  flags), call buttons, Telegram's settings rows (premium, stars, stories, wallet, proxy, privacy, sessions,
+  language packs, stickers, Passport, support), the attach menu's polls, checklists, location, gifts and rich text.
+- The chat list's compose menu is New Message (people search, opens a DM), New Channel and Browse Channels
+  (`RelayUI` on `MattermostDirectory`).
+- Own identity: Relay.app (`org.relaychat.RelayMac`, the Swift module keeps the name Telegram), version 1.0.0,
+  Relay's icon, Keychain scope `relay.<channel>`, no Telegram app groups (data in Application Support without a group
+  entitlement), `Telegram-Mac/Relay.entitlements` (no sandbox, microphone, camera). The share extension is not
+  embedded (Telegram's, needs a provisioning profile).
+
+Not done: localization of the Relay screens, threads (collapsed reply threads), Mattermost-specific chat and profile
+screens, push notifications, sharing, voice transcoding, stickers and GIF tabs (empty, not hidden).
+
+## Building, signing, checking
+
+- Build: `xcodebuild -workspace Telegram-Mac.xcworkspace -scheme Telegram -configuration Debug -derivedDataPath
+  /Volumes/X5/relay-mac-dd -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build` (works from an
+  agent shell).
+- Sign: `tools/relay-mac-sign.sh [Relay.app]` in a GUI session (Rex pane, Terminal); codesign in an agent's
+  background session fails with errSecInternalComponent. Apple Development by default, `RELAY_SIGN_IDENTITY` and
+  `RELAY_HARDENED=1` for Developer ID with the hardened runtime. An ad-hoc signed build asks for the login keychain
+  password after every rebuild (the Keychain item's ACL follows the signature); a stable signature doesn't.
+- Debug remote (debug builds): `tools/relay-mac-remote.swift` posts a command on the distributed notification
+  `org.relaychat.RelayMac.debug.command` and prints the answer from `relay-debug/result.json`: `state`, `login
+  server= login= [password=|RELAY_REMOTE_PASSWORD]`, `login-state`, `open-chat query=`, `send text=`, `screen
+  name=new-message|new-channel|browse|settings|chats`, `snapshot`. Screen captures need a permission the agent's
+  terminal lacks, and neither `layer.render` nor `cacheDisplay` draws TGUIKit's content, so `snapshot` writes each
+  window's view tree with TGUIKit `TextView` text (`relay-debug/window-N.txt`); that is how the screens were checked.
+- Checked on the dev server: login through the screen (bob) and the debug login (alice), bootstrap of 2 teams and
+  56 chats, channel pictures, a chat's history, sending (the post reaches the server), a post by another user arriving
+  live, settings and tabs, New Message listing people.
