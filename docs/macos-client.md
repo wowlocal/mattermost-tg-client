@@ -7,7 +7,7 @@ Relay for macOS is Telegram for macOS (TelegramMessenger/telegram-macos) with th
 
 ## Checkout
 
-- macOS app: `~/Developer/relay-mac`, telegram-macos at `d19f811484` (2026-10-09). That commit pins Telegram-iOS
+- macOS app: [wowlocal/relay-mac](https://github.com/wowlocal/relay-mac) (`main`; locally `~/Developer/relay-mac`, branch `relay`, `upstream` is telegram-macos), telegram-macos at `d19f811484` (2026-10-09). That commit pins Telegram-iOS
   `5bb60920e2`, 14 commits before this fork's upstream base `5c20d095d1`; TelegramCore and Postbox differ in three
   files between them, so the app compiles against this fork with no merge. (telegram-macos `master` already pins
   a Telegram-iOS 307 commits newer; moving to it means merging upstream here first.)
@@ -42,7 +42,7 @@ Relay for macOS is Telegram for macOS (TelegramMessenger/telegram-macos) with th
 
 The macOS app needs macOS 13 (the Mattermost packages' minimum).
 
-## In the app (relay-mac, branch `relay`)
+## In the app (wowlocal/relay-mac)
 
 Mostly as in this repository's iOS app, at the matching places of the macOS app:
 
