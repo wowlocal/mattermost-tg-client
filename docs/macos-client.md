@@ -81,11 +81,17 @@ screens, notifications while Relay isn't running (no push on macOS), sharing, vo
   background session fails with errSecInternalComponent. Apple Development by default, `RELAY_SIGN_IDENTITY` and
   `RELAY_HARDENED=1` for Developer ID with the hardened runtime. An ad-hoc signed build asks for the login keychain
   password after every rebuild (the Keychain item's ACL follows the signature); a stable signature doesn't.
-- Release: `tools/relay-mac-release.sh` in a GUI session: Release build, a stripped copy in `build/Relay.app`
-  (the unstripped executable is 435 MB), Developer ID signature with the hardened runtime, notarization with the App
-  Store Connect API key in `~/.relay-secrets/asc` (an individual key: notarytool takes it without `--issuer`),
-  stapled ticket, `build/Relay-<version>-macos-arm64.zip` (119 MB for 1.0.0). A Release build keeps its data under
-  `stable/` and has no debug login or remote.
+- Release: `tools/relay-mac-release.sh` in a GUI session, the way Snippets ships (wowlocal/snippets
+  `Distribution/Release`): Release build with CFBundleVersion = the commit count (`RELAY_VERSION` sets the marketing
+  version), a stripped copy (the unstripped executable is 435 MB), Developer ID signature with the hardened runtime,
+  notarization with the App Store Connect API key in `~/.relay-secrets/asc` (an individual key: notarytool takes it
+  without `--issuer`), stapled ticket, `build/updates/Relay-<version>-<build>.zip` (universal, about 119 MB). Then
+  Sparkle 2.9.5's `generate_appcast` writes `build/updates/appcast.xml` signed with Relay's EdDSA key
+  (`~/.relay-secrets/sparkle/relay-mac-ed25519.key`; the public half is `SUPublicEDKey`), without deltas (the app's
+  Sparkle is 1.21 and can't apply Sparkle 2's deltas), and curl's AWS SigV4 uploads the zip and the appcast to
+  `macos-releases/relay/` on Yandex Object Storage (Snippets' bucket), where `SUFeedURL` points; settings and keys in
+  `~/.relay-secrets/macos-release.env`. A Release build keeps its data under `stable/` and has no debug login or
+  remote. The updater uses only the appcast (Telegram's internal source reads Telegram's update channel).
 - Debug remote (debug builds): `tools/relay-mac-remote.swift` posts a command on the distributed notification
   `org.relaychat.RelayMac.debug.command` and prints the answer from `relay-debug/result.json`: `state`, `login
   server= login= [password=|RELAY_REMOTE_PASSWORD]`, `login-state`, `open-chat query=`, `send text=`, `thread`, `notifications`, `screen
