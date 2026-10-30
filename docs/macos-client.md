@@ -92,6 +92,16 @@ screens, notifications while Relay isn't running (no push on macOS), sharing, vo
   `macos-releases/relay/` on Yandex Object Storage (Snippets' bucket), where `SUFeedURL` points; settings and keys in
   `~/.relay-secrets/macos-release.env`. A Release build keeps its data under `stable/` and has no debug login or
   remote. The updater uses only the appcast (Telegram's internal source reads Telegram's update channel).
+- Every appcast item needs a description: Relay up to 1.0.1 (22) crashes on an update without one (Telegram's
+  updater reads `SUAppcastItem.itemDescription`, an implicitly unwrapped String). The release writes
+  `build/updates/Relay-<version>-<build>.html` from `RELAY_NOTES` (one line per item) or the "Relay for macOS:" commit
+  subjects since the last `relay-mac-*` tag, and release and publish refuse an appcast with an item lacking one.
+- Up to 1.0.1 a reset of the updater during a download started another download of the same zip (1.0.0 ran four,
+  progress past 100%); from 1.0.2 a reset while downloading, unarchiving or installing does nothing.
+- Bucket keys: `tools/relay-mac-bucket-keys.sh --paste` writes them into `~/.relay-secrets/macos-release.env` without
+  echoing the secret, then publishes. Its `yc` path cannot log in with an OAuth token: Yandex Cloud refuses OAuth tokens
+  issued after 2026-06-01 for IAM exchange, and `yc config set token` puts the token into its log file's name.
+  `tools/relay-mac-publish.sh` uploads an already built release.
 - Debug remote (debug builds): `tools/relay-mac-remote.swift` posts a command on the distributed notification
   `org.relaychat.RelayMac.debug.command` and prints the answer from `relay-debug/result.json`: `state`, `login
   server= login= [password=|RELAY_REMOTE_PASSWORD]`, `login-state`, `open-chat query=`, `send text=`, `thread`, `notifications`, `screen
