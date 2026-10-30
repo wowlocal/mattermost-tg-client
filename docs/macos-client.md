@@ -64,7 +64,9 @@ Mostly as in this repository's iOS app, at the matching places of the macOS app:
   entitlement), `Telegram-Mac/Relay.entitlements` (no sandbox, microphone, camera). The share extension is not
   embedded (Telegram's, needs a provisioning profile).
 
-Not done: localization of the Relay screens, threads (reply counts show on channel posts; opening a thread is not checked), Mattermost-specific chat and profile
+Threads: reply counts show on posts, and opening replies builds the thread location locally (`ChatReplyThreadMessage` with `isForumPost`, as on iOS; Telegram's `fetchAndPreloadReplyThreadInfo` would wait for a discussion message forever). The Mattermost token's Keychain service is per build channel (`MattermostSessionKeychain.service`): with one service a Release launch's token cleanup removed the Debug account's token.
+
+Not done: localization of the Relay screens, a Threads list (iOS has a tab), Mattermost-specific chat and profile
 screens, push notifications, sharing, voice transcoding. The emoji panel shows emoji only (no sticker or GIF tabs).
 
 ## Building, signing, checking
@@ -83,10 +85,10 @@ screens, push notifications, sharing, voice transcoding. The emoji panel shows e
   `stable/` and has no debug login or remote.
 - Debug remote (debug builds): `tools/relay-mac-remote.swift` posts a command on the distributed notification
   `org.relaychat.RelayMac.debug.command` and prints the answer from `relay-debug/result.json`: `state`, `login
-  server= login= [password=|RELAY_REMOTE_PASSWORD]`, `login-state`, `open-chat query=`, `send text=`, `screen
+  server= login= [password=|RELAY_REMOTE_PASSWORD]`, `login-state`, `open-chat query=`, `send text=`, `thread`, `screen
   name=new-message|new-channel|browse|settings|chats`, `snapshot`. Screen captures need a permission the agent's
   terminal lacks, and neither `layer.render` nor `cacheDisplay` draws TGUIKit's content, so `snapshot` writes each
   window's view tree with TGUIKit `TextView` text (`relay-debug/window-N.txt`); that is how the screens were checked.
 - Checked on the dev server: login through the screen (bob) and the debug login (alice), bootstrap of 2 teams and
   56 chats, channel pictures, a chat's history, sending (the post reaches the server), a post by another user arriving
-  live, settings and tabs, New Message listing people.
+  live, settings and tabs, New Message listing people, a thread with its replies; a notarized Release build launches.
