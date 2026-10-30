@@ -1,5 +1,9 @@
 import Foundation
+#if os(iOS)
 import UIKit
+#else
+import AppKit
+#endif
 import SwiftSignalKit
 import Postbox
 import TelegramCore
@@ -393,7 +397,7 @@ private func fetchURLImage(postbox: Postbox, url resourceURL: String, resourceId
 /// Telegram draws photos opaque, so the (arbitrary) colour of transparent pixels would show: images with
 /// an alpha channel (logos, icons) are flattened onto white.
 private func flattenedImageData(_ data: Data) -> Data {
-    guard let image = UIImage(data: data), let cgImage = image.cgImage else {
+    guard let image = MMImage(data: data), let cgImage = image.mmCGImage else {
         return data
     }
     switch cgImage.alphaInfo {
@@ -403,13 +407,10 @@ private func flattenedImageData(_ data: Data) -> Data {
         break
     }
     let size = CGSize(width: cgImage.width, height: cgImage.height)
-    let format = UIGraphicsImageRendererFormat()
-    format.scale = 1.0
-    format.opaque = true
-    let rendered = UIGraphicsImageRenderer(size: size, format: format).image { context in
-        UIColor.white.setFill()
+    let rendered = MMImageRenderer.image(size: size, opaque: true) { context in
+        context.setFillColor(MMColor.white.cgColor)
         context.fill(CGRect(origin: .zero, size: size))
-        image.draw(in: CGRect(origin: .zero, size: size))
+        image.mmDraw(in: CGRect(origin: .zero, size: size))
     }
-    return rendered.pngData() ?? data
+    return rendered.mmPNGData() ?? data
 }

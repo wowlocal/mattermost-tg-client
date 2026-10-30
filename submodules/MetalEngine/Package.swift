@@ -25,7 +25,6 @@ let package = Package(
             name: "MetalEngine",
             dependencies: [.product(name: "ShelfPack", package: "ShelfPack", condition: nil),
                            .product(name: "TGUIKit", package: "TGUIKit", condition: nil)],
-            path: "Sources/",
-            resources: [.copy("MetalEngineShaders.metal")]),
+            path: "Sources/"),
     ]
 )

@@ -1,11 +1,14 @@
 import Foundation
+#if os(iOS)
 import UIKit
+#else
+import AppKit
+#endif
 import SwiftSignalKit
 import Postbox
 import TelegramCore
 import MattermostKit
 import MattermostSyncCore
-import WebPBinding
 
 /// Static reaction images, generated on the device (nothing is downloaded for Unicode emoji).
 ///
@@ -98,29 +101,26 @@ enum MattermostReactionImages {
 
     /// An icon's image as a transparent square WebP (aspect fit; clipped to a circle when `round`).
     static func iconWebPData(_ data: Data, round: Bool) -> Data? {
-        guard let image = UIImage(data: data), image.size.width > 0, image.size.height > 0 else {
+        guard let image = MMImage(data: data), image.size.width > 0, image.size.height > 0 else {
             return nil
         }
         let side = CGFloat(self.pixelSize)
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1.0
-        format.opaque = false
-        let rendered = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format).image { context in
+        let rendered = MMImageRenderer.image(size: CGSize(width: side, height: side), opaque: false) { context in
             let box = CGRect(x: 0.0, y: 0.0, width: side, height: side)
             if round {
-                context.cgContext.addEllipse(in: box)
-                context.cgContext.clip()
+                context.addEllipse(in: box)
+                context.clip()
                 // A round icon fills its circle.
                 let scale = max(box.width / image.size.width, box.height / image.size.height)
                 let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-                image.draw(in: CGRect(x: box.midX - size.width / 2.0, y: box.midY - size.height / 2.0, width: size.width, height: size.height))
+                image.mmDraw(in: CGRect(x: box.midX - size.width / 2.0, y: box.midY - size.height / 2.0, width: size.width, height: size.height))
             } else {
                 let scale = min(box.width / image.size.width, box.height / image.size.height)
                 let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-                image.draw(in: CGRect(x: box.midX - size.width / 2.0, y: box.midY - size.height / 2.0, width: size.width, height: size.height))
+                image.mmDraw(in: CGRect(x: box.midX - size.width / 2.0, y: box.midY - size.height / 2.0, width: size.width, height: size.height))
             }
         }
-        return try? WebP.convert(toWebP: rendered, quality: 0.9)
+        return rendered.mmWebPData(quality: 0.9)
     }
 
     static func value(forFileId fileId: Int64) -> String? {
@@ -149,7 +149,7 @@ enum MattermostReactionImages {
                     subscriber.putError(.generic)
                     return
                 }
-                var sourceImage: UIImage?
+                var sourceImage: MMImage?
                 if value.count > 2, value.hasPrefix(":"), value.hasSuffix(":") {
                     sourceImage = await self.customEmojiImage(name: String(value.dropFirst().dropLast()), postbox: postbox)
                 }
@@ -167,7 +167,7 @@ enum MattermostReactionImages {
         }
     }
 
-    private static func customEmojiImage(name: String, postbox: Postbox) async -> UIImage? {
+    private static func customEmojiImage(name: String, postbox: Postbox) async -> MMImage? {
         let client: MattermostClient? = await withCheckedContinuation { continuation in
             let resumed = Atomic<Bool>(value: false)
             let _ = (MattermostResourceClients.shared.client(postbox: postbox)
@@ -184,28 +184,25 @@ enum MattermostReactionImages {
         guard let client = client, let emoji = try? await client.customEmoji(name: name), let data = try? await client.data(for: .emojiImage(emojiId: emoji.id)) else {
             return nil
         }
-        return UIImage(data: data)
+        return MMImage(data: data)
     }
 
     /// A square transparent WebP with the image (or the emoji glyph / text) centered.
-    static func webpData(value: String, image: UIImage?) -> Data? {
+    static func webpData(value: String, image: MMImage?) -> Data? {
         let side = CGFloat(self.pixelSize)
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1.0
-        format.opaque = false
-        let rendered = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format).image { _ in
+        let rendered = MMImageRenderer.image(size: CGSize(width: side, height: side), opaque: false) { _ in
             let box = CGRect(x: 0.0, y: 0.0, width: side, height: side).insetBy(dx: side * 0.04, dy: side * 0.04)
             if let image = image, image.size.width > 0, image.size.height > 0 {
                 let scale = min(box.width / image.size.width, box.height / image.size.height)
                 let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-                image.draw(in: CGRect(x: box.midX - size.width / 2.0, y: box.midY - size.height / 2.0, width: size.width, height: size.height))
+                image.mmDraw(in: CGRect(x: box.midX - size.width / 2.0, y: box.midY - size.height / 2.0, width: size.width, height: size.height))
                 return
             }
             let isText = value.hasPrefix(":")
-            let font: UIFont = isText ? UIFont.boldSystemFont(ofSize: side * 0.3) : (UIFont(name: "AppleColorEmoji", size: side * 0.78) ?? UIFont.systemFont(ofSize: side * 0.78))
+            let font: MMFont = isText ? MMFont.boldSystemFont(ofSize: side * 0.3) : (MMFont(name: "AppleColorEmoji", size: side * 0.78) ?? MMFont.systemFont(ofSize: side * 0.78))
             let text = NSAttributedString(string: isText ? String(value.dropFirst().dropLast()) : value, attributes: [
                 .font: font,
-                .foregroundColor: UIColor.gray
+                .foregroundColor: MMColor.gray
             ])
             var bounds = text.boundingRect(with: CGSize(width: 10000.0, height: 10000.0), options: [.usesLineFragmentOrigin], context: nil)
             var scale: CGFloat = 1.0
@@ -213,7 +210,7 @@ enum MattermostReactionImages {
                 scale = min(box.width / bounds.width, box.height / bounds.height)
             }
             bounds.size = CGSize(width: bounds.width * scale, height: bounds.height * scale)
-            if let context = UIGraphicsGetCurrentContext() {
+            if let context = MMImageRenderer.currentContext() {
                 context.saveGState()
                 context.translateBy(x: box.midX - bounds.width / 2.0, y: box.midY - bounds.height / 2.0)
                 context.scaleBy(x: scale, y: scale)
@@ -221,6 +218,6 @@ enum MattermostReactionImages {
                 context.restoreGState()
             }
         }
-        return try? WebP.convert(toWebP: rendered, quality: 0.9)
+        return rendered.mmWebPData(quality: 0.9)
     }
 }

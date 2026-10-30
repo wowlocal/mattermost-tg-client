@@ -1,5 +1,9 @@
 import Foundation
+#if os(iOS)
 import UIKit
+#else
+import AppKit
+#endif
 import SwiftSignalKit
 import Postbox
 import TelegramCore
@@ -311,20 +315,18 @@ enum MattermostDebugWriter {
 
     private static func generatedJpeg(label: String = "Relay 2A", hue: CGFloat? = nil) -> Data? {
         let size = CGSize(width: 1200, height: 800)
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1.0
-        let image = UIGraphicsImageRenderer(size: size, format: format).image { context in
-            var colors = [UIColor(red: 0.12, green: 0.45, blue: 0.86, alpha: 1.0).cgColor, UIColor(red: 0.55, green: 0.2, blue: 0.75, alpha: 1.0).cgColor]
+        let image = MMImageRenderer.image(size: size, opaque: false) { context in
+            var colors = [MMColor(red: 0.12, green: 0.45, blue: 0.86, alpha: 1.0).cgColor, MMColor(red: 0.55, green: 0.2, blue: 0.75, alpha: 1.0).cgColor]
             if let hue = hue {
-                colors = [UIColor(hue: hue, saturation: 0.7, brightness: 0.85, alpha: 1.0).cgColor, UIColor(hue: fmod(hue + 0.2, 1.0), saturation: 0.7, brightness: 0.6, alpha: 1.0).cgColor]
+                colors = [MMColor(hue: hue, saturation: 0.7, brightness: 0.85, alpha: 1.0).cgColor, MMColor(hue: fmod(hue + 0.2, 1.0), saturation: 0.7, brightness: 0.6, alpha: 1.0).cgColor]
             }
             if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors as CFArray, locations: [0.0, 1.0]) {
-                context.cgContext.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: size.width, y: size.height), options: [])
+                context.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: size.width, y: size.height), options: [])
             }
-            let text = NSAttributedString(string: "\(label)\n\(DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .medium))", attributes: [.font: UIFont.boldSystemFont(ofSize: 96), .foregroundColor: UIColor.white])
+            let text = NSAttributedString(string: "\(label)\n\(DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .medium))", attributes: [.font: MMFont.boldSystemFont(ofSize: 96), .foregroundColor: MMColor.white])
             text.draw(at: CGPoint(x: 80, y: 260))
         }
-        return image.jpegData(compressionQuality: 0.85)
+        return image.mmJPEGData(quality: 0.85)
     }
 }
 

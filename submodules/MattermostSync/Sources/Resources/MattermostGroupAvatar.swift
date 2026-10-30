@@ -1,5 +1,9 @@
 import Foundation
+#if os(iOS)
 import UIKit
+#else
+import AppKit
+#endif
 import SwiftSignalKit
 import Postbox
 import TelegramCore
@@ -99,14 +103,14 @@ enum MattermostGroupAvatar {
             return Signal { subscriber in
                 let task = Task {
                     do {
-                        var images: [UIImage?] = []
+                        var images: [MMImage?] = []
                         for member in resource.members {
                             guard member.pictureUpdate > 0 else {
                                 images.append(nil)
                                 continue
                             }
                             let avatar = MattermostAvatarResource(userId: member.userId, lastPictureUpdate: member.pictureUpdate)
-                            if let path = postbox.mediaBox.completedResourcePath(avatar), let data = try? Data(contentsOf: URL(fileURLWithPath: path)), let image = UIImage(data: data) {
+                            if let path = postbox.mediaBox.completedResourcePath(avatar), let data = try? Data(contentsOf: URL(fileURLWithPath: path)), let image = MMImage(data: data) {
                                 images.append(image)
                                 continue
                             }
@@ -124,7 +128,7 @@ enum MattermostGroupAvatar {
                                     throw error
                                 }
                             }
-                            guard let image = UIImage(data: data) else {
+                            guard let image = MMImage(data: data) else {
                                 images.append(nil)
                                 continue
                             }
@@ -187,24 +191,20 @@ enum MattermostGroupAvatar {
         }
     }
 
-    private static func color(_ rgb: UInt32) -> UIColor {
-        return UIColor(red: CGFloat((rgb >> 16) & 0xff) / 255.0, green: CGFloat((rgb >> 8) & 0xff) / 255.0, blue: CGFloat(rgb & 0xff) / 255.0, alpha: 1.0)
+    private static func color(_ rgb: UInt32) -> MMColor {
+        return MMColor(red: CGFloat((rgb >> 16) & 0xff) / 255.0, green: CGFloat((rgb >> 8) & 0xff) / 255.0, blue: CGFloat(rgb & 0xff) / 255.0, alpha: 1.0)
     }
 
-    static func render(members: [MattermostGroupAvatarResource.Member], images: [UIImage?]) -> Data? {
+    static func render(members: [MattermostGroupAvatarResource.Member], images: [MMImage?]) -> Data? {
         let side = CGFloat(self.pixelSize)
         let tiles = self.tiles(count: min(members.count, 4), side: side)
         if tiles.isEmpty {
             return nil
         }
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1.0
-        format.opaque = true
-        let rendered = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format).image { context in
-            let cgContext = context.cgContext
+        let rendered = MMImageRenderer.image(size: CGSize(width: side, height: side), opaque: true) { cgContext in
             // Opaque, with white between the tiles: a transparent gap showed the letter placeholder that avatar views
             // draw under the image.
-            UIColor.white.setFill()
+            MMColor.white.setFill()
             cgContext.fill(CGRect(x: 0.0, y: 0.0, width: side, height: side))
             for (index, tile) in tiles.enumerated() {
                 cgContext.saveGState()
@@ -213,7 +213,7 @@ enum MattermostGroupAvatar {
                     // Aspect fill, centred.
                     let scale = max(tile.width / image.size.width, tile.height / image.size.height)
                     let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-                    image.draw(in: CGRect(x: tile.midX - size.width / 2.0, y: tile.midY - size.height / 2.0, width: size.width, height: size.height))
+                    image.mmDraw(in: CGRect(x: tile.midX - size.width / 2.0, y: tile.midY - size.height / 2.0, width: size.width, height: size.height))
                 } else {
                     let member = members[index]
                     let gradient = self.gradients[Int(abs(member.colorIndex)) % self.gradients.count]
@@ -221,8 +221,8 @@ enum MattermostGroupAvatar {
                     if let cgGradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0.0, 1.0]) {
                         cgContext.drawLinearGradient(cgGradient, start: CGPoint(x: tile.midX, y: tile.minY), end: CGPoint(x: tile.midX, y: tile.maxY), options: [])
                     }
-                    let font = UIFont.systemFont(ofSize: min(tile.width, tile.height) * 0.42, weight: .semibold)
-                    let text = NSAttributedString(string: member.letter, attributes: [.font: font, .foregroundColor: UIColor.white])
+                    let font = MMFont.systemFont(ofSize: min(tile.width, tile.height) * 0.42, weight: .semibold)
+                    let text = NSAttributedString(string: member.letter, attributes: [.font: font, .foregroundColor: MMColor.white])
                     let bounds = text.boundingRect(with: CGSize(width: 1000.0, height: 1000.0), options: [.usesLineFragmentOrigin], context: nil)
                     // Halves and quarters reach the circle's edge: the letter moves a little toward the centre so
                     // the round clip doesn't cut it.
@@ -232,7 +232,7 @@ enum MattermostGroupAvatar {
                 cgContext.restoreGState()
             }
         }
-        return rendered.pngData()
+        return rendered.mmPNGData()
     }
 }
 

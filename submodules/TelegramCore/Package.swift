@@ -50,7 +50,12 @@ let package = Package(
                            .product(name: "EncryptionProvider", package: "EncryptionProvider", condition: nil),
                            .product(name: "MediaPreuploadRegistry", package: "MediaPreuploadRegistry", condition: nil)],
             path: "Sources",
-            swiftSettings: [.unsafeFlags(["-warnings-as-errors"])]),
+            swiftSettings: [
+                .unsafeFlags([
+                    "-warnings-as-errors",
+                    "-Wwarning", "ImplicitStrongCapture"
+                ])
+            ]),
         .testTarget(
             name: "TelegramCoreTests",
             dependencies: ["TelegramCore"],

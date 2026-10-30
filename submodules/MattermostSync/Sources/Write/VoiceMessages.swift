@@ -5,8 +5,10 @@ import Postbox
 import TelegramCore
 import MattermostKit
 import MattermostSyncCore
+#if os(iOS)
 import ConvertOpusToAAC
 import UniversalMediaPlayer
+#endif
 
 /// Relay's voice messages (Phase 5A, design: mattermost-sync.md "Voice messages (5A)").
 ///
@@ -66,6 +68,7 @@ extension PostSender {
 
     /// Transcodes a recording to AAC (`.m4a`) in a temporary file; nil when it fails.
     static func transcodeVoiceRecording(sourcePath: String, name: String) async -> String? {
+        #if os(iOS)
         let directory = NSTemporaryDirectory() + "relay-voice"
         try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
         let outputPath = directory + "/\(name).\(VoiceMessageFile.fileExtension)"
@@ -93,6 +96,10 @@ extension PostSender {
         }
         MMLog.log("voice: transcoded \(name) (Ogg/Opus \(sourceSize) bytes → AAC \(size) bytes) in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
         return path
+        #else
+        // macOS: no transcoder yet, the recording goes out as Ogg/Opus (PostSender's fallback).
+        return nil
+        #endif
     }
 }
 
@@ -206,6 +213,7 @@ private let voiceWaveformWork = MMLocked(VoiceWaveformWork())
 
 /// The audio of a file as 48 kHz mono 16-bit samples (FFmpeg: m4a, Ogg/Opus, mp3, wav, …).
 private func decodeVoicePCM(path: String) -> [Int16]? {
+    #if os(iOS)
     let source = SoftwareAudioSource(path: path)
     guard source.hasStream else {
         return nil
@@ -230,4 +238,8 @@ private func decodeVoicePCM(path: String) -> [Int16]? {
         }
     }
     return samples
+    #else
+    // macOS: no decoder yet, so no computed waveform.
+    return nil
+    #endif
 }

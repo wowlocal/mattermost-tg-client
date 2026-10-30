@@ -1,5 +1,9 @@
 import Foundation
+#if os(iOS)
 import UIKit
+#else
+import AppKit
+#endif
 import AVFoundation
 import SwiftSignalKit
 import Postbox
@@ -100,7 +104,7 @@ public enum MattermostShareExtension {
                 // A photo shared as a file (the Photos app): `TGItemProviderSignals` hands it over as a JPEG it
                 // scaled down to 1280 px.
                 addImage(data, "image/jpeg", ".jpg")
-            } else if let image = item["image"] as? UIImage, let data = image.jpegData(compressionQuality: 0.9) {
+            } else if let image = item["image"] as? MMImage, let data = image.mmJPEGData(quality: 0.9) {
                 addImage(data, "image/jpeg", ".jpg")
             } else if let data = item["image"] as? Data {
                 // An app that hands over the image's bytes: JPEG and PNG as they are, anything else (HEIC) as JPEG.
@@ -108,7 +112,7 @@ public enum MattermostShareExtension {
                     addImage(data, "image/jpeg", ".jpg")
                 } else if data.starts(with: [0x89, 0x50, 0x4E, 0x47]) {
                     addImage(data, "image/png", ".png")
-                } else if let jpeg = UIImage(data: data)?.jpegData(compressionQuality: 0.9) {
+                } else if let jpeg = MMImage(data: data)?.mmJPEGData(quality: 0.9) {
                     addImage(jpeg, "image/jpeg", ".jpg")
                 } else {
                     self.log("left out an image the system can't decode (\(data.count) bytes)")
