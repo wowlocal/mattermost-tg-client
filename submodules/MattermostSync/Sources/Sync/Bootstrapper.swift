@@ -90,6 +90,10 @@ extension MattermostAccountSync {
             }
             included.append((item.channel, member, item.teamId))
         }
+        // The members chosen for channel pictures (`ChannelPictures.swift`, restored at start), so the channels are
+        // written with their pictures; without them a relaunch wrote every channel with its letter until the next
+        // daily choice.
+        userIds.formUnion(self.state.with { state in state.channelPictureUserIds.values.flatMap { $0 } })
         var users: [User] = []
         let userIdList = Array(userIds)
         for start in stride(from: 0, to: userIdList.count, by: 100) {
