@@ -64,8 +64,8 @@ Mostly as in this repository's iOS app, at the matching places of the macOS app:
   entitlement), `Telegram-Mac/Relay.entitlements` (no sandbox, microphone, camera). The share extension is not
   embedded (Telegram's, needs a provisioning profile).
 
-Not done: localization of the Relay screens, threads (collapsed reply threads), Mattermost-specific chat and profile
-screens, push notifications, sharing, voice transcoding, stickers and GIF tabs (empty, not hidden).
+Not done: localization of the Relay screens, threads (reply counts show on channel posts; opening a thread is not checked), Mattermost-specific chat and profile
+screens, push notifications, sharing, voice transcoding. The emoji panel shows emoji only (no sticker or GIF tabs).
 
 ## Building, signing, checking
 
@@ -76,6 +76,11 @@ screens, push notifications, sharing, voice transcoding, stickers and GIF tabs (
   background session fails with errSecInternalComponent. Apple Development by default, `RELAY_SIGN_IDENTITY` and
   `RELAY_HARDENED=1` for Developer ID with the hardened runtime. An ad-hoc signed build asks for the login keychain
   password after every rebuild (the Keychain item's ACL follows the signature); a stable signature doesn't.
+- Release: `tools/relay-mac-release.sh` in a GUI session: Release build, a stripped copy in `build/Relay.app`
+  (the unstripped executable is 435 MB), Developer ID signature with the hardened runtime, notarization with the App
+  Store Connect API key in `~/.relay-secrets/asc` (an individual key: notarytool takes it without `--issuer`),
+  stapled ticket, `build/Relay-<version>-macos-arm64.zip` (119 MB for 1.0.0). A Release build keeps its data under
+  `stable/` and has no debug login or remote.
 - Debug remote (debug builds): `tools/relay-mac-remote.swift` posts a command on the distributed notification
   `org.relaychat.RelayMac.debug.command` and prints the answer from `relay-debug/result.json`: `state`, `login
   server= login= [password=|RELAY_REMOTE_PASSWORD]`, `login-state`, `open-chat query=`, `send text=`, `screen
