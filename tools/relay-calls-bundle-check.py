@@ -14,10 +14,13 @@ def inspect_bundle(read, names):
     if not extension_id or not group:
         failures.append("The app is missing its ReplayKit extension or app-group setting.")
     extensions = [name for name in names if name.startswith("PlugIns/") and name.count("/") == 2 and name.endswith(".appex/Info.plist")]
-    broadcast = next((plistlib.loads(read(name)) for name in extensions if plistlib.loads(read(name)).get("CFBundleIdentifier") == extension_id), None)
+    broadcast_path = next((name for name in extensions if plistlib.loads(read(name)).get("CFBundleIdentifier") == extension_id), None)
+    broadcast = plistlib.loads(read(broadcast_path)) if broadcast_path else None
     if broadcast is None:
         failures.append("The configured ReplayKit broadcast extension is not embedded.")
     else:
+        if broadcast_path.removesuffix("Info.plist") + "PrivacyInfo.xcprivacy" not in names:
+            failures.append("The broadcast extension is missing its privacy manifest.")
         if not str(broadcast.get("CFBundleDisplayName", "")).strip():
             failures.append("The broadcast extension has no CFBundleDisplayName; iOS will reject installation.")
         if broadcast.get("RTCAppGroupIdentifier") != group:
@@ -54,7 +57,7 @@ def main():
         print(f"FAIL: {failure}", file=sys.stderr)
     if failures:
         return 1
-    print("Relay Calls bundle checks passed: broadcast metadata, app group and both dynamic frameworks.")
+    print("Relay Calls bundle checks passed: broadcast metadata and privacy manifest, app group and both dynamic frameworks.")
     return 0
 
 
