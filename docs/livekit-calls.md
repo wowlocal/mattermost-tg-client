@@ -157,9 +157,10 @@ verification. Disabling automatic `NSHostingController` sizing keeps its
 720×620 call content size stable when participants and shared screens update;
 all controls remain visible. Microphone mute/unmute, source selection, sharing
 and end-for-everyone were exercised in that build. Screen capture succeeded
-without a stale error message. Both freshly built iOS receivers rendered the
-shared window, and ending from macOS passed the final two receiver checks and
-cleared the server call state.
+without a stale error message. The iPhone rendered that final Mac's shared
+window; both freshly built iOS receivers had also rendered the window during
+the earlier multiuser run. Ending from macOS passed the final two receiver
+checks and cleared the server call state.
 
 A receive-only SDK probe joined that final native call for 15 seconds and
 decoded 1,500 audio frames / 720,000 samples from each of the three clients,
