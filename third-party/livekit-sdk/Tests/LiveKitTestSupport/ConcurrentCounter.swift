@@ -1,0 +1,45 @@
+/*
+ * Copyright 2026 LiveKit
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import Foundation
+
+public actor ConcurrentCounter {
+    private var count: Int = 0
+
+    public init() {}
+
+    public func increment() -> Int {
+        count += 1
+        return count - 1
+    }
+
+    public func getCount() -> Int {
+        count
+    }
+
+    /// Polls until `count >= target` (or `timeout` elapses) and returns the observed count.
+    ///
+    /// The default is generous on purpose: callers use this for liveness ("it fired at all"), and
+    /// the work being counted usually rides a `.utility` task whose wake-ups a loaded host is free
+    /// to coalesce. A shorter budget turns that into a failed assertion rather than a slower pass.
+    public func wait(untilAtLeast target: Int, timeout: TimeInterval = 60) async -> Int {
+        let deadline = Date().addingTimeInterval(timeout)
+        while count < target, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        return count
+    }
+}

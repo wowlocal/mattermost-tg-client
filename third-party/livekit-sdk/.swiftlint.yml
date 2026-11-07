@@ -1,0 +1,63 @@
+excluded:
+  - "**/.build"
+  - "**/.build-test"
+  - "**/.cache"
+  - "**/.swiftpm"
+  - build
+  - Sources/LiveKit/Protos
+  - Tests/LiveKitNanopbTests/Oracle
+  - Tests/LiveKitNanopbTests/Generated
+
+disabled_rules:
+  - todo
+  - nesting
+  - identifier_name
+  - multiple_closures_with_trailing_closure
+  # SwiftFormat conflicts
+  - trailing_comma
+  - line_length
+  - opening_brace
+
+type_name:
+  excluded:
+    - ID
+    - OS
+
+custom_rules:
+  no_xctest_in_swift_tests:
+    name: "No XCTest in Swift Tests"
+    regex: "^import XCTest"
+    message: "Use Swift Testing (import Testing) instead of XCTest in Swift test targets."
+    severity: error
+    included:
+      - "Tests/LiveKitCoreTests/.*\\.swift"
+      - "Tests/LiveKitAudioTests/.*\\.swift"
+  no_manual_task_management:
+    name: "No Manual Task Management"
+    regex: "(let|var)\\s+\\w+\\s*:\\s*Task<Void,"
+    message: "Prefer AnyTaskCancellable over manually managing Task<Void, ...>. This allows for safer cleanup, similar to Combine's AnyCancellable."
+    severity: warning
+  prefer_objc_members:
+    name: "Prefer @objcMembers for classes"
+    regex: "@objc(?![(\\[])\\s+(?:(?:public|open|final|internal|package)\\s+)*class\\b"
+    message: "Use @objcMembers instead of @objc for classes to implicitly expose members to Objective-C."
+    severity: warning
+  webrtc_sendable_in_one_file:
+    name: "WebRTC Sendable Conformance In One File"
+    regex: "extension +LKRTC\\w+ *: *@unchecked"
+    message: "Declare `@unchecked Sendable` on a WebRTC type only in Extensions/Sendable.swift, so every conformance is reviewed in one place. A proxy that has to cross an isolation boundary belongs behind an @RTC facade (RTCSender, RTCReceiver, RTCMediaTrack) instead — the conformance would let its blocking calls be written anywhere."
+    severity: error
+    excluded:
+      - "Sources/LiveKit/Extensions/Sendable\\.swift"
+  no_raw_webrtc_proxy_storage:
+    name: "No Raw WebRTC Proxy Storage"
+    regex: "(let|var) +_?\\w+ *: *LKRTC(PeerConnection|RtpSender|RtpReceiver|RtpTransceiver|MediaStreamTrack|AudioTrack|VideoTrack|VideoSource|DataChannel)\\b\\??(?! *\\{)"
+    message: "Store a libwebrtc proxy in an RTCBox behind an @RTC facade, not as a raw property: every call on it and its last release are BlockingCalls, and a raw property makes them writable from any isolation. See Core/RTCSender.swift."
+    severity: error
+    included:
+      - "Sources/LiveKit/.*\\.swift"
+  no_background_qos:
+    name: "No Background QoS"
+    regex: "(qos:\\s*\\.background\\b|priority:\\s*\\.background\\b|DispatchQoS\\.background\\b|TaskPriority\\.background\\b|qosClass:\\s*\\.background\\b|QOS_CLASS_BACKGROUND)"
+    message: "Background QoS may be deferred indefinitely under CPU pressure; anything awaiting work scheduled here can stall forever (QoS inversion). Use .utility or higher."
+    severity: error

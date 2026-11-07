@@ -1,0 +1,52 @@
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+load("@rules_cc//cc:objc_library.bzl", "objc_library")
+load("@build_bazel_rules_apple//apple:resources.bzl", "apple_resource_group")
+
+package(default_visibility = ["//visibility:public"])
+
+objc_library(
+    name = "CLiveKitProto",
+    srcs = glob(["Sources/CLiveKitProto/*.c"]),
+    hdrs = glob(["Sources/CLiveKitProto/include/*.h"]),
+    includes = ["Sources/CLiveKitProto/include"],
+    enable_modules = True,
+    module_name = "CLiveKitProto",
+)
+
+objc_library(
+    name = "LKObjCHelpers",
+    srcs = glob(["Sources/LKObjCHelpers/*.m"]),
+    hdrs = glob(["Sources/LKObjCHelpers/include/*.h"]),
+    includes = ["Sources/LKObjCHelpers/include"],
+    enable_modules = True,
+    module_name = "LKObjCHelpers",
+    sdk_frameworks = ["Foundation", "ReplayKit"],
+)
+
+swift_library(
+    name = "LiveKitNanopb",
+    module_name = "LiveKitNanopb",
+    package_name = "LiveKit",
+    srcs = glob(["Sources/LiveKitNanopb/**/*.swift"]),
+    deps = [":CLiveKitProto"],
+    copts = ["-swift-version", "5"],
+)
+
+apple_resource_group(
+    name = "Privacy",
+    resources = ["Sources/LiveKit/PrivacyInfo.xcprivacy"],
+)
+
+swift_library(
+    name = "LiveKit",
+    module_name = "LiveKit",
+    package_name = "LiveKit",
+    srcs = glob(["Sources/LiveKit/**/*.swift"]),
+    copts = ["-swift-version", "5"],
+    data = [":Privacy"],
+    deps = [
+        ":CLiveKitProto", ":LKObjCHelpers", ":LiveKitNanopb",
+        "//third-party/livekit-binaries:LiveKitWebRTC",
+        "//third-party/livekit-ffi:LiveKitFFI",
+    ],
+)

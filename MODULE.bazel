@@ -2,6 +2,20 @@ http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_
 
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
+http_archive(
+    name = "relay_livekit_webrtc",
+    urls = ["https://github.com/livekit/webrtc-xcframework/releases/download/150.7871.04/LiveKitWebRTC.xcframework.zip"],
+    sha256 = "3b0aa4bee8d5596d6592b8d75bddc84391769849fd64c04b8e13c9e77ce6a82b",
+    build_file = "//third-party/livekit-binaries:webrtc.BUILD",
+)
+
+http_archive(
+    name = "relay_livekit_ffi",
+    urls = ["https://github.com/livekit/livekit-uniffi-xcframework/releases/download/0.13.1/RustLiveKitFFI.xcframework.zip"],
+    sha256 = "9c6fca694df24f1206897c5787c001120c27e03a2b28688af76c83ea79a45805",
+    build_file = "//third-party/livekit-binaries:ffi.BUILD",
+)
+
 _WASI_SDK_BUILD = """
 exports_files(["bin/clang++"])
 filegroup(

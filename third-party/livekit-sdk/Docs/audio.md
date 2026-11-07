@@ -1,0 +1,274 @@
+# Audio
+
+## Disabling automatic `AVAudioSession` configuration
+
+By default, the SDK automatically configures the `AVAudioSession`. However, this can interfere with your own configuration or with frameworks like CallKit that configure the AVAudioSession automatically. In such cases, you can disable automatic configuration by the SDK.
+
+```swift
+AudioManager.shared.audioSession.isAutomaticConfigurationEnabled = false
+```
+
+## Audio engine observers
+
+The SDK configures and wires the internal audio engine through an `AudioEngineObserver` chain.
+On iOS, visionOS, and tvOS, the default chain is:
+
+```swift
+AudioManager.shared.set(engineObservers: [AudioManager.shared.audioSession, AudioManager.shared.mixer])
+```
+
+If you only want to manage `AVAudioSession` yourself, keep the default observers and set
+`AudioManager.shared.audioSession.isAutomaticConfigurationEnabled = false`.
+
+On macOS, the default chain is:
+
+```swift
+AudioManager.shared.set(engineObservers: [AudioManager.shared.mixer])
+```
+
+Set a custom observer chain only if you need custom lifecycle hooks or audio graph wiring.
+Setting `AudioManager.shared.set(engineObservers: [])` disables all observers, including
+session handling and mixer setup. Configure the chain once early in app startup, and avoid
+changing it while the engine is in use.
+
+## Disabling automatic `AVAudioSession` deactivation
+
+> Note: If `isAutomaticConfigurationEnabled` is `false`, the SDK does not touch the audio
+> session, so this setting has no effect.
+
+By default, the SDK deactivates the `AVAudioSession` when both playout and recording are disabled (e.g., after disconnecting from a room). This allows other apps' audio (like Music) to resume.
+
+However, if your app has its own audio features that could be disrupted by deactivating the audio session, you can disable automatic deactivation:
+
+```swift
+AudioManager.shared.audioSession.isAutomaticDeactivationEnabled = false
+```
+
+When set to `false`, the audio session remains active after the LiveKit call ends, preserving your app's audio state.
+
+## Audio session category selection
+
+When `isAutomaticConfigurationEnabled` is `true`, the SDK derives the category from the audio engine:
+
+- **Playout only** (subscribing to remote audio, nothing recording): `.playback`. The volume buttons stay on the media register.
+- **Recording active**: `.playAndRecord`, and it stays there until the audio engine stops.
+
+`.playAndRecord` is sticky on purpose. Changing the category mid-session tears down Apple's Voice Processing I/O, which would leave echo cancellation off for the remainder of the call, so muting the microphone does not fall back to `.playback`. The category returns to `.playback` once the audio engine stops — typically at `Room.disconnect()` — and the next session starts fresh. Session requirements held outside the engine (a prepared `SoundPlayer` sound, for example) keep the session active but do not keep `.playAndRecord` selected.
+
+Recording is considered active whenever anything needs microphone input — a published microphone track, `AudioManager.setRecordingAlwaysPreparedMode(_:)`, `AudioManager.startLocalRecording(audioProcessingOptions:)`, or an externally acquired session requirement that includes `.recording`.
+
+> Note: iOS asks for microphone permission when a `.playAndRecord` session is activated. Apps that only ever subscribe should avoid the APIs above so the session stays on `.playback`.
+
+Because the categories differ in whether they mix with other apps, publishing the microphone interrupts audio from other apps (`.playAndRecord` does not set `.mixWithOthers`), and muting does not bring it back — the interruption lasts until the audio engine stops.
+
+## Audio Processing Modes (software, platform, automatic)
+
+Each audio processing effect has its own mode type: `EchoCancellationMode`, `NoiseSuppressionMode`, `AutoGainControlMode`, and `HighpassFilterMode`. Echo cancellation, noise suppression, and auto gain control can use Apple's platform Voice Processing I/O or WebRTC's software processing:
+
+- `.automatic` (default): prefer platform voice processing when available, and fall back to WebRTC software processing otherwise.
+- `.platform`: use platform voice processing only. If the platform implementation is unavailable, the request is rejected.
+- `.software`: force WebRTC software processing and disable the matching platform effect when possible.
+
+Configure the modes when you publish the microphone:
+
+```swift
+let options = AudioCaptureOptions(
+    echoCancellation: true,
+    autoGainControl: true,
+    noiseSuppression: true,
+    highpassFilter: true,
+    echoCancellationMode: .software,
+    autoGainControlMode: .software,
+    noiseSuppressionMode: .software,
+    highpassFilterMode: .software
+)
+try await room.localParticipant.setMicrophone(enabled: true, captureOptions: options)
+```
+
+You can also set them as the room default, so they apply whenever the mic is published:
+
+```swift
+let room = Room()
+try await room.connect(url: url, token: token,
+                       roomOptions: RoomOptions(defaultAudioCaptureOptions: options))
+```
+
+To change the modes at runtime on an already-published track, use `setAudioProcessingOptions`:
+
+```swift
+let result = try localAudioTrack.setAudioProcessingOptions(
+    AudioProcessingOptions(
+        echoCancellation: true,
+        autoGainControl: true,
+        noiseSuppression: true,
+        highpassFilter: true,
+        echoCancellationMode: .software,
+        autoGainControlMode: .software,
+        noiseSuppressionMode: .software,
+        highpassFilterMode: .software
+    )
+)
+print(result) // .applied, or .stored when no sender is active yet
+```
+
+On failure this throws `AudioProcessingOptionsError`, whose `code` describes the reason — for example `.platformUnavailable` when a `.platform` mode was requested but Apple Voice Processing I/O is unavailable.
+
+To confirm which implementation each effect resolved to, read the engine-wide state:
+
+```swift
+let state = AudioManager.shared.audioProcessingState
+print(state.echoCancellation.effective) // Software
+print(state.noiseSuppression.effective)  // Software
+```
+
+Each component also exposes the most recent `requested` options and per-path detail: `software` and `platform` carry resolved/active flags, with `platform` being `nil` on devices without a built-in implementation. Device-level Apple Voice Processing I/O state is available separately through `AudioManager.shared.platformVoiceProcessingState`.
+
+> **NOTE**: There is no platform high-pass filter, so `HighpassFilterMode` only provides `.automatic` and `.software`.
+
+To guarantee Apple Voice Processing I/O is never used at all, for example to keep hardware volume consistent or to allow screen recording with audio, also disallow platform voice processing as described below.
+
+## Disallowing Platform Voice Processing
+
+Apple's platform voice processing is allowed by default, such as echo cancellation and auto-gain control.
+
+If your app must not use Apple Voice Processing I/O, disallow platform voice processing:
+
+```swift
+try AudioManager.shared.setPlatformVoiceProcessingAllowed(false)
+```
+
+This restarts the internal `AVAudioEngine` when an Apple VPIO path is active. It is recommended to set it once before connecting to a Room. Runtime `AudioProcessingOptions` with `automatic` mode will fall back to WebRTC software processing while platform voice processing is disallowed.
+
+For per-track or per-capture software processing, use `AudioProcessingOptions` with `.software` modes. The lower-level bypass API remains available when you need to directly control Apple VPIO:
+
+```swift
+AudioManager.shared.isVoiceProcessingBypassed = true
+```
+
+Set it back to `false` to re-enable the Apple path. This uses `AVAudioEngine`'s [isVoiceProcessingBypassed](https://developer.apple.com/documentation/avfaudio/avaudioinputnode/isvoiceprocessingbypassed). Runtime `AudioProcessingOptions` can overwrite this Apple-specific state when capture starts or options are reapplied.
+
+## Other audio ducking
+
+When using Apple's voice processing APIs, the system may *duck* (lower) *other audio* so the voice chat stays intelligible.
+
+- **What is "other audio"**: Any playback that is *not* the voice-chat stream rendered through the voice processing path (for example, media playback in your app outside the SDK, or audio from other apps).
+- **SDK default behavior**: The SDK defaults to minimal ducking with fixed behavior (`isAdvancedDuckingEnabled = false`) and a ducking level of `.min` (when available). This is intended to keep other audio as loud as possible. Stronger or dynamic ducking is opt-in.
+
+The SDK exposes two controls:
+
+- `AudioManager.shared.isAdvancedDuckingEnabled`: When enabled, ducking becomes dynamic based on voice activity from either side of the call (more ducking while someone is speaking, less ducking during silence).
+- `AudioManager.shared.duckingLevel`: Controls how much other audio is lowered (`.default`, `.min`, `.mid`, `.max`). `.default` matches Apple's historical fixed ducking amount.
+
+Example:
+
+```swift
+// Dynamic ducking based on voice activity (FaceTime / SharePlay-like behavior).
+AudioManager.shared.isAdvancedDuckingEnabled = true
+// Control the ducking amount (availability depends on the OS).
+AudioManager.shared.duckingLevel = .max // maximize voice intelligibility
+```
+
+> **NOTE**: These settings apply when the SDK is using Apple's voice processing (default). If you disable voice processing, other-audio ducking does not apply.
+
+## Always-prepared recording mode
+
+If you want to minimize mic publish latency, you can pre-warm the audio engine and keep mic input prepared in a muted state:
+
+```swift
+Task.detached {
+    try? await AudioManager.shared.setRecordingAlwaysPreparedMode(true)
+}
+```
+
+Behavior and trade-offs:
+
+- Starts the audio engine configured for mic input in a muted state, so publishing the mic is almost immediate.
+- The mic privacy indicator typically stays off while the engine is prepared and muted.
+- If `AudioManager.shared.audioSession.isAutomaticConfigurationEnabled` is `true`, the SDK configures the session category to `.playAndRecord`.
+- Mic permission is required and the system prompt will appear if not already granted.
+- This mode persists across Room lifecycles. The audio engine stays running (muted) even after disconnect, so re-joining and publishing is fast.
+- Startup takes a bit longer because voice processing needs to warm up.
+
+Disable it when you no longer need the pre-warmed engine:
+
+```swift
+try await AudioManager.shared.setRecordingAlwaysPreparedMode(false)
+```
+
+## Microphone mute modes
+
+You can control how mic mute/unmute works:
+
+```swift
+try AudioManager.shared.set(microphoneMuteMode: .voiceProcessing)
+```
+
+- `.voiceProcessing` (default): Uses the Voice Processing I/O mute API internally. Fast and does not reconfigure the audio session on mute/unmute. iOS plays a short system sound when muting or unmuting.
+- `.restart`: Shuts down the audio engine on mute and restarts it on unmute. This deactivates and reconfigures the audio session, so it is slower and may affect audio session category or volume. No system sound is played. Not recommended for most apps.
+- `.inputMixer`: Mutes the input mixer only. The audio engine keeps running and the mic indicator remains on. No system sound is played.
+
+| Mode | iOS beep sound | Mic indicator | Speed |
+| --- | --- | --- | --- |
+| `.voiceProcessing` | Yes | Turns off | Fast |
+| `.restart` | No | Turns off | Slow |
+| `.inputMixer` | No | Remains on | Fast |
+
+Notes:
+
+- `.voiceProcessing` uses the Voice Processing I/O mute API. In our testing,
+  this can behave like an app-wide mute for voice-processing input, affecting other
+  `AVAudioEngine` instances that use the mic. If you have another engine that uses mic
+  input, consider `.inputMixer` or manage muting yourself.
+- If your other engines are playback-only, there is typically no impact.
+
+If you disable automatic audio session configuration (`AudioManager.shared.audioSession.isAutomaticConfigurationEnabled = false`), the SDK will not touch the session category. Make sure your app sets `.playAndRecord` before unmuting or publishing the mic.
+
+## Capturing Audio Buffers
+
+The SDK supports capturing custom audio buffers (`AVAudioPCMBuffer`) instead of or in addition to microphone input.
+
+### Capturing Audio Buffers with Microphone
+
+To capture custom audio buffers while still using the microphone:
+
+1. Enable the microphone:
+   ```swift
+   try await room.localParticipant.setMicrophone(enabled: true)
+   ```
+
+2. Repeatedly call the capture method with your audio buffers:
+   ```swift
+   AudioManager.shared.mixer.capture(appAudio: yourAudioBuffer)
+   ```
+
+### Capturing Audio Buffers Without Device Access (Manual Mode)
+
+For applications that need to provide audio without accessing the device's microphone:
+
+1. Enable manual rendering mode:
+   ```swift
+   try AudioManager.shared.setManualRenderingMode(true)
+   ```
+
+2. Enable the microphone track (this won't access the physical microphone in manual mode):
+   ```swift
+   try await room.localParticipant.setMicrophone(enabled: true)
+   ```
+
+3. Provide audio buffers continuously:
+   ```swift
+   AudioManager.shared.mixer.capture(appAudio: yourAudioBuffer)
+   ```
+
+> **NOTE**: When manual rendering mode is enabled, the audio engine doesn't access any audio devices. This means remote audio will not be played automatically and you must handle audio playback yourself.
+
+> **NOTE**: Audio format will be automatically converted so you don't need to handle this yourself.
+
+### Volume Control
+
+You can adjust the volume levels for different audio sources:
+
+- **Microphone volume**: `AudioManager.shared.mixer.micVolume`
+- **Custom audio buffer volume**: `AudioManager.shared.mixer.appVolume`
+
+Both properties accept values from `0.0` (muted) to `1.0` (full volume).

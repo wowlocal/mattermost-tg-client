@@ -1,0 +1,263 @@
+/*
+ * Copyright 2026 LiveKit
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import Foundation
+@testable import LiveKit
+import LiveKitFFI
+
+/// Framework-agnostic test environment utilities (no XCTest/Testing dependency).
+public enum TestEnvironment {
+    public static func readEnvironmentString(for key: String, defaultValue: String) -> String {
+        if let string = ProcessInfo.processInfo.environment[key]?.trimmingCharacters(in: .whitespacesAndNewlines), !string.isEmpty {
+            return string
+        }
+        return defaultValue
+    }
+
+    public static func liveKitServerUrl() -> String {
+        readEnvironmentString(for: "LIVEKIT_TESTING_URL", defaultValue: "ws://localhost:7880")
+    }
+
+    /// The test server never answered the readiness probe.
+    ///
+    /// Thrown from every connect in the process once ``waitForServer(_:)`` has given up, so each
+    /// test fails at once with the reason, instead of each sitting out its own connect timeouts.
+    public struct ServerUnreachable: Error, CustomStringConvertible {
+        public let url: URL
+        public let timeout: TimeInterval
+        public var description: String { "Test server at \(url) did not answer within \(Int(timeout)) s" }
+    }
+
+    /// How long ``waitForServer(_:)`` gives the configured server to answer before failing.
+    public static let serverReadyTimeout: TimeInterval = 90
+
+    /// Waits, once per process, for the configured test server to answer over HTTP.
+    ///
+    /// A freshly booted simulator can take most of a minute before loopback traffic reaches the
+    /// host: on the xcode-27 iOS 27.0 leg the first connecting test started 52 s before the SFU
+    /// logged its first request from it, and spent its three connect attempts on `The request
+    /// timed out`. Waiting here turns that into wait time rather than a failed test. After
+    /// ``serverReadyTimeout`` it throws ``ServerUnreachable``, which Swift Testing records as the
+    /// test's issue and the Objective-C helper hands to its completion handler.
+    ///
+    /// Only the server from ``liveKitServerUrl()`` is probed. A caller connecting anywhere else
+    /// is using an endpoint this harness does not manage — possibly one it expects to fail
+    /// against — so it goes straight to its connect.
+    public static func waitForServer(_ url: String) async throws {
+        guard url == liveKitServerUrl() else { return }
+        try await serverReady.value
+    }
+
+    private static let serverReady = Task<Void, Error> {
+        guard var components = URLComponents(string: liveKitServerUrl()) else { return }
+        components.scheme = components.scheme == "wss" ? "https" : "http"
+        guard let url = components.url else { return }
+        let deadline = Date().addingTimeInterval(serverReadyTimeout)
+        while Date() < deadline {
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 2
+            let answered = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                URLSession.shared.dataTask(with: request) { _, response, _ in
+                    continuation.resume(returning: response is HTTPURLResponse)
+                }.resume()
+            }
+            if answered { return }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+        }
+        throw ServerUnreachable(url: url, timeout: serverReadyTimeout)
+    }
+
+    /// Grants default to the minimum needed to connect and observe; pass them explicitly to publish.
+    public static func liveKitServerToken(for room: String,
+                                          identity: String,
+                                          canPublish: Bool = false,
+                                          canPublishData: Bool = false,
+                                          canPublishSources: Set<Track.Source> = [],
+                                          canSubscribe: Bool = true) throws -> String
+    {
+        let apiKey = readEnvironmentString(for: "LIVEKIT_TESTING_API_KEY", defaultValue: "devkey")
+        let apiSecret = readEnvironmentString(for: "LIVEKIT_TESTING_API_SECRET", defaultValue: "secret")
+
+        let tokenGenerator = TokenGenerator(apiKey: apiKey,
+                                            apiSecret: apiSecret,
+                                            identity: identity)
+
+        tokenGenerator.videoGrants = VideoGrants(
+            roomCreate: false,
+            roomList: false,
+            roomRecord: false,
+            roomAdmin: false,
+            roomJoin: true,
+            room: room,
+            destinationRoom: "",
+            canPublish: canPublish,
+            canSubscribe: canSubscribe,
+            canPublishData: canPublishData,
+            canPublishSources: canPublishSources.map(String.init),
+            canUpdateOwnMetadata: false,
+            ingressAdmin: false,
+            hidden: false,
+            recorder: false,
+            agent: false,
+        )
+
+        return try tokenGenerator.sign()
+    }
+
+    /// Single-room convenience. Connects one Room, executes the block, then disconnects.
+    public static func withRoom(_ options: RoomTestingOptions = RoomTestingOptions(),
+                                _ block: @escaping (Room) async throws -> Void) async throws
+    {
+        try await withRooms([options]) { rooms in
+            try await block(rooms[0])
+        }
+    }
+
+    // Set up variable number of Rooms, connect them, wait for participants to discover each other,
+    // execute the block, then disconnect. Framework-agnostic (no XCTest/Testing dependency).
+    public static func withRooms(_ options: [RoomTestingOptions] = [],
+                                 _ block: @escaping ([Room]) async throws -> Void) async throws
+    {
+        // Rooms without an explicit name share this one, so they meet in the same room.
+        let sharedRoomName = UUID().uuidString
+        let sharedKey = UUID().uuidString
+
+        let rooms = try options.enumerated().map {
+            let connectOptions = ConnectOptions(
+                enableMicrophone: $0.element.enableMicrophone,
+                clientProtocol: $0.element.clientProtocol ?? ConnectOptions().clientProtocol,
+            )
+
+            let encryptionOptions = $0.element.isE2eeEnabled
+                ? $0.element.encryptionOptions ?? EncryptionOptions(keyProvider: BaseKeyProvider(isSharedKey: true, sharedKey: sharedKey))
+                : nil
+            let roomOptions = RoomOptions(dataStreamOptions: $0.element.dataStreamOptions, encryptionOptions: encryptionOptions,
+                                          reportRemoteTrackStatistics: true, singlePeerConnection: $0.element.singlePeerConnection)
+
+            let room = Room(delegate: $0.element.delegate, connectOptions: connectOptions, roomOptions: roomOptions)
+            let roomName = $0.element.roomName ?? sharedRoomName
+            let identity = $0.element.identity ?? "identity-\($0.offset)"
+
+            let url = $0.element.url ?? liveKitServerUrl()
+
+            let lkToken = try liveKitServerToken(for: roomName,
+                                                 identity: identity,
+                                                 canPublish: $0.element.canPublish,
+                                                 canPublishData: $0.element.canPublishData,
+                                                 canPublishSources: $0.element.canPublishSources,
+                                                 canSubscribe: $0.element.canSubscribe)
+            let token = $0.element.token ?? lkToken
+
+            print("Token: \(token) for room: \(roomName)")
+
+            return RoomFixture(room: room,
+                               identity: identity,
+                               url: url,
+                               token: token)
+        }
+
+        let allRooms = rooms.map(\.room)
+
+        // Tear down on every exit path: a `Room` keeps itself alive through its
+        // signaling and transport tasks, so an early exit without `disconnect()`
+        // leaks a live Room into the rest of the test process.
+        for url in Set(rooms.map(\.url)) {
+            try await waitForServer(url)
+        }
+        do {
+            try await connectAndDiscover(rooms, sharedRoomName: sharedRoomName)
+            try await block(allRooms)
+        } catch {
+            await teardown(allRooms)
+            throw error
+        }
+        await teardown(allRooms)
+
+        // Allow the server to fully tear down resources before the next test.
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+    }
+
+    private struct RoomFixture {
+        let room: Room
+        let identity: String
+        let url: String
+        let token: String
+    }
+
+    private static func connectAndDiscover(_ rooms: [RoomFixture], sharedRoomName: String) async throws {
+        // Connect all Rooms concurrently (retry on transient failure)
+        try await Task.retrying(totalAttempts: 3, retryDelay: 2) { _, _ in
+            try await withThrowingTaskGroup { group in
+                for element in rooms {
+                    group.addTask {
+                        try await element.room.connect(url: element.url, token: element.token)
+                        guard element.room.localParticipant.identity != nil else {
+                            throw LiveKitError(.invalidState, message: "LocalParticipant.identity is nil after connect")
+                        }
+                        print("LocalParticipant.identity: \(String(describing: element.room.localParticipant.identity))")
+                    }
+                }
+                try await group.waitForAll()
+            }
+        }.value
+
+        let observerToken = try liveKitServerToken(for: sharedRoomName,
+                                                   identity: "observer",
+                                                   canPublish: true,
+                                                   canPublishData: true,
+                                                   canPublishSources: [],
+                                                   canSubscribe: true)
+
+        print("Observer token: \(observerToken) for room: \(sharedRoomName)")
+
+        // Wait for all participants to discover each other using async polling
+        if rooms.count >= 2 {
+            let allIdentities = rooms.map(\.identity)
+
+            for fixture in rooms {
+                let (room, identity) = (fixture.room, fixture.identity)
+                let exceptSelfIdentity = allIdentities.filter { $0 != identity }
+                print("Will wait for remote participants: \(exceptSelfIdentity)")
+
+                let deadline = Date().addingTimeInterval(30)
+                while Date() < deadline {
+                    let remoteIdentities = room.remoteParticipants.map(\.key.stringValue)
+                    if remoteIdentities.hasSameElements(as: exceptSelfIdentity) {
+                        break
+                    }
+                    try await Task.sleep(nanoseconds: 200_000_000) // 200ms
+                }
+
+                let remoteIdentities = room.remoteParticipants.map(\.key.stringValue)
+                guard remoteIdentities.hasSameElements(as: exceptSelfIdentity) else {
+                    throw LiveKitError(.timedOut, message: "Timed out waiting for participants for \(identity)")
+                }
+            }
+        }
+    }
+
+    /// Gracefully unpublish all tracks then disconnect, best-effort.
+    private static func teardown(_ rooms: [Room]) async {
+        await withTaskGroup(of: Void.self) { group in
+            for room in rooms {
+                group.addTask {
+                    await room.localParticipant.unpublishAll()
+                    await room.disconnect()
+                }
+            }
+        }
+    }
+}

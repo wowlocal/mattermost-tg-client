@@ -1,0 +1,103 @@
+/*
+ * Copyright 2026 LiveKit
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import Foundation
+
+#if canImport(ReplayKit)
+import ReplayKit
+#endif
+
+internal import LiveKitWebRTC
+
+@available(macOS 11.0, iOS 11.0, *)
+public class InAppScreenCapturer: VideoCapturer, @unchecked Sendable {
+    private let capturer = RTC.createVideoCapturer()
+    private let options: ScreenShareCaptureOptions
+
+    init(delegate: LKRTCVideoCapturerDelegate, options: ScreenShareCaptureOptions) {
+        self.options = options
+        super.init(delegate: delegate)
+    }
+
+    override public func startCapture() async throws -> Bool {
+        let didStart = try await super.startCapture()
+
+        // Already started
+        guard didStart else { return false }
+
+        // TODO: force pixel format kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            RPScreenRecorder.shared().startCapture { [weak self] sampleBuffer, type, _ in
+                guard let self else { return }
+                // Only process .video
+                if type == .video {
+                    capture(sampleBuffer: sampleBuffer, capturer: capturer, options: options)
+                }
+            } completionHandler: { error in
+                if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+            }
+        }
+
+        return true
+    }
+
+    override public func stopCapture() async throws -> Bool {
+        let didStop = try await super.stopCapture()
+
+        // Already stopped
+        guard didStop else { return false }
+
+        RPScreenRecorder.shared().stopCapture()
+
+        return true
+    }
+}
+
+public extension LocalVideoTrack {
+    /// Creates a track that captures in-app screen only (due to limitation of ReplayKit)
+    @available(*, deprecated, message: "Blocks the calling thread until WebRTC's factory responds; use the async variant instead.")
+    @available(macOS 11.0, iOS 11.0, *)
+    static func createInAppScreenShareTrack(name: String = Track.screenShareVideoName,
+                                            options: ScreenShareCaptureOptions = ScreenShareCaptureOptions(),
+                                            reportStatistics: Bool = false) -> LocalVideoTrack
+    {
+        _createInAppScreenShareTrack(name: name, options: options, reportStatistics: reportStatistics)
+    }
+
+    /// Creates an in-app screen-share track on the RTC executor: the calling task suspends
+    /// instead of blocking its thread on WebRTC's factory.
+    @available(macOS 11.0, iOS 11.0, *)
+    static func createInAppScreenShareTrack(name: String = Track.screenShareVideoName,
+                                            options: ScreenShareCaptureOptions = ScreenShareCaptureOptions(),
+                                            reportStatistics: Bool = false) async -> LocalVideoTrack
+    {
+        await RTC.run { _createInAppScreenShareTrack(name: name, options: options, reportStatistics: reportStatistics) }
+    }
+
+    @available(macOS 11.0, iOS 11.0, *)
+    internal static func _createInAppScreenShareTrack(name: String,
+                                                      options: ScreenShareCaptureOptions,
+                                                      reportStatistics: Bool) -> LocalVideoTrack
+    {
+        let videoSource = RTC.createVideoSource(forScreenShare: true)
+        let capturer = InAppScreenCapturer(delegate: videoSource, options: options)
+        return LocalVideoTrack(name: name,
+                               source: .screenShareVideo,
+                               capturer: capturer,
+                               videoSource: videoSource,
+                               reportStatistics: reportStatistics)
+    }
+}

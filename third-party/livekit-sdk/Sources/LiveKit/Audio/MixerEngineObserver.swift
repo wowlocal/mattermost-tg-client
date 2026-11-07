@@ -1,0 +1,360 @@
+/*
+ * Copyright 2026 LiveKit
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+@preconcurrency import AVFoundation
+
+internal import LiveKitWebRTC
+
+public final class MixerEngineObserver: AudioEngineObserver, Loggable {
+    public var next: (any AudioEngineObserver)? {
+        get { _state.next }
+        set { _state.mutate { $0.next = newValue } }
+    }
+
+    /// Adjust the output volume of all audio tracks. Range is 0.0 ~ 1.0.
+    public var outputVolume: Float {
+        get { _state.read { $0.outputVolume } }
+        set {
+            _state.mutate {
+                $0.mainMixerNode?.outputVolume = newValue
+                $0.outputVolume = newValue
+            }
+        }
+    }
+
+    /// Adjust the volume of captured app audio. Range is 0.0 ~ 1.0.
+    public var appVolume: Float {
+        get { _state.read { $0.appMixerNode.outputVolume } }
+        set { _state.mutate { $0.appMixerNode.outputVolume = newValue } }
+    }
+
+    /// Adjust the volume of microphone audio. Range is 0.0 ~ 1.0.
+    public var micVolume: Float {
+        get { _state.read { $0.micMixerNode.outputVolume } }
+        set { _state.mutate { $0.micMixerNode.outputVolume = newValue } }
+    }
+
+    /// Adjust the volume of sound player audio sent to remote participants. Range is 0.0 ~ 1.0.
+    public var soundPlayerVolume: Float {
+        get { _state.read { $0.soundPlayerNodes.mixerNode.outputVolume } }
+        set { _state.mutate { $0.soundPlayerNodes.mixerNode.outputVolume = newValue } }
+    }
+
+    // MARK: - Internal
+
+    var appAudioNode: AVAudioPlayerNode {
+        _state.read { $0.appNode }
+    }
+
+    var micAudioNode: AVAudioPlayerNode {
+        _state.read { $0.micNode }
+    }
+
+    struct State {
+        var next: (any AudioEngineObserver)?
+
+        // App audio (Input)
+        let appNode = AVAudioPlayerNode()
+        let appMixerNode = AVAudioMixerNode()
+
+        // Mic audio (Input), not connected for device rendering mode.
+        let micNode = AVAudioPlayerNode()
+        let micMixerNode = AVAudioMixerNode()
+
+        // Sound player audio (Input) — for sending sounds to remote participants via WebRTC
+        let soundPlayerNodes = AVAudioPlayerNodePool()
+
+        // Reference to mainMixerNode
+        weak var mainMixerNode: AVAudioMixerNode?
+        var outputVolume: Float = 1.0
+
+        // Internal states
+        var isInputConnected: Bool = false
+
+        // Cached converters
+        var converters: [AVAudioFormat: AudioConverter] = [:]
+
+        // Reference to engine format
+        var playerNodeFormat: AVAudioFormat?
+    }
+
+    let _state = StateSync(State())
+
+    public init() {}
+
+    public func setNext(_ handler: any AudioEngineObserver) {
+        next = handler
+    }
+
+    public func engineDidCreate(_ engine: AVAudioEngine) -> Int {
+        log("isManualRenderingMode: \(engine.isInManualRenderingMode)")
+        let (appNode, appMixerNode, micNode, micMixerNode, soundPlayerNodes) = _state.read {
+            ($0.appNode, $0.appMixerNode, $0.micNode, $0.micMixerNode, $0.soundPlayerNodes)
+        }
+
+        // Match the outputNode's maximumFramesToRender so our nodes can handle the same
+        // buffer sizes the engine expects, preventing kAudioUnitErr_TooManyFramesToProcess (-10874).
+        // Must be set before render resources are allocated (i.e. before attach/connect/start).
+        //
+        // Complementary to the preferredIOBufferDuration hint set in AudioSessionEngineObserver,
+        // which iOS may ignore on some devices.
+        //
+        // Note: AVAudioEngine may override these values during prepare()/start(), propagating the
+        // outputNode's maximumFramesToRender to all hosted nodes. If that occurs, the actual fix
+        // must move into the WebRTC layer (audio_engine_device.mm).
+        // See: https://developer.apple.com/documentation/audiotoolbox/auaudiounit/maximumframestorender
+        // See: https://developer.apple.com/forums/thread/111968
+        let maxFrames = engine.outputNode.maximumFramesToRender
+
+        log("maximumFramesToRender before: " +
+            "appNode=\(appNode.maximumFramesToRender), " +
+            "appMixerNode=\(appMixerNode.maximumFramesToRender), " +
+            "micNode=\(micNode.maximumFramesToRender), " +
+            "micMixerNode=\(micMixerNode.maximumFramesToRender), " +
+            "soundPlayerMixerNode=\(soundPlayerNodes.mixerNode.maximumFramesToRender)", .debug)
+
+        appNode.maximumFramesToRender = maxFrames
+        appMixerNode.maximumFramesToRender = maxFrames
+        micNode.maximumFramesToRender = maxFrames
+        micMixerNode.maximumFramesToRender = maxFrames
+        soundPlayerNodes.setMaximumFramesToRender(maxFrames)
+
+        log("maximumFramesToRender setting to \(maxFrames): " +
+            "appNode=\(appNode.maximumFramesToRender), " +
+            "appMixerNode=\(appMixerNode.maximumFramesToRender), " +
+            "micNode=\(micNode.maximumFramesToRender), " +
+            "micMixerNode=\(micMixerNode.maximumFramesToRender), " +
+            "soundPlayerMixerNode=\(soundPlayerNodes.mixerNode.maximumFramesToRender)", .debug)
+
+        #if os(iOS) || os(visionOS) || os(tvOS)
+        let config = LKRTCAudioSessionConfiguration.webRTC()
+        log("webRTCPreferredFrames=\(AVAudioFrameCount(config.sampleRate * config.ioBufferDuration))", .debug)
+        #endif
+
+        engine.attach(appNode)
+        engine.attach(appMixerNode)
+        engine.attach(micNode)
+        engine.attach(micMixerNode)
+        engine.attach(soundPlayerNodes)
+
+        // Invoke next
+        return next?.engineDidCreate(engine) ?? 0
+    }
+
+    public func engineWillRelease(_ engine: AVAudioEngine) -> Int {
+        log("isManualRenderingMode: \(engine.isInManualRenderingMode)")
+        // Invoke next
+        let nextResult = next?.engineWillRelease(engine)
+
+        let (appNode, appMixerNode, micNode, micMixerNode, soundPlayerNodes) = _state.read {
+            ($0.appNode, $0.appMixerNode, $0.micNode, $0.micMixerNode, $0.soundPlayerNodes)
+        }
+
+        engine.detach(appNode)
+        engine.detach(appMixerNode)
+        engine.detach(micNode)
+        engine.detach(micMixerNode)
+        engine.detach(soundPlayerNodes)
+
+        return nextResult ?? 0
+    }
+
+    public func engineWillConnectInput(_ engine: AVAudioEngine, src: AVAudioNode?, dst: AVAudioNode, format: AVAudioFormat, context: [AnyHashable: Any]) -> Int {
+        log("isManualRenderingMode: \(engine.isInManualRenderingMode)")
+        // Get the main input mixer node, for manual rendering mode this is currently the mainMixerNode
+        let mainMixerNode = engine.isInManualRenderingMode ? engine.mainMixerNode : (context[kLKRTCAudioEngineInputMixerNodeKey] as? AVAudioMixerNode)
+
+        guard let mainMixerNode else {
+            // If failed to get main mixer, call next and return.
+            return next?.engineWillConnectInput(engine, src: src, dst: dst, format: format, context: context) ?? 0
+        }
+
+        // Read nodes from state lock.
+        let (appNode, appMixerNode, micNode, micMixerNode, soundPlayerNodes) = _state.read {
+            ($0.appNode, $0.appMixerNode, $0.micNode, $0.micMixerNode, $0.soundPlayerNodes)
+        }
+
+        // AVAudioPlayerNode doesn't support Int16 so we ensure to use Float32
+        guard let playerNodeFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+                                                   sampleRate: format.sampleRate,
+                                                   channels: format.channelCount,
+                                                   interleaved: format.isInterleaved)
+        else {
+            log("Failed to create player node format", .error)
+            return next?.engineWillConnectInput(engine, src: src, dst: dst, format: format, context: context) ?? 0
+        }
+
+        log("Connecting app -> appMixer -> mainMixer")
+        // appAudio -> appAudioMixer -> mainMixer
+        engine.connect(appNode, to: appMixerNode, format: playerNodeFormat)
+        engine.connect(appMixerNode, to: mainMixerNode, format: format)
+
+        // src is not null if device rendering mode.
+        if let src {
+            log("Connecting src (device) to micMixer -> mainMixer")
+            // mic (device) -> micMixer -> mainMixer
+            engine.connect(src, to: micMixerNode, format: format)
+        }
+
+        log("Connecting micAudio (player) to micMixer -> mainMixer")
+        // mic (player) -> micMixer -> mainMixer
+        engine.connect(micNode, to: micMixerNode, format: playerNodeFormat)
+        // Always connect micMixer to mainMixer
+        engine.connect(micMixerNode, to: mainMixerNode, format: format)
+
+        log("Connecting soundPlayerNodes -> mainMixer")
+        // soundPlayerNodes -> mainMixer -> WebRTC (remote)
+        engine.connect(soundPlayerNodes, to: mainMixerNode, format: format, playerNodeFormat: playerNodeFormat)
+
+        _state.mutate {
+            if let previousEngineFormat = $0.playerNodeFormat, previousEngineFormat != format {
+                // Clear cached converters when engine format changes
+                $0.converters.removeAll()
+            }
+            $0.playerNodeFormat = playerNodeFormat
+            $0.isInputConnected = true
+        }
+
+        // Invoke next
+        return next?.engineWillConnectInput(engine, src: src, dst: dst, format: format, context: context) ?? 0
+    }
+
+    public func engineWillConnectOutput(_ engine: AVAudioEngine, src: AVAudioNode, dst: AVAudioNode?, format: AVAudioFormat, context: [AnyHashable: Any]) -> Int {
+        log("isManualRenderingMode: \(engine.isInManualRenderingMode)")
+        // Get the main mixer
+        let outputVolume = _state.mutate {
+            $0.mainMixerNode = engine.mainMixerNode
+            return $0.outputVolume
+        }
+
+        engine.mainMixerNode.outputVolume = outputVolume
+
+        return next?.engineWillConnectOutput(engine, src: src, dst: dst, format: format, context: context) ?? 0
+    }
+
+    public func engineWillStart(_ engine: AVAudioEngine, isPlayoutEnabled: Bool, isRecordingEnabled: Bool) -> Int {
+        log("isPlayoutEnabled: \(isPlayoutEnabled), isRecordingEnabled: \(isRecordingEnabled)")
+        let (micNode, appNode, soundPlayerNodes) = _state.read {
+            ($0.micNode, $0.appNode, $0.soundPlayerNodes)
+        }
+
+        micNode.reset()
+        appNode.reset()
+        soundPlayerNodes.reset()
+
+        return next?.engineWillStart(engine, isPlayoutEnabled: isPlayoutEnabled, isRecordingEnabled: isRecordingEnabled) ?? 0
+    }
+
+    public func engineDidStop(_ engine: AVAudioEngine, isPlayoutEnabled: Bool, isRecordingEnabled: Bool) -> Int {
+        log("isPlayoutEnabled: \(isPlayoutEnabled), isRecordingEnabled: \(isRecordingEnabled)")
+        // Invoke next first
+        let nextResult = next?.engineDidStop(engine, isPlayoutEnabled: isPlayoutEnabled, isRecordingEnabled: isRecordingEnabled)
+
+        let (micNode, appNode) = _state.read {
+            ($0.micNode, $0.appNode)
+        }
+
+        micNode.stop()
+        appNode.stop()
+
+        return nextResult ?? 0
+    }
+}
+
+extension MixerEngineObserver {
+    // Create or use cached AudioConverter.
+    func converter(for format: AVAudioFormat) -> AudioConverter? {
+        _state.mutate {
+            guard let playerNodeFormat = $0.playerNodeFormat else { return nil }
+
+            if let converter = $0.converters[format] {
+                return converter
+            }
+
+            let newConverter = AudioConverter(from: format, to: playerNodeFormat)
+            $0.converters[format] = newConverter
+            return newConverter
+        }
+    }
+
+    /// Play a sound buffer through the input path for remote participants via WebRTC.
+    @discardableResult
+    func playSound(_ inputBuffer: AVAudioPCMBuffer, loop: Bool = false) -> SoundPlayback? {
+        let (isInputConnected, soundPlayerNodes, playerNodeFormat) = _state.read {
+            ($0.isInputConnected, $0.soundPlayerNodes, $0.playerNodeFormat)
+        }
+
+        guard isInputConnected else {
+            log("Remote sound playback skipped because the microphone is not published. Publish the microphone to send SoundPlayer audio to remote participants.", .warning)
+            return nil
+        }
+
+        guard let playerNodeFormat, let engine = soundPlayerNodes.engine, engine.isRunning else {
+            log("Remote sound playback skipped because the remote sound path is temporarily unavailable.", .warning)
+            return nil
+        }
+
+        // Convert buffer to engine format with a properly-sized converter.
+        let bufferToSchedule: AVAudioPCMBuffer
+        if inputBuffer.format != playerNodeFormat {
+            let outputBufferCapacity = AudioConverter.frameCapacity(from: inputBuffer.format,
+                                                                    to: playerNodeFormat,
+                                                                    inputFrameCount: inputBuffer.frameLength)
+            guard let converter = AudioConverter(from: inputBuffer.format,
+                                                 to: playerNodeFormat,
+                                                 outputBufferCapacity: outputBufferCapacity)
+            else {
+                log("Failed to create converter for sound buffer, skipping remote sound playback", .debug)
+                return nil
+            }
+            bufferToSchedule = converter.convert(from: inputBuffer)
+        } else {
+            bufferToSchedule = inputBuffer
+        }
+
+        do {
+            return try soundPlayerNodes.play(bufferToSchedule, loop: loop)
+        } catch {
+            log("Failed to play sound remotely: \(error)", .debug)
+            return nil
+        }
+    }
+
+    // Capture appAudio and apply conversion automatically suitable for internal audio engine.
+    public func capture(appAudio inputBuffer: AVAudioPCMBuffer) {
+        guard let converter = converter(for: inputBuffer.format) else {
+            log("Failed to get converter for input buffer format: \(inputBuffer.format)", .warning)
+            return
+        }
+
+        let buffer = converter.convert(from: inputBuffer)
+
+        let (isInputConnected, appNode) = _state.read {
+            ($0.isInputConnected, $0.appNode)
+        }
+
+        guard isInputConnected, let engine = appNode.engine, engine.isRunning else {
+            log("Engine is not running", .warning)
+            return
+        }
+
+        appNode.scheduleBuffer(buffer)
+
+        if !appNode.isPlaying, let engine = appNode.engine, engine.isRunning {
+            appNode.play()
+        }
+    }
+}

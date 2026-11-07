@@ -1,0 +1,228 @@
+/*
+ * Copyright 2026 LiveKit
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import AVFAudio
+import Combine
+import Foundation
+
+internal import LiveKitWebRTC
+
+@objcMembers
+public class LocalAudioTrack: Track, LocalTrackProtocol, AudioTrackProtocol, @unchecked Sendable {
+    /// ``AudioCaptureOptions`` used to create this track.
+    public let captureOptions: AudioCaptureOptions
+
+    // MARK: - Internal
+
+    struct FrameWatcherState {
+        var frameWatcher: AudioFrameWatcher?
+    }
+
+    let _frameWatcherState = StateSync(FrameWatcherState())
+
+    init(name: String,
+         source: Track.Source,
+         track: RTCMediaTrack,
+         reportStatistics: Bool,
+         captureOptions: AudioCaptureOptions)
+    {
+        self.captureOptions = captureOptions
+
+        super.init(name: name,
+                   kind: .audio,
+                   source: source,
+                   track: track,
+                   reportStatistics: reportStatistics)
+    }
+
+    deinit {
+        if let watcher = _frameWatcherState.frameWatcher {
+            remove(audioRenderer: watcher)
+        }
+    }
+
+    @available(*, deprecated, message: "Blocks the calling thread until WebRTC's factory responds; use the async variant instead.")
+    public static func createTrack(name: String = Track.microphoneName,
+                                   options: AudioCaptureOptions? = nil,
+                                   reportStatistics: Bool = false) -> LocalAudioTrack
+    {
+        _createTrack(name: name, options: options, reportStatistics: reportStatistics)
+    }
+
+    /// Creates a microphone track on the RTC executor: the calling task suspends instead of
+    /// blocking its thread on WebRTC's factory.
+    public static func createTrack(name: String = Track.microphoneName,
+                                   options: AudioCaptureOptions? = nil,
+                                   reportStatistics: Bool = false) async -> LocalAudioTrack
+    {
+        await RTC.run { _createTrack(name: name, options: options, reportStatistics: reportStatistics) }
+    }
+
+    static func _createTrack(name: String,
+                             options: AudioCaptureOptions?,
+                             reportStatistics: Bool) -> LocalAudioTrack
+    {
+        let options = options ?? AudioCaptureOptions()
+
+        let constraints: [String: String] = [
+            "googEchoCancellation": options.echoCancellation.toString(),
+            "googAutoGainControl": options.autoGainControl.toString(),
+            "googNoiseSuppression": options.noiseSuppression.toString(),
+            "googTypingNoiseDetection": options.typingNoiseDetection.toString(),
+            "googHighpassFilter": options.highpassFilter.toString(),
+            "echoCancellationMode": options.echoCancellationMode.toConstraintValue(),
+            "autoGainControlMode": options.autoGainControlMode.toConstraintValue(),
+            "noiseSuppressionMode": options.noiseSuppressionMode.toConstraintValue(),
+            "highPassFilterMode": options.highpassFilterMode.toConstraintValue(),
+        ]
+
+        // Plain value object, no libwebrtc proxy: nothing to wait on.
+        let audioConstraints = LKRTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: constraints)
+
+        let audioSource = RTC.createAudioSource(audioConstraints)
+        let rtcTrack = RTC.createAudioTrack(source: audioSource)
+        rtcTrack.isEnabled = true
+        let mediaTrack = RTCMediaTrack(rtcTrack)
+
+        return LocalAudioTrack(name: name,
+                               source: .microphone,
+                               track: mediaTrack,
+                               reportStatistics: reportStatistics,
+                               captureOptions: options)
+    }
+
+    public func mute() async throws {
+        try await super._mute()
+    }
+
+    public func unmute() async throws {
+        try await super._unmute()
+    }
+
+    /// Updates this local track's voice processing options without restarting capture.
+    ///
+    /// If this track is already published, WebRTC reapplies the updated options through
+    /// the active sender. Effective APM configuration is shared by the WebRTC voice engine,
+    /// so conflicting updates from multiple local audio tracks are last-writer-wins.
+    ///
+    /// - Returns: Whether the options were applied immediately or stored for reapplication.
+    /// - Throws: ``AudioProcessingOptionsError`` when the options cannot be applied.
+    /// - Note: Blocks the calling thread until WebRTC's signaling thread applies the options.
+    @discardableResult
+    public func setAudioProcessingOptions(_ options: AudioProcessingOptions) throws -> AudioProcessingOptionsResult {
+        let result = try mediaTrack.blocking { rawTrack in
+            guard let audioTrack = rawTrack as? LKRTCAudioTrack else {
+                throw AudioProcessingOptionsError(
+                    code: .invalidState,
+                    message: "Media track is not an audio track",
+                )
+            }
+            return try audioTrack.setAudioProcessingOptions(options.toRTCType()).toLKType()
+        }
+        // Track-level options reach the ADM through the sender, so inform the
+        // session observer here to keep the session mode in sync with the
+        // requested voice processing implementation.
+        AudioManager.shared.updateExpectedPlatformVoiceProcessing(for: options)
+        return result
+    }
+
+    // MARK: - Internal
+
+    override func startCapture() async throws {
+        // The WebRTC audio device no longer prompts for mic permission (see webrtc-sdk#265),
+        // so request it here while foregrounded before starting recording. Manual rendering mode
+        // publishes app audio without ever opening the microphone, and disabled input availability
+        // (CallKit flows, see setEngineAvailability) defers opening it entirely, so neither needs
+        // permission. Reading these flags waits on WebRTC's worker thread, hence the RTC hop.
+        let needsMicrophonePermission = await RTC.run {
+            !AudioManager.shared.isManualRenderingMode && AudioManager.shared.engineAvailability.isInputAvailable
+        }
+        if needsMicrophonePermission {
+            try await LiveKitSDK.ensureMicrophoneAccessForRecording()
+        }
+        // AudioDeviceModule's InitRecording() and StartRecording() automatically get called by WebRTC, but
+        // explicitly init & start it early to detect audio engine failures (mic not accessible for some reason, etc.).
+        let audioProcessingOptions = captureOptions.audioProcessing
+        try await RTC.run {
+            try AudioManager.shared.startLocalRecording(audioProcessingOptions: audioProcessingOptions)
+        }
+    }
+
+    override func stopCapture() async throws {
+        cleanUpFrameWatcher()
+    }
+}
+
+public extension LocalAudioTrack {
+    var publishOptions: TrackPublishOptions? { super._state.lastPublishOptions }
+    var publishState: Track.PublishState { super._state.publishState }
+}
+
+public extension LocalAudioTrack {
+    func add(audioRenderer: AudioRenderer) {
+        AudioManager.shared.add(localAudioRenderer: audioRenderer)
+    }
+
+    func remove(audioRenderer: AudioRenderer) {
+        AudioManager.shared.remove(localAudioRenderer: audioRenderer)
+    }
+}
+
+// MARK: - Internal frame waiting
+
+extension LocalAudioTrack {
+    final class AudioFrameWatcher: AudioRenderer, Loggable {
+        private let completer = AsyncCompleter<Void>(label: "Frame watcher", defaultTimeout: 5)
+
+        func wait() async throws {
+            try await completer.wait()
+        }
+
+        func reset() {
+            completer.reset()
+        }
+
+        // MARK: - AudioRenderer
+
+        func render(pcmBuffer _: AVAudioPCMBuffer) {
+            completer.resume(returning: ())
+        }
+    }
+
+    func startWaitingForFrames() async throws {
+        let frameWatcher = _frameWatcherState.mutate {
+            $0.frameWatcher?.reset()
+            let watcher = AudioFrameWatcher()
+            add(audioRenderer: watcher)
+            $0.frameWatcher = watcher
+            return watcher
+        }
+
+        try await frameWatcher.wait()
+        // Detach after wait is complete
+        cleanUpFrameWatcher()
+    }
+
+    func cleanUpFrameWatcher() {
+        _frameWatcherState.mutate {
+            if let watcher = $0.frameWatcher {
+                watcher.reset()
+                remove(audioRenderer: watcher)
+                $0.frameWatcher = nil
+            }
+        }
+    }
+}

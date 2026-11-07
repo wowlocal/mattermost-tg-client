@@ -1,0 +1,90 @@
+name: Publish XCFramework
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to build (defaults to .version, e.g. 2.15.1)
+        type: string
+      dry_run:
+        description: Build only, skip draft release / PR
+        default: true
+        type: boolean
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  HOSTING_REPO: livekit/client-sdk-swift-xcframework
+
+jobs:
+  build-and-publish:
+    name: Build & publish XCFramework
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.version || 'main' }}
+          submodules: recursive
+          # Needed to reach github.sha below, which is not an ancestor of the
+          # checked-out tag.
+          fetch-depth: 0
+
+      # The checkout above pins the whole repo to the released tag, build tooling
+      # included -- so a fix to scripts/ can never reach a version already tagged,
+      # and re-running this job for it fails the same way forever. The SDK sources
+      # must come from the tag, since that is the artifact's identity; the tooling
+      # that packages them must not.
+      #
+      # On a release event github.sha IS the tag's commit, so it cannot serve as
+      # the tooling ref -- that is exactly the stale script we are avoiding. Use
+      # the default branch there. A dispatch keeps github.sha so that changes to
+      # scripts/ can be exercised from a PR branch before they are merged.
+      - name: Use current build tooling
+        env:
+          TOOLING_REF: ${{ github.event_name == 'workflow_dispatch' && github.sha || format('origin/{0}', github.event.repository.default_branch) }}
+        run: |
+          echo "Taking scripts/ from $TOOLING_REF"
+          git checkout "$TOOLING_REF" -- scripts/
+          git --no-pager diff --stat HEAD -- scripts/ || true
+
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Resolve version
+        id: ver
+        run: |
+          VERSION="${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.version }}"
+          [ -z "$VERSION" ] && VERSION="$(cat .version)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install swiftly
+        run: |
+          brew install swiftly swift-sh
+          swiftly init --quiet-shell-followup --skip-install -y
+
+      - name: Build XCFramework
+        run: swiftly run +xcode swift-sh scripts/xcframework.swift --version "${{ steps.ver.outputs.version }}"
+
+      - name: Publish to hosting repo
+        if: ${{ github.event_name == 'release' || github.event.inputs.dry_run != 'true' }}
+        uses: livekit/publish-xcframework-action@3b8645334fb62b0fd1d7067067819bcd111db157 # main
+        with:
+          xcframework-zip: .build/xcframework/LiveKit.xcframework.zip
+          version: ${{ steps.ver.outputs.version }}
+          hosting-repo: ${{ env.HOSTING_REPO }}
+          files: |
+            .build/xcframework/Package.swift:Package.swift
+            .build/xcframework/LiveKitClient-XCFramework.podspec:LiveKitClient-XCFramework.podspec
+            CHANGELOG.md:CHANGELOG.md
+            README.md:README.md
+            LICENSE:LICENSE
+          token: ${{ secrets.XCFRAMEWORK_PAT }}
+          pr-body: |
+            Source release: https://github.com/livekit/client-sdk-swift/releases/tag/${{ steps.ver.outputs.version }}

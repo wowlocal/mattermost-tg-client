@@ -74,6 +74,8 @@ swift_library(
         "//submodules/TelegramCore:TelegramCore",
         "//submodules/MattermostSync:MattermostSync",
         "//submodules/MattermostUI:MattermostUI",
+        "//submodules/RelayCalls:RelayCalls",
+        "//submodules/RelayCalls:RelayCallsCore",
         "//submodules/WebProxyTransport:WebProxyTransport",
         "//submodules/MtProtoKit:MtProtoKit",
         "//submodules/TelegramPresentationData:TelegramPresentationData",

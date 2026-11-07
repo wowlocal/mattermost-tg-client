@@ -1,0 +1,13 @@
+exports_files(["webrtc.BUILD", "ffi.BUILD"])
+
+alias(
+    name = "LiveKitWebRTC",
+    actual = "@relay_livekit_webrtc//:LiveKitWebRTC",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "RustLiveKitFFI",
+    actual = "@relay_livekit_ffi//:RustLiveKitFFI",
+    visibility = ["//visibility:public"],
+)

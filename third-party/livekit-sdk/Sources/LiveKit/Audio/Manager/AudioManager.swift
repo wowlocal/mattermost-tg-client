@@ -1,0 +1,651 @@
+/*
+ * Copyright 2026 LiveKit
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// swiftlint:disable file_length
+
+import Accelerate
+import AVFoundation
+import Combine
+
+internal import LiveKitWebRTC
+
+/// Represents an audio session requirement from a specific component.
+///
+/// Multiple components can independently register their requirements. On platforms that use
+/// `AVAudioSession`, the session stays active as long as any component requires playout or recording.
+public struct SessionRequirement: OptionSet, Sendable {
+    public let rawValue: UInt8
+
+    public static let playout = Self(rawValue: 1 << 0)
+    public static let recording = Self(rawValue: 1 << 1)
+
+    public static let none: Self = []
+    public static let playbackOnly: Self = [.playout]
+    public static let recordingOnly: Self = [.recording]
+    public static let playbackAndRecording: Self = [.playout, .recording]
+
+    public init(rawValue: UInt8) {
+        self.rawValue = rawValue
+    }
+
+    public init(isPlayoutEnabled: Bool = false, isRecordingEnabled: Bool = false) {
+        var rawValue: UInt8 = 0
+        if isPlayoutEnabled {
+            rawValue |= Self.playout.rawValue
+        }
+        if isRecordingEnabled {
+            rawValue |= Self.recording.rawValue
+        }
+        self.init(rawValue: rawValue)
+    }
+
+    public var isPlayoutEnabled: Bool {
+        contains(.playout)
+    }
+
+    public var isRecordingEnabled: Bool {
+        contains(.recording)
+    }
+}
+
+/// Opaque handle for an acquired audio session requirement.
+///
+/// Call ``release()`` when the requirement is no longer needed.
+/// If not released explicitly, the requirement is released automatically on deinit.
+public final class SessionRequirementHandle: @unchecked Sendable {
+    private struct State {
+        var releaseImpl: (@Sendable () throws -> Void)?
+    }
+
+    private let _state: StateSync<State>
+
+    init(releaseImpl: @escaping @Sendable () throws -> Void) {
+        _state = StateSync(State(releaseImpl: releaseImpl))
+    }
+
+    deinit {
+        try? releaseIfNeeded()
+    }
+
+    /// Releases the associated audio session requirement.
+    ///
+    /// Releasing the same handle multiple times is a no-op.
+    public func release() throws {
+        try releaseIfNeeded()
+    }
+
+    private func releaseIfNeeded() throws {
+        let releaseImpl = _state.mutate { state -> (@Sendable () throws -> Void)? in
+            let releaseImpl = state.releaseImpl
+            state.releaseImpl = nil
+            return releaseImpl
+        }
+        try releaseImpl?()
+    }
+}
+
+/// Configures the SDK's audio engine, devices, and audio session behavior.
+///
+/// - Note: The synchronous methods that reach the audio device module (``startLocalRecording(audioProcessingOptions:)``,
+///   ``stopLocalRecording()``, ``setEngineAvailability(_:)``, device selection, mute modes) wait for WebRTC's worker
+///   thread to apply the change and block the calling thread until it does. They are safe to call from any thread, but
+///   a Swift Concurrency task calling them holds its thread while the audio stack is busy or stalled.
+public class AudioManager: Loggable {
+    // MARK: - Public
+
+    public nonisolated(unsafe) static let shared = AudioManager()
+
+    public static func prepare() {
+        // Instantiate shared instance
+        _ = shared
+    }
+
+    public typealias OnDevicesDidUpdate = @Sendable (_ audioManager: AudioManager) -> Void
+
+    public typealias OnSpeechActivity = @Sendable (_ audioManager: AudioManager, _ event: SpeechActivityEvent) -> Void
+
+    #if os(iOS) || os(visionOS) || os(tvOS)
+
+    @available(*, deprecated)
+    public typealias ConfigureAudioSessionFunc = @Sendable (_ newState: State,
+                                                            _ oldState: State) -> Void
+
+    /// Use this to provide a custom function to configure the audio session, overriding the default behavior
+    /// provided by ``defaultConfigureAudioSessionFunc(newState:oldState:)``.
+    ///
+    /// - Important: This method should return immediately and must not block.
+    /// - Note: Once set, the following properties will no longer be effective:
+    ///   - ``sessionConfiguration``
+    ///   - ``isSpeakerOutputPreferred``
+    ///
+    /// If you want to revert to default behavior, set this to `nil`.
+    @available(*, deprecated, message: "Use `set(engineObservers:)` instead. See `AudioSessionEngineObserver` for example.")
+    public var customConfigureAudioSessionFunc: ConfigureAudioSessionFunc? {
+        get { _state.customConfigureFunc }
+        set { _state.mutate { $0.customConfigureFunc = newValue } }
+    }
+
+    /// Determines whether the device's built-in speaker or receiver is preferred for audio output.
+    ///
+    /// - Defaults to `true`, indicating that the speaker is preferred.
+    /// - Set to `false` if the receiver is preferred instead of the speaker.
+    /// - Note: This property only applies when the audio output is routed to the built-in speaker or receiver.
+    ///
+    /// This property is ignored if ``customConfigureAudioSessionFunc`` is set.
+    public var isSpeakerOutputPreferred: Bool {
+        get { audioSession.isSpeakerOutputPreferred }
+        set { audioSession.isSpeakerOutputPreferred = newValue }
+    }
+
+    /// Specifies a fixed configuration for the audio session, overriding dynamic adjustments.
+    ///
+    /// If this property is set, it will take precedence over any dynamic configuration logic, including
+    /// the value of ``isSpeakerOutputPreferred``.
+    ///
+    /// This property is ignored if ``customConfigureAudioSessionFunc`` is set.
+    public var sessionConfiguration: AudioSessionConfiguration? {
+        get { _state.sessionConfiguration }
+        set { _state.mutate { $0.sessionConfiguration = newValue } }
+    }
+
+    @available(*, deprecated)
+    public enum TrackState {
+        case none
+        case localOnly
+        case remoteOnly
+        case localAndRemote
+    }
+    #endif
+
+    public struct State: @unchecked Sendable {
+        var engineObservers = [any AudioEngineObserver]()
+        var onDevicesDidUpdate: OnDevicesDidUpdate?
+        var onMutedSpeechActivity: OnSpeechActivity?
+
+        #if os(iOS) || os(visionOS) || os(tvOS)
+        // Keep this var within State so it's protected by UnfairLock
+        public var localTracksCount: Int = 0
+        public var remoteTracksCount: Int = 0
+        public var customConfigureFunc: ConfigureAudioSessionFunc?
+        public var sessionConfiguration: AudioSessionConfiguration?
+
+        public var trackState: TrackState {
+            switch (localTracksCount > 0, remoteTracksCount > 0) {
+            case (true, false): .localOnly
+            case (false, true): .remoteOnly
+            case (true, true): .localAndRemote
+            default: .none
+            }
+        }
+        #endif
+    }
+
+    // MARK: - AudioProcessingModule
+
+    private lazy var capturePostProcessingDelegateAdapter = AudioCustomProcessingDelegateAdapter(
+        label: "capturePost",
+        rtcDelegateSetter: { RTC.audioProcessingModule.capturePostProcessingDelegate = $0 },
+    )
+
+    private lazy var renderPreProcessingDelegateAdapter = AudioCustomProcessingDelegateAdapter(
+        label: "renderPre",
+        rtcDelegateSetter: { RTC.audioProcessingModule.renderPreProcessingDelegate = $0 },
+    )
+
+    let capturePostProcessingDelegateSubject = CurrentValueSubject<AudioCustomProcessingDelegate?, Never>(nil)
+
+    /// Add a delegate to modify the local audio buffer before it is sent to the network
+    /// - Note: Only one delegate can be set at a time, but you can create one to wrap others if needed
+    /// - Note: If you only need to observe the buffer (rather than modify it), use ``add(localAudioRenderer:)`` instead
+    public var capturePostProcessingDelegate: AudioCustomProcessingDelegate? {
+        didSet {
+            capturePostProcessingDelegateAdapter.set(target: capturePostProcessingDelegate, oldTarget: oldValue)
+            capturePostProcessingDelegateSubject.send(capturePostProcessingDelegate)
+        }
+    }
+
+    /// Add a delegate to modify the combined remote audio buffer (all tracks) before it is played to the user
+    /// - Note: Only one delegate can be set at a time, but you can create one to wrap others if needed
+    /// - Note: If you only need to observe the buffer (rather than modify it), use ``add(remoteAudioRenderer:)`` instead
+    /// - Note: If you need to observe the buffer for individual tracks, use ``RemoteAudioTrack/add(audioRenderer:)`` instead
+    public var renderPreProcessingDelegate: AudioCustomProcessingDelegate? {
+        didSet {
+            renderPreProcessingDelegateAdapter.set(target: renderPreProcessingDelegate, oldTarget: oldValue)
+        }
+    }
+
+    // MARK: - AudioDeviceModule
+
+    public let defaultOutputDevice = AudioDevice(ioDevice: LKRTCIODevice.defaultDevice(with: .output))
+
+    public let defaultInputDevice = AudioDevice(ioDevice: LKRTCIODevice.defaultDevice(with: .input))
+
+    public var outputDevices: [AudioDevice] {
+        #if os(macOS)
+        RTC.audioDeviceModule.outputDevices.map { AudioDevice(ioDevice: $0) }
+        #else
+        []
+        #endif
+    }
+
+    public var inputDevices: [AudioDevice] {
+        #if os(macOS)
+        RTC.audioDeviceModule.inputDevices.map { AudioDevice(ioDevice: $0) }
+        #else
+        []
+        #endif
+    }
+
+    public var outputDevice: AudioDevice {
+        get {
+            #if os(macOS)
+            AudioDevice(ioDevice: RTC.audioDeviceModule.outputDevice)
+            #else
+            AudioDevice(ioDevice: LKRTCIODevice.defaultDevice(with: .output))
+            #endif
+        }
+        set {
+            #if os(macOS)
+            RTC.audioDeviceModule.outputDevice = newValue._ioDevice
+            #endif
+        }
+    }
+
+    public var inputDevice: AudioDevice {
+        get {
+            #if os(macOS)
+            AudioDevice(ioDevice: RTC.audioDeviceModule.inputDevice)
+            #else
+            AudioDevice(ioDevice: LKRTCIODevice.defaultDevice(with: .input))
+            #endif
+        }
+        set {
+            #if os(macOS)
+            RTC.audioDeviceModule.inputDevice = newValue._ioDevice
+            #endif
+        }
+    }
+
+    public var onDeviceUpdate: OnDevicesDidUpdate? {
+        get { _state.onDevicesDidUpdate }
+        set { _state.mutate { $0.onDevicesDidUpdate = newValue } }
+    }
+
+    /// Detect voice activity even if the mic is muted.
+    /// Internal audio engine must be initialized by calling ``prepareRecording()`` or
+    /// connecting to a room and subscribing to a remote audio track or publishing a local audio track.
+    public var onMutedSpeechActivity: OnSpeechActivity? {
+        get { _state.onMutedSpeechActivity }
+        set { _state.mutate { $0.onMutedSpeechActivity = newValue } }
+    }
+
+    /// Enables "advanced ducking" of *other audio* while using Apple's voice processing APIs.
+    ///
+    /// When enabled, the system dynamically adjusts ducking based on the presence of voice activity from
+    /// either side of the call: it applies more ducking when someone is speaking and reduces ducking
+    /// when neither side is speaking (SharePlay / FaceTime-like behavior).
+    ///
+    /// Defaults to `false` (SDK default), which keeps a fixed ducking behavior with minimal ducking.
+    /// This is intended to keep other audio as loud as possible by default.
+    ///
+    /// - Note: This only affects how non-voice audio is reduced. It does not change the level of
+    ///   the voice-chat stream itself.
+    /// - SeeAlso: ``duckingLevel``
+    public var isAdvancedDuckingEnabled: Bool {
+        get { RTC.audioDeviceModule.isAdvancedDuckingEnabled }
+        set { RTC.audioDeviceModule.isAdvancedDuckingEnabled = newValue }
+    }
+
+    /// Controls how much *other audio* is reduced ("ducked") while using Apple's voice processing APIs.
+    ///
+    /// The level and ``isAdvancedDuckingEnabled`` can be used independently:
+    /// - Use higher values (for example ``AudioDuckingLevel/max``) for better voice intelligibility.
+    /// - Use lower values (for example ``AudioDuckingLevel/min``) to keep other audio as loud as possible.
+    ///
+    /// Defaults to ``AudioDuckingLevel/min`` (SDK default), which keeps other audio as loud as possible.
+    /// Higher levels are opt-in and trade other-audio loudness for better voice intelligibility.
+    ///
+    /// ``AudioDuckingLevel/default`` matches Apple's historical fixed ducking amount (not the SDK default).
+    @available(iOS 17, macOS 14.0, visionOS 1.0, *)
+    public var duckingLevel: AudioDuckingLevel {
+        get { RTC.audioDeviceModule.duckingLevel.toLKType() }
+        set { RTC.audioDeviceModule.duckingLevel = newValue.toRTCType() }
+    }
+
+    /// Whether Apple's platform voice processing is allowed.
+    ///
+    /// Defaults to `true`. When set to `false`, runtime ``AudioProcessingOptions``
+    /// treat Apple Voice Processing I/O as unavailable. `automatic` mode falls
+    /// back to WebRTC software processing and `platform` mode is rejected.
+    ///
+    /// Use ``AudioProcessingOptions`` with `.software` modes for per-track or
+    /// per-capture software voice processing. Use this policy when the app must
+    /// guarantee Apple Voice Processing I/O is not used.
+    public var isPlatformVoiceProcessingAllowed: Bool { RTC.audioDeviceModule.isPlatformVoiceProcessingAllowed }
+
+    public func setPlatformVoiceProcessingAllowed(_ allowed: Bool) throws {
+        let result = RTC.audioDeviceModule.setPlatformVoiceProcessingAllowed(allowed)
+        try checkAdmResult(code: result)
+        #if os(iOS) || os(visionOS) || os(tvOS)
+        // Disallowing the platform path tears down any current VPIO and makes
+        // future captures resolve to software processing regardless of their
+        // options, so the session must not keep the chat mode expectation.
+        // Re-allowing does not enable VPIO by itself, the next capture's
+        // options decide, so the expectation is left for that path to update.
+        if !allowed {
+            audioSession.setPlatformVoiceProcessingExpected(false)
+        }
+        #endif
+    }
+
+    @available(*, deprecated, renamed: "isPlatformVoiceProcessingAllowed")
+    public var isVoiceProcessingEnabled: Bool { isPlatformVoiceProcessingAllowed }
+
+    @available(*, deprecated, renamed: "setPlatformVoiceProcessingAllowed(_:)")
+    public func setVoiceProcessingEnabled(_ enabled: Bool) throws {
+        try setPlatformVoiceProcessingAllowed(enabled)
+    }
+
+    /// Bypass Voice-Processing I/O of internal AVAudioEngine.
+    /// It is valid to toggle this at runtime and AudioEngine doesn't require restart.
+    /// Runtime ``AudioProcessingOptions`` may overwrite this Apple-specific state
+    /// when capture starts or when local audio track options are reapplied.
+    /// Defaults to `false`.
+    public var isVoiceProcessingBypassed: Bool {
+        get {
+            if RTC.pcFactoryState.admType == .platformDefault {
+                return RTC.pcFactoryState.bypassVoiceProcessing
+            }
+
+            return RTC.audioDeviceModule.isVoiceProcessingBypassed
+        }
+        set {
+            guard !(RTC.pcFactoryState.read { $0.isInitialized && $0.admType == .platformDefault }) else {
+                log("Cannot set this property after the peer connection has been initialized when using non-AVAudioEngine audio device module", .error)
+                return
+            }
+
+            RTC.audioDeviceModule.isVoiceProcessingBypassed = newValue
+        }
+    }
+
+    /// Bypass the Auto Gain Control of internal AVAudioEngine.
+    /// It is valid to toggle this at runtime.
+    public var isVoiceProcessingAGCEnabled: Bool {
+        get { RTC.audioDeviceModule.isVoiceProcessingAGCEnabled }
+        set { RTC.audioDeviceModule.isVoiceProcessingAGCEnabled = newValue }
+    }
+
+    /// Device-level platform voice-processing capability and requested/active state.
+    public var platformVoiceProcessingState: PlatformVoiceProcessingState {
+        RTC.audioDeviceModule.platformAudioProcessingState.toLKType()
+    }
+
+    /// Diagnostic snapshot of the resolved audio processing state.
+    ///
+    /// The audio processing module is owned by the peer connection factory and
+    /// shared engine-wide, so this reflects what is actually applied across the
+    /// engine rather than any single track or connection — use it to verify what
+    /// a ``LocalAudioTrack/setAudioProcessingOptions(_:)`` request resolved to.
+    public var audioProcessingState: AudioProcessingState {
+        RTC.audioProcessingState().toLKType()
+    }
+
+    /// Enables manual rendering (no-device) mode of AVAudioEngine.
+    /// In this mode, you can provide audio buffers by calling `AudioManager.shared.mixer.capture(appAudio:)` continuously.
+    /// Remote audio will not play out automatically. Get remote mixed audio buffers with `AudioManager.shared.add(localAudioRenderer:)` or individual tracks with ``RemoteAudioTrack/add(audioRenderer:)``.
+    /// - Note: While enabled, the SDK will not configure `AVAudioSession`. Configure it yourself if your app does its own audio I/O.
+    public func setManualRenderingMode(_ enabled: Bool) throws {
+        let result = RTC.audioDeviceModule.setManualRenderingMode(enabled)
+        try checkAdmResult(code: result)
+    }
+
+    public var isManualRenderingMode: Bool { RTC.audioDeviceModule.isManualRenderingMode }
+
+    // MARK: - Recording
+
+    /// Whether recording is kept initialized (mic input) for low-latency publish.
+    ///
+    /// - SeeAlso: ``setRecordingAlwaysPreparedMode(_:)``
+    public var isRecordingAlwaysPreparedMode: Bool { RTC.audioDeviceModule.isRecordingAlwaysPreparedMode }
+
+    /// Prepares the microphone capture pipeline for low-latency publishing.
+    ///
+    /// When enabled, the audio engine is started configured for mic input in a muted state,
+    /// which keeps recording initialized and pre-warms voice processing.
+    ///
+    /// - Parameter enabled: Pass `true` to enable always-prepared recording, or `false` to disable it.
+    /// - Parameter audioProcessingOptions: Optional voice-processing options used when prewarming mic input.
+    /// - Note: If `audioSession.isAutomaticConfigurationEnabled` is `true`, the session category is configured to `.playAndRecord`.
+    /// - Note: Microphone permission is required to enable, but is not requested here: prewarming is not a
+    ///   user-initiated capture, so prompting from it would surprise the user. Request it up front with
+    ///   ``LiveKitSDK/ensureDeviceAccess(for:)``, otherwise this throws ``LiveKitError`` of type
+    ///   ``LiveKitErrorType/deviceAccessDenied`` when the audio device module reports the missing permission.
+    /// - Note: This persists across ``Room`` lifecycles and connections until disabled.
+    /// - Throws: An error if microphone permission is not granted, or if the underlying audio device module fails to apply the setting.
+    public func setRecordingAlwaysPreparedMode(
+        _ enabled: Bool,
+        audioProcessingOptions: AudioProcessingOptions? = nil,
+    ) async throws {
+        if enabled {
+            updateExpectedPlatformVoiceProcessing(for: audioProcessingOptions)
+        }
+        let result = RTC.audioDeviceModule.setRecordingAlwaysPreparedMode(
+            enabled,
+            audioProcessingOptions: audioProcessingOptions?.toRTCType(),
+        )
+        try checkAdmResult(code: result)
+    }
+
+    /// Starts mic input to the SDK even without any ``Room`` or a connection.
+    /// Audio buffers will flow into ``LocalAudioTrack/add(audioRenderer:)`` and ``capturePostProcessingDelegate``.
+    ///
+    /// - Note: Being synchronous, this cannot request microphone permission. Ensure permission is granted first (for example via
+    ///   ``LiveKitSDK/ensureDeviceAccess(for:)``), otherwise it throws ``LiveKitError`` of type ``LiveKitErrorType/deviceAccessDenied``.
+    public func startLocalRecording(audioProcessingOptions: AudioProcessingOptions? = nil) throws {
+        updateExpectedPlatformVoiceProcessing(for: audioProcessingOptions)
+        // Always unmute APM if muted by last session.
+        RTC.audioProcessingModule.isMuted = false // TODO: Possibly not required anymore with new libs
+        // Start recording on the ADM.
+        let result = RTC.audioDeviceModule.initAndStartRecording(
+            audioProcessingOptions: audioProcessingOptions?.toRTCType(),
+        )
+        try checkAdmResult(code: result)
+    }
+
+    /// Stops mic input after it was started with ``startLocalRecording()``
+    public func stopLocalRecording() throws {
+        let result = RTC.audioDeviceModule.stopRecording()
+        try checkAdmResult(code: result)
+    }
+
+    /// Sets whether the internal `AVAudioEngine` is allowed to run.
+    ///
+    /// This flag has the highest priority over any API that may start the engine
+    /// (e.g., enabling the mic, ``startLocalRecording()``, or starting playback).
+    ///
+    /// - Behavior:
+    ///   - When set to a disabled availability, the engine will stop if running,
+    ///     and it will not start, even if recording or playback is requested.
+    ///   - When set back to enabled, the engine will start as soon as possible
+    ///     if recording and/or playback had been previously requested while disabled
+    ///     (i.e., pending requests are honored once availability allows).
+    ///
+    /// This is useful when you need to set up connections without touching the audio
+    /// device yet (e.g., CallKit flows), or to guarantee the engine remains off
+    /// regardless of subscription/publication requests.
+    ///
+    /// - Note: Microphone permission is not requested here. If recording was requested while input
+    ///   was unavailable, ensure permission is granted (for example via
+    ///   ``LiveKitSDK/ensureDeviceAccess(for:)``) before restoring input availability, otherwise
+    ///   this throws ``LiveKitError`` of type ``LiveKitErrorType/deviceAccessDenied``.
+    public func setEngineAvailability(_ availability: AudioEngineAvailability) throws {
+        let result = RTC.audioDeviceModule.setEngineAvailability(availability.toRTCType())
+        try checkAdmResult(code: result)
+    }
+
+    public var engineAvailability: AudioEngineAvailability {
+        RTC.audioDeviceModule.engineAvailability.toLKType()
+    }
+
+    /// Set a chain of ``AudioEngineObserver``s.
+    /// Defaults to having a single ``AudioSessionEngineObserver`` initially.
+    ///
+    /// The first object will be invoked and is responsible for calling the next object.
+    /// See ``NextInvokable`` protocol for details.
+    ///
+    /// Objects set here will be retained.
+    public func set(engineObservers: [any AudioEngineObserver]) {
+        _state.mutate { $0.engineObservers = engineObservers }
+    }
+
+    public var isEngineRunning: Bool {
+        RTC.audioDeviceModule.isEngineRunning
+    }
+
+    /// Acquires an audio session requirement for external ownership.
+    ///
+    /// On platforms without `AVAudioSession`, this returns a no-op handle.
+    public func acquireSessionRequirement(_ requirement: SessionRequirement) throws -> SessionRequirementHandle {
+        #if os(iOS) || os(visionOS) || os(tvOS)
+        try audioSession.acquire(requirement: requirement)
+        #else
+        SessionRequirementHandle(releaseImpl: {})
+        #endif
+    }
+
+    /// The mute state of internal audio engine which uses Voice Processing I/O mute API ``AVAudioInputNode.isVoiceProcessingInputMuted``.
+    /// Normally, you do not need to set this manually since it will be handled automatically.
+    public var isMicrophoneMuted: Bool {
+        get { RTC.audioDeviceModule.isMicrophoneMuted }
+        set {
+            let result = RTC.audioDeviceModule.setMicrophoneMuted(newValue)
+            if result != 0 {
+                log("Failed to set microphone muted: \(result)", .error)
+            }
+        }
+    }
+
+    // MARK: - Default AudioEngineObservers
+
+    public let mixer = MixerEngineObserver()
+
+    #if os(iOS) || os(visionOS) || os(tvOS)
+    /// Configures the `AVAudioSession` based on the audio engine's state.
+    /// Set `AudioManager.shared.audioSession.isAutomaticConfigurationEnabled` to `false` to manually configure the `AVAudioSession` instead.
+    /// > Note: It is recommended to set this before connecting to a room.
+    public let audioSession = AudioSessionEngineObserver()
+    #endif
+
+    // MARK: - Internal
+
+    let _state: StateSync<State>
+
+    let _admDelegateAdapter = AudioDeviceModuleDelegateAdapter()
+
+    init() {
+        #if os(iOS) || os(visionOS) || os(tvOS)
+        let engineObservers: [any AudioEngineObserver] = [audioSession, mixer]
+        #else
+        let engineObservers: [any AudioEngineObserver] = [mixer]
+        #endif
+        _state = StateSync(State(engineObservers: engineObservers))
+        _admDelegateAdapter.audioManager = self
+        RTC.audioDeviceModule.observer = _admDelegateAdapter
+    }
+}
+
+public extension AudioManager {
+    /// Add an ``AudioRenderer`` to receive pcm buffers from local input (mic).
+    /// Only ``AudioRenderer/render(pcmBuffer:)`` will be called.
+    /// Usage: `AudioManager.shared.add(localAudioRenderer: localRenderer)`
+    func add(localAudioRenderer delegate: AudioRenderer) {
+        capturePostProcessingDelegateAdapter.add(delegate: delegate)
+    }
+
+    func remove(localAudioRenderer delegate: AudioRenderer) {
+        capturePostProcessingDelegateAdapter.remove(delegate: delegate)
+    }
+}
+
+public extension AudioManager {
+    /// Add an ``AudioRenderer`` to receive pcm buffers from combined remote audio.
+    /// Only ``AudioRenderer/render(pcmBuffer:)`` will be called.
+    /// To receive buffer for individual tracks, use ``RemoteAudioTrack/add(audioRenderer:)`` instead.
+    /// Usage: `AudioManager.shared.add(remoteAudioRenderer: localRenderer)`
+    func add(remoteAudioRenderer delegate: AudioRenderer) {
+        renderPreProcessingDelegateAdapter.add(delegate: delegate)
+    }
+
+    func remove(remoteAudioRenderer delegate: AudioRenderer) {
+        renderPreProcessingDelegateAdapter.remove(delegate: delegate)
+    }
+}
+
+extension AudioManager {
+    /// Tells the session observer which voice processing implementation the
+    /// next capture resolves to, before the ADM engine transition starts. The
+    /// session category and mode are configured during that transition, so the
+    /// expectation must be known up front. Also called from
+    /// ``LocalAudioTrack/setAudioProcessingOptions(_:)`` since track-level
+    /// requests reach the ADM through the sender, bypassing this manager.
+    func updateExpectedPlatformVoiceProcessing(for options: AudioProcessingOptions?) {
+        #if os(iOS) || os(visionOS) || os(tvOS)
+        // nil requests no processing change and the ADM keeps its current
+        // voice processing state, so the expectation must stay unchanged too.
+        guard let options else { return }
+        #if targetEnvironment(simulator)
+        let expected = false
+        #else
+        let expected = options.requestsPlatformEchoNoisePath && isPlatformVoiceProcessingAllowed
+        #endif
+        audioSession.setPlatformVoiceProcessingExpected(expected)
+        #endif
+    }
+
+    func buildEngineObserverChain() -> (any AudioEngineObserver)? {
+        var objects = _state.engineObservers
+        guard !objects.isEmpty else { return nil }
+
+        for i in 0 ..< objects.count - 1 {
+            objects[i].next = objects[i + 1]
+        }
+
+        return objects.first
+    }
+}
+
+// Error code originating from the SDK's own AudioEngineObserver chain.
+let kAudioEngineErrorFailedToConfigureAudioSession = -4100
+
+// Error codes originating from the WebRTC AudioEngineDevice.
+// Keep these values in sync with `audio_engine_device.h` in the webrtc-sdk fork.
+let kAudioEngineErrorInsufficientDevicePermission = -9000
+let kAudioEngineErrorAudioSessionInvalidCategory = -9001
+
+extension AudioManager {
+    func checkAdmResult(code: Int) throws {
+        if code == kAudioEngineErrorFailedToConfigureAudioSession {
+            throw LiveKitError(.audioSession, message: "Failed to configure audio session")
+        } else if code == kAudioEngineErrorInsufficientDevicePermission {
+            throw LiveKitError(.deviceAccessDenied, message: "Microphone permission is not granted")
+        } else if code == kAudioEngineErrorAudioSessionInvalidCategory {
+            throw LiveKitError(.audioSession, message: "Audio session category does not support recording")
+        } else if code != 0 {
+            throw LiveKitError(.audioEngine, message: "Audio engine returned error code: \(code)")
+        }
+    }
+}

@@ -1,0 +1,79 @@
+/*
+ * Copyright 2026 LiveKit
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import AVFoundation
+import CoreMedia
+
+internal import LiveKitWebRTC
+
+@objcMembers
+public class RemoteAudioTrack: Track, RemoteTrackProtocol, AudioTrackProtocol, @unchecked Sendable {
+    private static let volumeRange = 0.0 ... 10.0
+
+    /// Playout volume of the remote audio track.
+    ///
+    /// A gain value in the range `0.0` to `10.0`:
+    /// - `0.0` mutes the track.
+    /// - `1.0` plays the track at unity gain (unmodified audio).
+    /// - Values greater than `1.0` boost the track, up to `10.0` (10× amplification).
+    ///
+    /// Values outside this range are clamped.
+    ///
+    /// - Note: Reading or writing this blocks the calling thread until WebRTC's signaling thread
+    ///   applies it; avoid calling it from a Swift Concurrency task on a latency-sensitive path.
+    public var volume: Double {
+        get {
+            mediaTrack.blocking { ($0 as? LKRTCAudioTrack)?.source.volume.clamped(to: Self.volumeRange) ?? 0 }
+        }
+        set {
+            mediaTrack.blocking { ($0 as? LKRTCAudioTrack)?.source.volume = newValue.clamped(to: Self.volumeRange) }
+        }
+    }
+
+    private lazy var _adapter = AudioRendererAdapter()
+
+    init(name: String,
+         source: Track.Source,
+         track: RTCMediaTrack,
+         reportStatistics: Bool)
+    {
+        super.init(name: name,
+                   kind: .audio,
+                   source: source,
+                   track: track,
+                   reportStatistics: reportStatistics)
+
+        // Attaching the sink blocks on the signaling thread; remote tracks are built on the RTC
+        // executor, so this runs inline there rather than hopping.
+        let adapter = _adapter
+        mediaTrack.blocking { ($0 as? LKRTCAudioTrack)?.add(adapter) }
+    }
+
+    deinit {
+        // The symmetric detach blocks on the signaling thread; keep it off the serial RTC executor
+        // and the cooperative pool.
+        let adapter = _adapter
+        mediaTrack.park { ($0 as? LKRTCAudioTrack)?.remove(adapter) }
+    }
+
+    public func add(audioRenderer: AudioRenderer) {
+        _adapter.add(delegate: audioRenderer)
+    }
+
+    public func remove(audioRenderer: AudioRenderer) {
+        _adapter.remove(delegate: audioRenderer)
+    }
+}

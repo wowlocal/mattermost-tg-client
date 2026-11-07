@@ -1772,6 +1772,55 @@ ios_extension(
 )
 
 plist_fragment(
+    name = "RelayBroadcastEntitlements",
+    extension = "entitlements",
+    template = """
+    <key>com.apple.security.application-groups</key>
+    <array><string>group.{telegram_bundle_id}</string></array>
+    <key>application-identifier</key>
+    <string>{telegram_team_id}.{telegram_bundle_id}.BroadcastUpload</string>
+    """.format(telegram_team_id = telegram_team_id, telegram_bundle_id = telegram_bundle_id),
+)
+
+plist_fragment(
+    name = "RelayBroadcastInfoPlist",
+    extension = "plist",
+    template = """
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleName</key><string>Relay Screen Sharing</string>
+    <key>CFBundlePackageType</key><string>XPC!</string>
+    <key>NSExtension</key>
+    <dict>
+        <key>NSExtensionPointIdentifier</key><string>com.apple.broadcast-services-upload</string>
+        <key>NSExtensionPrincipalClass</key><string>RelayBroadcastSampleHandler</string>
+        <key>RPBroadcastProcessMode</key><string>RPBroadcastProcessModeSampleBuffer</string>
+    </dict>
+    <key>RTCAppGroupIdentifier</key><string>group.{telegram_bundle_id}</string>
+    """.format(telegram_bundle_id = telegram_bundle_id),
+)
+
+swift_library(
+    name = "RelayBroadcastLib",
+    module_name = "RelayBroadcastLib",
+    srcs = glob(["RelayBroadcast/*.swift"]),
+    deps = ["//third-party/livekit-sdk:LiveKit"],
+)
+
+ios_extension(
+    name = "RelayBroadcastExtension",
+    bundle_id = "{telegram_bundle_id}.BroadcastUpload".format(telegram_bundle_id = telegram_bundle_id),
+    families = ["iphone", "ipad"],
+    infoplists = [":RelayBroadcastInfoPlist", ":VersionInfoPlist", ":BuildNumberInfoPlist"],
+    minimum_os_version = minimum_os_version,
+    provisioning_profile = select({
+        ":disableProvisioningProfilesSetting": None,
+        "//conditions:default": "@build_configuration//provisioning:BroadcastUpload.mobileprovision",
+    }),
+    entitlements = ":RelayBroadcastEntitlements.entitlements",
+    deps = [":RelayBroadcastLib"],
+)
+
+plist_fragment(
     name = "NotificationServiceInfoPlist",
     extension = "plist",
     template = 
@@ -1926,7 +1975,11 @@ plist_fragment(
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>When you share your location in a chat, Relay needs access to show it on a map.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Relay uses the microphone to record voice messages and videos with sound. A recording is sent to your Mattermost server only when you send it.</string>
+    <string>Relay uses the microphone for voice messages and calls. During a call, your audio is shared with the other participants.</string>
+    <key>RTCAppGroupIdentifier</key>
+    <string>group.{telegram_bundle_id}</string>
+    <key>RTCScreenSharingExtension</key>
+    <string>{telegram_bundle_id}.BroadcastUpload</string>
     <key>NSMotionUsageDescription</key>
     <string>Relay doesn't record your motion or fitness activity.</string>
     <!-- MATTERMOST: Telegram's Siri intents and voice-to-text code is still linked (unused), and App Store
@@ -2109,6 +2162,7 @@ ios_application(
             ":ShareExtension",
             ":NotificationContentExtension",
             ":NotificationServiceExtension" + notificationServiceExtensionVersion,
+            ":RelayBroadcastExtension",
             # MATTERMOST: Siri intents, the widget and call screen sharing are Telegram-only or "Later"
             # (docs/plan/06-feature-scope.md). Their targets stay buildable.
             #":IntentsExtension",

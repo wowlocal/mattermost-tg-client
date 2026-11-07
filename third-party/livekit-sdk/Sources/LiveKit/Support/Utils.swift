@@ -1,0 +1,392 @@
+/*
+ * Copyright 2026 LiveKit
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+internal import LiveKitWebRTC
+
+enum OS {
+    case macOS
+    case iOS
+    case visionOS
+    case tvOS
+}
+
+extension OS: CustomStringConvertible {
+    var description: String {
+        switch self {
+        case .macOS: "macOS"
+        case .iOS: "iOS"
+        case .visionOS: "visionOS"
+        case .tvOS: "tvOS"
+        }
+    }
+}
+
+func format(bps: UInt64) -> String {
+    let bpsDivider: Double = 1000
+    let ordinals = ["", "K", "M", "G", "T", "P", "E"]
+
+    var rate = Double(bps)
+    var ordinal = 0
+
+    while rate > bpsDivider {
+        rate /= bpsDivider
+        ordinal += 1
+    }
+
+    return String(rate.rounded(to: 2)) + ordinals[ordinal] + "bps"
+}
+
+class Utils: Loggable {
+    private static let processInfo = ProcessInfo()
+
+    /// Returns current OS.
+    static func os() -> OS {
+        #if os(iOS)
+        .iOS
+        #elseif os(macOS)
+        .macOS
+        #elseif os(visionOS)
+        .visionOS
+        #elseif os(tvOS)
+        .tvOS
+        #endif
+    }
+
+    /// Returns os version as a string.
+    /// format: `12.1`, `15.3.1`, `15.0.1`
+    static func osVersionString() -> String {
+        let osVersion = processInfo.operatingSystemVersion
+        var versions = [osVersion.majorVersion]
+        if osVersion.minorVersion != 0 || osVersion.patchVersion != 0 {
+            versions.append(osVersion.minorVersion)
+        }
+        if osVersion.patchVersion != 0 {
+            versions.append(osVersion.patchVersion)
+        }
+        return versions.map { String($0) }.joined(separator: ".")
+    }
+
+    /// Returns a model identifier.
+    /// format: `MacBookPro18,3`, `iPhone13,3` or `iOSSimulator,arm64`
+    static func modelIdentifier() -> String? {
+        #if os(iOS) || os(visionOS) || os(tvOS)
+        var systemInfo = utsname()
+        uname(&systemInfo)
+        let machineMirror = Mirror(reflecting: systemInfo.machine)
+        let identifier = machineMirror.children.reduce("") { identifier, element in
+            guard let value = element.value as? Int8, value != 0 else { return identifier }
+            return identifier + String(UnicodeScalar(UInt8(value)))
+        }
+        // for simulator, the following codes are returned
+        guard !["i386", "x86_64", "arm64"].contains(where: { $0 == identifier }) else {
+            return "iOSSimulator,\(identifier)"
+        }
+        return identifier
+        #elseif os(macOS)
+        let mainPort: mach_port_t = if #available(macOS 12.0, *) {
+            kIOMainPortDefault
+        } else {
+            0 // kIOMainPortDefault (macOS 12+) is a synonym for the NULL default port
+        }
+        let service = IOServiceGetMatchingService(mainPort,
+                                                  IOServiceMatching("IOPlatformExpertDevice"))
+        defer { IOObjectRelease(service) }
+
+        guard let modelData = IORegistryEntryCreateCFProperty(service,
+                                                              "model" as CFString,
+                                                              kCFAllocatorDefault,
+                                                              0).takeRetainedValue() as? Data
+        else {
+            return nil
+        }
+
+        return modelData.withUnsafeBytes { (pointer: UnsafeRawBufferPointer) -> String? in
+            guard let cString = pointer.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return nil }
+            return String(cString: cString)
+        }
+        #endif
+    }
+
+    static func networkTypeString() -> String? {
+        // wifi, wired, cellular, vpn, empty if not known
+        guard let interface = ConnectivityListener.shared.activeInterfaceType() else {
+            return nil
+        }
+
+        switch interface {
+        case .wifi: return "wifi"
+        case .cellular: return "cellular"
+        case .wiredEthernet: return "wired"
+        default: return nil
+        }
+    }
+
+    /// Client capabilities this SDK advertises to peers. Defined once so both connection paths
+    /// (query-param and join-request) announce the same set — otherwise peers connected via the
+    /// path that omits a capability never enable the corresponding feature (e.g. compression).
+    ///
+    /// Advertised unconditionally: deflate-raw payloads are decompressed by the Rust data stream
+    /// layer, so support doesn't vary by platform or options.
+    static let advertisedClientCapabilities: [Livekit_ClientInfo_Capability] = [.capCompressionDeflateRaw]
+
+    /// Wire (protobuf enum) name for a capability. The query-param connection path advertises
+    /// capabilities as a comma-separated list of these names, which the server maps back to the enum.
+    private static func capabilityWireName(_ capability: Livekit_ClientInfo_Capability) -> String? {
+        switch capability {
+        case .capPacketTrailer: "CAP_PACKET_TRAILER"
+        case .capCompressionDeflateRaw: "CAP_COMPRESSION_DEFLATE_RAW"
+        default: nil
+        }
+    }
+
+    static func buildUrl(
+        _ url: URL,
+        connectOptions: ConnectOptions? = nil,
+        reconnectMode: ReconnectMode? = nil,
+        participantSid: Participant.Sid? = nil,
+        adaptiveStream: Bool,
+    ) throws -> URL {
+        // use default options if nil
+        let connectOptions = connectOptions ?? ConnectOptions()
+
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+
+        guard var builder = components else {
+            throw LiveKitError(.failedToParseUrl)
+        }
+
+        let wsScheme = url.isSecure ? "wss" : "ws"
+
+        var pathSegments = url.pathComponents
+        // strip empty & slashes
+        pathSegments.removeAll(where: { $0.isEmpty || $0 == "/" })
+
+        // if already ending with `rtc` or `validate`
+        // and is not a dir, remove it
+        if !url.hasDirectoryPath,
+           !pathSegments.isEmpty,
+           ["rtc", "validate"].contains(pathSegments.last!)
+        {
+            pathSegments.removeLast()
+        }
+        // add the correct segment
+        pathSegments.append("rtc")
+
+        builder.scheme = wsScheme
+        builder.path = "/" + pathSegments.joined(separator: "/")
+
+        var queryItems = [
+            URLQueryItem(name: "protocol", value: connectOptions.protocolVersion.description),
+            URLQueryItem(name: "sdk", value: "swift"),
+            URLQueryItem(name: "version", value: LiveKitSDK.version),
+            URLQueryItem(name: "client_protocol", value: String(connectOptions.clientProtocol.rawValue)),
+            // Additional client info
+            URLQueryItem(name: "os", value: String(describing: os())),
+            URLQueryItem(name: "os_version", value: osVersionString()),
+        ]
+
+        if let modelIdentifier = modelIdentifier() {
+            queryItems.append(URLQueryItem(name: "device_model", value: modelIdentifier))
+        }
+
+        if let network = networkTypeString() {
+            queryItems.append(URLQueryItem(name: "network", value: network))
+        }
+
+        // only for quick-reconnect
+        if reconnectMode == .quick {
+            queryItems.append(URLQueryItem(name: "reconnect", value: "1"))
+            if let sid = participantSid {
+                queryItems.append(URLQueryItem(name: "sid", value: sid.stringValue))
+            }
+        }
+
+        queryItems.append(URLQueryItem(name: "auto_subscribe", value: connectOptions.autoSubscribe ? "1" : "0"))
+        queryItems.append(URLQueryItem(name: "adaptive_stream", value: adaptiveStream ? "1" : "0"))
+
+        // Advertise client capabilities on this (query-param) path too, matching the join-request
+        // path — otherwise peers connected this way never learn we support e.g. deflate compression.
+        let capabilityNames = advertisedClientCapabilities.compactMap(capabilityWireName)
+        if !capabilityNames.isEmpty {
+            queryItems.append(URLQueryItem(name: "capabilities", value: capabilityNames.joined(separator: ",")))
+        }
+
+        builder.queryItems = queryItems
+
+        guard let result = builder.url else {
+            throw LiveKitError(.failedToParseUrl)
+        }
+
+        return result
+    }
+
+    static func buildJoinRequestUrl(
+        _ url: URL,
+        connectOptions: ConnectOptions? = nil,
+        reconnectMode: ReconnectMode? = nil,
+        participantSid: Participant.Sid? = nil,
+        adaptiveStream: Bool,
+        publisherOffer: Livekit_SessionDescription? = nil,
+    ) throws -> URL {
+        let connectOptions = connectOptions ?? ConnectOptions()
+
+        guard var builder = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            throw LiveKitError(.failedToParseUrl)
+        }
+
+        let wsScheme = url.isSecure ? "wss" : "ws"
+
+        var pathSegments = url.pathComponents
+        pathSegments.removeAll(where: { $0.isEmpty || $0 == "/" })
+        if !url.hasDirectoryPath, let last = pathSegments.last,
+           ["rtc", "validate"].contains(last)
+        {
+            pathSegments.removeLast()
+        }
+        pathSegments.append("rtc")
+        pathSegments.append("v1")
+
+        builder.scheme = wsScheme
+        builder.path = "/" + pathSegments.joined(separator: "/")
+
+        let encoded = try buildWrappedJoinRequest(connectOptions: connectOptions,
+                                                  reconnectMode: reconnectMode,
+                                                  participantSid: participantSid,
+                                                  adaptiveStream: adaptiveStream,
+                                                  publisherOffer: publisherOffer)
+
+        builder.queryItems = [URLQueryItem(name: "join_request", value: encoded)]
+
+        guard let result = builder.url else {
+            throw LiveKitError(.failedToParseUrl)
+        }
+
+        return result
+    }
+
+    /// Converts a WebSocket URL to its HTTP validation counterpart.
+    /// - `wss://host/rtc?...` → `https://host/rtc/validate?...`
+    /// - `wss://host/rtc/v1?...` → `https://host/rtc/v1/validate?...`
+    static func toValidateUrl(_ wsUrl: URL) throws -> URL {
+        guard var components = URLComponents(url: wsUrl, resolvingAgainstBaseURL: false) else {
+            throw LiveKitError(.failedToParseUrl)
+        }
+        components.scheme = components.scheme == "wss" ? "https" : "http"
+        components.path = components.path.hasSuffix("/")
+            ? components.path + "validate"
+            : components.path + "/validate"
+        guard let result = components.url else {
+            throw LiveKitError(.failedToParseUrl)
+        }
+        return result
+    }
+
+    private static func buildWrappedJoinRequest(
+        connectOptions: ConnectOptions,
+        reconnectMode: ReconnectMode?,
+        participantSid: Participant.Sid?,
+        adaptiveStream: Bool,
+        publisherOffer: Livekit_SessionDescription?,
+    ) throws -> String {
+        let joinRequest = Livekit_JoinRequest.with { request in
+            request.clientInfo = Livekit_ClientInfo.with {
+                $0.sdk = .swift
+                $0.version = LiveKitSDK.version
+                $0.protocol = Int32(connectOptions.protocolVersion.rawValue)
+                $0.clientProtocol = Int32(connectOptions.clientProtocol.rawValue)
+                $0.capabilities = advertisedClientCapabilities
+                $0.os = String(describing: os())
+                $0.osVersion = osVersionString()
+                if let model = modelIdentifier() { $0.deviceModel = model }
+                if let network = networkTypeString() { $0.network = network }
+            }
+            request.connectionSettings = Livekit_ConnectionSettings.with {
+                $0.autoSubscribe = connectOptions.autoSubscribe
+                $0.adaptiveStream = adaptiveStream
+            }
+
+            // Bundling the publisher offer lets the server answer it in the same exchange,
+            // removing a round trip from the connect path.
+            if let publisherOffer {
+                request.publisherOffer = publisherOffer
+            }
+
+            if reconnectMode == .quick {
+                request.reconnect = true
+                request.reconnectReason = .rrSignalDisconnected
+                if let sid = participantSid {
+                    request.participantSid = sid.stringValue
+                }
+            }
+        }
+
+        let joinRequestData = try joinRequest.serializedData()
+
+        // The request travels in the WebSocket upgrade URL, so keeping it within
+        // a single TCP segment avoids paying a retransmission timeout before the
+        // handshake even starts on a lossy link. Mirrors client-sdk-js and
+        // rust-sdks: gzip, but keep the compressed form only when it is actually
+        // smaller — gzip framing exceeds the savings on a small request.
+        let (payload, compression): (Data, Livekit_WrappedJoinRequest_Compression) =
+            if let compressed = Gzip.compress(joinRequestData), compressed.count < joinRequestData.count {
+                (compressed, .gzip)
+            } else {
+                (joinRequestData, .none)
+            }
+
+        let wrappedData = try Livekit_WrappedJoinRequest.with {
+            $0.compression = compression
+            $0.joinRequest = payload
+        }.serializedData()
+
+        return wrappedData.base64URLEncodedString()
+    }
+}
+
+extension Collection {
+    /// Returns the element at the specified index if it is within bounds, otherwise nil.
+    subscript(safe index: Index) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
+}
+
+extension MutableCollection {
+    subscript(safe index: Index) -> Element? {
+        get { indices.contains(index) ? self[index] : nil }
+        set {
+            if let newValue, indices.contains(index) {
+                self[index] = newValue
+            }
+        }
+    }
+}
+
+extension HTTPURLResponse {
+    var isStatusCodeOK: Bool {
+        (200 ..< 300).contains(statusCode)
+    }
+}
+
+func computeAttributesDiff(oldValues: [String: String], newValues: [String: String]) -> [String: String] {
+    let allKeys = Set(oldValues.keys).union(newValues.keys)
+    var diff = [String: String]()
+
+    for key in allKeys where oldValues[key] != newValues[key] {
+        diff[key] = newValues[key] ?? ""
+    }
+
+    return diff
+}

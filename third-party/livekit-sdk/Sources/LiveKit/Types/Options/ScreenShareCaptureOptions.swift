@@ -1,0 +1,124 @@
+/*
+ * Copyright 2026 LiveKit
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import Foundation
+
+@objcMembers
+public final class ScreenShareCaptureOptions: NSObject, VideoCaptureOptions, Sendable {
+    public let dimensions: Dimensions
+
+    /// - Note: Not applied by ``IOSScreenCapturer``; `SCStreamConfiguration.minimumFrameInterval`
+    ///   is unavailable on iOS, so the system picks the rate there.
+    public let fps: Int
+
+    /// Only used for macOS
+    public let showCursor: Bool
+
+    public let appAudio: Bool
+
+    /// Use broadcast extension for screen capture (iOS only).
+    ///
+    /// If a broadcast extension has been properly configured, this defaults to `true`.
+    ///
+    /// - Note: Ignored on iOS 27 and later unless ``useScreenCaptureKit`` is set to `false`, except
+    ///   for the screen share published automatically when the extension starts a broadcast.
+    public let useBroadcastExtension: Bool
+
+    /// Capture in-process with ScreenCaptureKit instead of ReplayKit (iOS 27+ only).
+    ///
+    /// ScreenCaptureKit captures system-wide content from within your app, so neither a Broadcast
+    /// Upload Extension nor an app group is needed, and it supersedes both ReplayKit modes: when
+    /// this is `true` (the default), ``useBroadcastExtension`` has no effect on iOS 27 and later.
+    /// The exception is the screen share published automatically when the app's extension starts a
+    /// broadcast, for example from Control Center, which uses that broadcast instead of the picker.
+    ///
+    /// Set to `false` to keep using ReplayKit on iOS 27 — for example while an existing broadcast
+    /// extension setup is still in place. Has no effect below iOS 27, on Mac Catalyst, or on other
+    /// platforms. Screen sharing then falls back in order: ScreenCaptureKit, Broadcast Capture if
+    /// ``useBroadcastExtension`` is set, In-app Capture otherwise.
+    ///
+    /// - SeeAlso: ``IOSScreenCapturer``
+    public let useScreenCaptureKit: Bool
+
+    public let includeCurrentApplication: Bool
+
+    /// Exclude windows by their window ID (macOS only).
+    public let excludeWindowIDs: [UInt32]
+
+    public static let defaultToBroadcastExtension: Bool = {
+        #if os(iOS)
+        return BroadcastBundleInfo.hasExtension
+        #else
+        return false
+        #endif
+    }()
+
+    public init(dimensions: Dimensions = .h1080_169,
+                fps: Int = 30,
+                showCursor: Bool = true,
+                appAudio: Bool = false,
+                useBroadcastExtension: Bool = defaultToBroadcastExtension,
+                useScreenCaptureKit: Bool = true,
+                includeCurrentApplication: Bool = false,
+                excludeWindowIDs: [UInt32] = [])
+    {
+        self.dimensions = dimensions
+        self.fps = fps
+        self.showCursor = showCursor
+        self.appAudio = appAudio
+        self.useBroadcastExtension = useBroadcastExtension
+        self.useScreenCaptureKit = useScreenCaptureKit
+        self.includeCurrentApplication = includeCurrentApplication
+        self.excludeWindowIDs = excludeWindowIDs
+    }
+
+    // MARK: - Equal
+
+    override public func isEqual(_ object: Any?) -> Bool {
+        guard let other = object as? Self else { return false }
+        return dimensions == other.dimensions &&
+            fps == other.fps &&
+            showCursor == other.showCursor &&
+            appAudio == other.appAudio &&
+            useBroadcastExtension == other.useBroadcastExtension &&
+            useScreenCaptureKit == other.useScreenCaptureKit &&
+            includeCurrentApplication == other.includeCurrentApplication &&
+            excludeWindowIDs == other.excludeWindowIDs
+    }
+
+    override public var hash: Int {
+        var hasher = Hasher()
+        hasher.combine(dimensions)
+        hasher.combine(fps)
+        hasher.combine(showCursor)
+        hasher.combine(appAudio)
+        hasher.combine(useBroadcastExtension)
+        hasher.combine(useScreenCaptureKit)
+        hasher.combine(includeCurrentApplication)
+        hasher.combine(excludeWindowIDs)
+        return hasher.finalize()
+    }
+}
+
+extension ScreenShareCaptureOptions {
+    /// Whether screen sharing captures with ScreenCaptureKit on iOS 27 and later.
+    ///
+    /// Publishing a broadcast the app's own extension just started, for example from Control
+    /// Center, goes through Broadcast Capture instead of presenting the content picker again.
+    func prefersScreenCaptureKit(roomDefaults: ScreenShareCaptureOptions, publishesRunningBroadcast: Bool) -> Bool {
+        useScreenCaptureKit && !(roomDefaults.useBroadcastExtension && publishesRunningBroadcast)
+    }
+}

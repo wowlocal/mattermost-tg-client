@@ -1,0 +1,209 @@
+/*
+ * Copyright 2026 LiveKit
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import AVFoundation
+@testable import LiveKit
+import Testing
+#if canImport(LiveKitTestSupport)
+import LiveKitTestSupport
+#endif
+
+extension AVAudioCommonFormat: @retroactive CustomTestStringConvertible {
+    public var testDescription: String {
+        switch self {
+        case .pcmFormatFloat32: "Float32"
+        case .pcmFormatFloat64: "Float64"
+        case .pcmFormatInt16: "Int16"
+        case .pcmFormatInt32: "Int32"
+        case .otherFormat: "Other"
+        @unknown default: "Unknown(\(rawValue))"
+        }
+    }
+}
+
+@Suite(.tags(.audio)) struct AVAudioPCMBufferTests {
+    struct ResampleCase: CustomTestStringConvertible {
+        let from: Double
+        let to: Double
+        let shouldSucceed: Bool
+        var testDescription: String { "\(Int(from))Hz → \(Int(to))Hz (\(shouldSucceed ? "ok" : "fail"))" }
+    }
+
+    @Test(arguments: [
+        ResampleCase(from: 44100, to: 48000, shouldSucceed: true),
+        ResampleCase(from: 48000, to: 16000, shouldSucceed: true),
+        ResampleCase(from: 44100, to: 44100, shouldSucceed: true),
+        ResampleCase(from: 44100, to: 0, shouldSucceed: false),
+    ])
+    func resample(_ c: ResampleCase) throws {
+        try resampleHelper(fromSampleRate: c.from, toSampleRate: c.to, expectedSuccess: c.shouldSucceed)
+    }
+
+    private func resampleHelper(fromSampleRate: Double, toSampleRate: Double, expectedSuccess: Bool) throws {
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: fromSampleRate, channels: 2))
+
+        let frameCount = 1000
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount)))
+
+        fillBufferWithSineWave(buffer: buffer, frameCount: frameCount)
+
+        let resampledBuffer = buffer.resample(toSampleRate: toSampleRate)
+
+        if expectedSuccess {
+            let resampled = try #require(resampledBuffer, "Resampling should succeed")
+            #expect(abs(resampled.format.sampleRate - toSampleRate) < 0.001, "Resampled buffer should have the target sample rate")
+
+            let expectedFrameCount = Int(Double(frameCount) * toSampleRate / fromSampleRate)
+            #expect(abs(Int(resampled.frameLength) - expectedFrameCount) <= 1, "Resampled buffer should have the expected frame count")
+        } else {
+            #expect(resampledBuffer == nil, "Resampling should fail")
+        }
+    }
+
+    static let sampleRates: [Double] = [8000, 16000, 22050, 24000, 32000, 44100, 48000]
+    static let formats: [AVAudioCommonFormat] = [.pcmFormatFloat32, .pcmFormatInt16, .pcmFormatInt32]
+
+    @Test(arguments: sampleRates, formats)
+    func toData(sampleRate: Double, format: AVAudioCommonFormat) throws {
+        try toDataHelper(sampleRate: sampleRate, format: format)
+    }
+
+    private func toDataHelper(sampleRate: Double, format: AVAudioCommonFormat) throws {
+        let audioFormat = try #require(AVAudioFormat(commonFormat: format, sampleRate: sampleRate, channels: 2, interleaved: false))
+
+        let frameCount = 1000
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: audioFormat, frameCapacity: AVAudioFrameCount(frameCount)))
+
+        fillBufferWithSineWave(buffer: buffer, frameCount: frameCount)
+
+        let data = try #require(buffer.toData(), "toData() returned nil")
+
+        let channels = Int(audioFormat.channelCount)
+
+        let bytesPerSample = switch format {
+        case .pcmFormatFloat32:
+            4
+        case .pcmFormatInt16:
+            2
+        case .pcmFormatInt32:
+            4
+        default:
+            Int(audioFormat.streamDescription.pointee.mBytesPerFrame) / channels
+        }
+
+        let expectedSize = frameCount * channels * bytesPerSample
+        #expect(data.count == expectedSize, "Data size mismatch")
+
+        let newBuffer = try #require(AVAudioPCMBuffer(pcmFormat: audioFormat, frameCapacity: AVAudioFrameCount(frameCount)))
+        newBuffer.frameLength = AVAudioFrameCount(frameCount)
+
+        fillBufferFromData(buffer: newBuffer, data: data)
+
+        #expect(compareBuffers(buffer1: buffer, buffer2: newBuffer), "Buffer data mismatch after conversion")
+    }
+
+    private func fillBufferWithSineWave(buffer: AVAudioPCMBuffer, frameCount: Int) {
+        let format = buffer.format
+        let channels = Int(format.channelCount)
+
+        let sineWaveValues = (0 ..< frameCount).map { frame in
+            sin(Double(frame) * 2 * .pi / 100.0)
+        }
+
+        for frame in 0 ..< frameCount {
+            let value = sineWaveValues[frame]
+            for channel in 0 ..< channels {
+                switch format.commonFormat {
+                case .pcmFormatFloat32:
+                    buffer.floatChannelData?[channel][frame] = Float(value)
+                case .pcmFormatInt16:
+                    buffer.int16ChannelData?[channel][frame] = Int16(value * Double(Int16.max))
+                case .pcmFormatInt32:
+                    buffer.int32ChannelData?[channel][frame] = Int32(value * Double(Int32.max))
+                default:
+                    break
+                }
+            }
+        }
+
+        buffer.frameLength = AVAudioFrameCount(frameCount)
+    }
+
+    private func fillBufferFromData(buffer: AVAudioPCMBuffer, data: Data) {
+        let format = buffer.format
+        let channels = Int(format.channelCount)
+        let frameCount = Int(buffer.frameLength)
+
+        data.withUnsafeBytes { (bufferPointer: UnsafeRawBufferPointer) in
+            guard let baseAddress = bufferPointer.baseAddress else { return }
+
+            for frame in 0 ..< frameCount {
+                for channel in 0 ..< channels {
+                    let index = frame * channels + channel
+
+                    switch format.commonFormat {
+                    case .pcmFormatFloat32:
+                        let floatArray = baseAddress.assumingMemoryBound(to: Float.self)
+                        buffer.floatChannelData?[channel][frame] = floatArray[index]
+                    case .pcmFormatInt16:
+                        let int16Array = baseAddress.assumingMemoryBound(to: Int16.self)
+                        buffer.int16ChannelData?[channel][frame] = int16Array[index]
+                    case .pcmFormatInt32:
+                        let int32Array = baseAddress.assumingMemoryBound(to: Int32.self)
+                        buffer.int32ChannelData?[channel][frame] = int32Array[index]
+                    default:
+                        break
+                    }
+                }
+            }
+        }
+    }
+
+    private func compareBuffers(buffer1: AVAudioPCMBuffer, buffer2: AVAudioPCMBuffer) -> Bool {
+        guard buffer1.frameLength == buffer2.frameLength,
+              buffer1.format.commonFormat == buffer2.format.commonFormat
+        else {
+            return false
+        }
+
+        let channels = Int(buffer1.format.channelCount)
+        let frameCount = Int(buffer1.frameLength)
+        let format = buffer1.format
+
+        for channel in 0 ..< channels {
+            for frame in 0 ..< frameCount {
+                let valuesMatch: Bool
+
+                switch format.commonFormat {
+                case .pcmFormatFloat32:
+                    valuesMatch = buffer1.floatChannelData?[channel][frame] == buffer2.floatChannelData?[channel][frame]
+                case .pcmFormatInt16:
+                    valuesMatch = buffer1.int16ChannelData?[channel][frame] == buffer2.int16ChannelData?[channel][frame]
+                case .pcmFormatInt32:
+                    valuesMatch = buffer1.int32ChannelData?[channel][frame] == buffer2.int32ChannelData?[channel][frame]
+                default:
+                    return false
+                }
+
+                if !valuesMatch {
+                    return false
+                }
+            }
+        }
+
+        return true
+    }
+}

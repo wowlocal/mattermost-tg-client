@@ -1,0 +1,18 @@
+{
+  "id": "org.relaychat.calls",
+  "name": "Relay Calls",
+  "description": "Native group audio and screen sharing for Relay, powered by self-hosted LiveKit.",
+  "version": "0.1.0",
+  "min_server_version": "11.7.0",
+  "server": {"executables": {"linux-amd64": "server/dist/plugin-linux-amd64", "linux-arm64": "server/dist/plugin-linux-arm64"}},
+  "settings_schema": {
+    "settings": [
+      {"key": "LiveKitURL", "display_name": "Public LiveKit URL", "type": "text", "default": "", "help_text": "HTTPS or WSS URL reachable by Relay clients."},
+      {"key": "LiveKitInternalURL", "display_name": "Internal LiveKit URL", "type": "text", "default": "http://127.0.0.1:7880", "help_text": "Private HTTP endpoint for the LiveKit room API."},
+      {"key": "LiveKitAPIKey", "display_name": "LiveKit API key", "type": "text", "default": ""},
+      {"key": "LiveKitAPISecret", "display_name": "LiveKit API secret", "type": "text", "secret": true, "default": ""},
+      {"key": "MaxParticipants", "display_name": "Maximum participants per call", "type": "number", "default": 25},
+      {"key": "AnnounceCalls", "display_name": "Post call invitations in channels", "type": "bool", "default": true}
+    ]
+  }
+}

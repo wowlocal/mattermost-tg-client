@@ -1,0 +1,10 @@
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+
+swift_library(
+    name = "LiveKitFFI",
+    module_name = "LiveKitFFI",
+    srcs = glob(["Sources/**/*.swift"]),
+    copts = ["-swift-version", "5"],
+    deps = ["//third-party/livekit-binaries:RustLiveKitFFI"],
+    visibility = ["//visibility:public"],
+)

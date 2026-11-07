@@ -1,0 +1,283 @@
+/*
+ * Copyright 2026 LiveKit
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+@preconcurrency import AVFoundation
+@testable import LiveKit
+
+private let cachedSampleVideoURL = StateSync<URL?>(nil)
+
+// Creates a LocalVideoTrack with BufferCapturer, generates frames for approx 30 seconds.
+public func createSampleVideoTrack(targetFps: Int = 30, _ onCapture: @Sendable @escaping (CMSampleBuffer) -> Void) async throws -> Task<Void, any Error> {
+    let url = URL(string: "https://storage.unxpected.co.jp/public/sample-videos/ocean-1080p.mp4")!
+    let tempLocalUrl: URL
+
+    if let cachedURL = cachedSampleVideoURL.copy(), FileManager.default.fileExists(atPath: cachedURL.path) {
+        print("Using cached sample video at \(cachedURL)...")
+        tempLocalUrl = cachedURL
+    } else {
+        print("Downloading sample video from \(url)...")
+        let (downloadedLocalUrl, _) = try await URLSession.shared.downloadBackport(from: url)
+
+        tempLocalUrl = FileManager.default.temporaryDirectory.appendingPathComponent("sample-video-cached").appendingPathExtension("mp4")
+
+        if FileManager.default.fileExists(atPath: tempLocalUrl.path) {
+            try FileManager.default.removeItem(at: tempLocalUrl)
+        }
+
+        try FileManager.default.moveItem(at: downloadedLocalUrl, to: tempLocalUrl)
+
+        cachedSampleVideoURL.mutate { $0 = tempLocalUrl }
+        print("Cached sample video at \(tempLocalUrl)")
+    }
+
+    print("Opening \(tempLocalUrl) with asset reader...")
+    let asset = AVAsset(url: tempLocalUrl)
+    let assetReader = try AVAssetReader(asset: asset)
+
+    let tracks = try await {
+        #if os(visionOS)
+        return try await asset.loadTracks(withMediaType: .video)
+        #else
+        if #available(iOS 15.0, macOS 12.0, *) {
+            return try await asset.loadTracks(withMediaType: .video)
+        } else {
+            return asset.tracks(withMediaType: .video)
+        }
+        #endif
+    }()
+
+    guard let track = tracks.first else {
+        throw LiveKitError(.invalidState, message: "No video track found in sample video file")
+    }
+
+    let outputSettings: [String: Any] = [
+        kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
+    ]
+
+    let trackOutput = AVAssetReaderTrackOutput(track: track, outputSettings: outputSettings)
+    assetReader.add(trackOutput)
+
+    guard assetReader.startReading() else {
+        throw LiveKitError(.invalidState, message: "Could not start reading the asset.")
+    }
+
+    return Task.detached {
+        let frameDuration = UInt64(1_000_000_000 / targetFps)
+        while !Task.isCancelled, assetReader.status == .reading, let sampleBuffer = trackOutput.copyNextSampleBuffer() {
+            onCapture(sampleBuffer)
+            try await Task.sleep(nanoseconds: frameDuration)
+        }
+    }
+}
+
+public typealias OnDidRenderFirstFrame = (_ id: String) -> Void
+
+public class VideoTrackWatcher: TrackDelegate, VideoRenderer, @unchecked Sendable {
+    // MARK: - Public
+
+    public var didRenderFirstFrame: Bool { _state.didRenderFirstFrame }
+    public var detectedCodecs: Set<String> { _state.detectedCodecs }
+
+    private struct State {
+        var didRenderFirstFrame: Bool = false
+        var maxRenderedArea: Int32 = 0
+        var detectedCodecs: Set<String> = []
+    }
+
+    public let id: String
+    private let _state = StateSync(State())
+    private let onDidRenderFirstFrame: OnDidRenderFirstFrame?
+
+    public init(id: String, onDidRenderFirstFrame: OnDidRenderFirstFrame? = nil) {
+        self.id = id
+        self.onDidRenderFirstFrame = onDidRenderFirstFrame
+    }
+
+    public func reset() {
+        _state.mutate {
+            $0.didRenderFirstFrame = false
+            $0.detectedCodecs.removeAll()
+        }
+    }
+
+    public func isCodecDetected(codec: VideoCodec) -> Bool {
+        _state.read { $0.detectedCodecs.contains(codec.name) }
+    }
+
+    // MARK: - VideoRenderer
+
+    public var isAdaptiveStreamEnabled: Bool { true }
+
+    public var adaptiveStreamSize: CGSize { .init(width: 1920, height: 1080) }
+
+    public func set(size: CGSize) {
+        print("\(type(of: self)) set(size: \(size))")
+    }
+
+    public func render(frame: LiveKit.VideoFrame) {
+        _state.mutate {
+            if !$0.didRenderFirstFrame {
+                $0.didRenderFirstFrame = true
+                onDidRenderFirstFrame?(id)
+            }
+
+            $0.maxRenderedArea = max($0.maxRenderedArea, frame.dimensions.area)
+        }
+    }
+
+    /// Async polling wait for dimensions.
+    public func waitForDimensions(_ dimensions: Dimensions, timeout: TimeInterval = 30) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if _state.read({ $0.maxRenderedArea >= dimensions.area }) { return }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+        throw LiveKitError(.timedOut, message: "Timed out waiting for dimensions \(dimensions)")
+    }
+
+    /// Async polling wait for codec.
+    public func waitForCodec(_ codec: VideoCodec, timeout: TimeInterval = 60) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if _state.read({ $0.detectedCodecs.contains(codec.name.lowercased()) }) { return }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+        throw LiveKitError(.timedOut, message: "Timed out waiting for codec \(codec.name)")
+    }
+
+    // MARK: - TrackDelegate
+
+    public func track(_: Track, didUpdateStatistics statistics: TrackStatistics, simulcastStatistics _: [VideoCodec: TrackStatistics]) {
+        guard let stream = statistics.inboundRtpStream.first else { return }
+        var segments: [String] = []
+
+        let codecsString = statistics.codec.compactMap(\.mimeType).map { "'\($0)'" }.joined(separator: ", ")
+        print("statistics codecs: \(codecsString), count: \(statistics.codec.count)")
+
+        if let codec = statistics.codec.first(where: { $0.id == stream.codecId }), let mimeType = codec.mimeType {
+            segments.append("codec: \(mimeType.lowercased())")
+
+            // Extract codec id from mimeType (e.g., "video/vp8" -> "vp8")
+            if let codecName = mimeType.split(separator: "/").last?.lowercased() {
+                _state.mutate {
+                    $0.detectedCodecs.insert(codecName)
+                }
+            }
+        }
+
+        if let width = stream.frameWidth, let height = stream.frameHeight {
+            segments.append("dimensions: \(width)x\(height)")
+        }
+
+        if let fps = stream.framesPerSecond {
+            segments.append("fps: \(fps)")
+        }
+
+        print("\(type(of: self)) didUpdateStatistics (\(segments.joined(separator: ", ")))")
+    }
+}
+
+/// LocalAudioTrack subclass that bypasses AudioManager, avoiding audio engine errors in test environments.
+public class TestAudioTrack: LocalAudioTrack, @unchecked Sendable {
+    override public func startCapture() async throws {}
+    override public func stopCapture() async throws {}
+    // Bypass frame-waiting since no real audio engine is running.
+    override public func startWaitingForFrames() async throws {}
+
+    public convenience init(name: String = Track.microphoneName) {
+        let source = RTC.createAudioSource(nil)
+        let rtcTrack = RTC.createAudioTrack(source: source)
+        rtcTrack.isEnabled = true
+        self.init(name: name, source: .microphone, track: RTCMediaTrack(rtcTrack), reportStatistics: false, captureOptions: AudioCaptureOptions())
+    }
+}
+
+/// Fails where a real audio track fails when its engine never delivers a frame:
+/// after `AddTrack` and negotiation, before the publication exists.
+public final class FrameStarvedAudioTrack: TestAudioTrack, @unchecked Sendable {
+    override public func startWaitingForFrames() async throws {
+        // Give negotiation time to reach the server so it holds a live publication when
+        // the failure hits, as it does with the real 5s frame-watcher timeout.
+        try await Task.sleep(nanoseconds: 2_000_000_000)
+        throw LiveKitError(.timedOut, message: "No audio frames")
+    }
+}
+
+public class AudioTrackWatcher: AudioRenderer, @unchecked Sendable {
+    public let id: String
+    public var didRenderFirstFrame: Bool { _state.didRenderFirstFrame }
+
+    // MARK: - Private
+
+    private let onDidRenderFirstFrame: OnDidRenderFirstFrame?
+
+    private struct State {
+        var didRenderFirstFrame: Bool = false
+    }
+
+    private let _state = StateSync(State())
+
+    public init(id: String, onDidRenderFirstFrame: OnDidRenderFirstFrame? = nil) {
+        self.id = id
+        self.onDidRenderFirstFrame = onDidRenderFirstFrame
+    }
+
+    public func reset() {
+        _state.mutate {
+            $0.didRenderFirstFrame = false
+        }
+    }
+
+    public func render(pcmBuffer: AVAudioPCMBuffer) {
+        _state.mutate {
+            if !$0.didRenderFirstFrame {
+                print("did receive first audio frame: \(String(describing: pcmBuffer))")
+                $0.didRenderFirstFrame = true
+                onDidRenderFirstFrame?(id)
+            }
+        }
+    }
+}
+
+public extension BufferCapturer {
+    /// Feeds blank frames at ~30 fps until the returned task is cancelled. Publishing waits on
+    /// the capturer's dimensions, and `stopCapture()` resets them, so a track that is published
+    /// more than once needs frames to keep arriving for the whole test.
+    ///
+    /// Each tick also resolves the dimensions directly. `capture()` only *enqueues* onto the
+    /// capturer's processing queue — `set(dimensions:)` happens inside `_process`, and frames are
+    /// dropped outright while one is in flight — so on a loaded runner the publish gate can wait
+    /// out its whole `.defaultCaptureStart` budget for a value the caller already knows.
+    func startFeedingFrames(dimensions: Dimensions) -> Task<Void, Never> {
+        set(dimensions: dimensions)
+        return Task {
+            var pixelBuffer: CVPixelBuffer?
+            CVPixelBufferCreate(kCFAllocatorDefault,
+                                Int(dimensions.width),
+                                Int(dimensions.height),
+                                kCVPixelFormatType_32BGRA,
+                                nil,
+                                &pixelBuffer)
+            guard let pixelBuffer else { return }
+
+            while !Task.isCancelled {
+                capture(pixelBuffer)
+                set(dimensions: dimensions)
+                try? await Task.sleep(nanoseconds: 33_000_000)
+            }
+        }
+    }
+}

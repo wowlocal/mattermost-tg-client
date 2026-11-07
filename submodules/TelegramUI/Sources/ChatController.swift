@@ -3634,6 +3634,11 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         }, presentGlobalOverlayController: { [weak self] controller, arguments in
             self?.presentInGlobalOverlay(controller, with: arguments)
         }, callPeer: { [weak self] peerId, isVideo in
+            // MATTERMOST: voice calls use the Relay calling service.
+            if MattermostBackend.isEnabled, let self {
+                mattermostPresentCall(from: self, context: context, peerId: peerId)
+                return
+            }
             // MATTERMOST: no calls (call bubbles, phone-number menu, `beginCall`).
             if !MattermostFeatures.calls {
                 return

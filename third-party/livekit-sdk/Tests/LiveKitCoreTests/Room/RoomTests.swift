@@ -1,0 +1,229 @@
+/*
+ * Copyright 2026 LiveKit
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import Foundation
+@testable import LiveKit
+import Testing
+#if canImport(LiveKitTestSupport)
+import LiveKitTestSupport
+#endif
+
+@Suite(.serialized, .tags(.e2e), TestLimits.e2e) final class RoomTests: @unchecked Sendable {
+    @Test func roomProperties() async throws {
+        try await TestEnvironment.withRoom { room in
+            // SID
+            let sid = try await room.sid()
+            print("Room.sid(): \(String(describing: sid))")
+            #expect(sid.stringValue.starts(with: "RM_"))
+
+            // creationTime
+            #expect(room.creationTime != nil)
+            print("Room.creationTime: \(String(describing: room.creationTime))")
+        }
+    }
+
+    @Test func participantCleanUp() async throws {
+        // Create 2 Rooms
+        try await TestEnvironment.withRooms([RoomTestingOptions(delegate: self), RoomTestingOptions(delegate: self)]) { _ in
+            // Nothing to do here
+        }
+    }
+
+    #if targetEnvironment(macCatalyst)
+    @Test(.disabled("WebSocket may not deallocate on Mac Catalyst, causing CI timeout"))
+    #else
+    @Test
+    #endif
+    func resourcesCleanUp() async throws {
+        var refs = WeakRoomRefs()
+
+        try await TestEnvironment.withRoom { room in
+            await refs.capture(from: room)
+        }
+
+        // Allow time for deallocation after withRooms returns (rooms disconnected)
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+
+        refs.expectAllNil()
+    }
+
+    /// Verify that cleanUp() runs to completion even when called from a
+    /// cancelled Task — the scenario that occurs when a reconnect task is
+    /// cancelled by disconnect() or a newer reconnect.
+    @Test func cleanUpRunsWhenTaskIsCancelled() async throws {
+        try await TestEnvironment.withRoom { room in
+            #expect(room.connectionState == .connected)
+
+            // Call cleanUp from a cancelled Task context — reproduces the
+            // reconnect-cancellation scenario where Task.isCancelled is true.
+            let task = Task {
+                do { try await Task.sleep(nanoseconds: NSEC_PER_SEC * 60) } catch {}
+                #expect(Task.isCancelled)
+                await room.cleanUp()
+            }
+            task.cancel()
+            _ = await task.result
+
+            // Verify cleanup actually ran (not skipped due to cancellation)
+            #expect(room.connectionState == .disconnected)
+
+            let socketAfterCleanUp = await room.signalClient._state.socket
+            #expect(socketAfterCleanUp == nil)
+
+            let signalConnectionState = await room.signalClient.connectionState
+            #expect(signalConnectionState == .disconnected)
+        }
+
+        // Allow time for deallocation
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+    }
+
+    /// A write submitted to a drain parks until a channel attaches. Once teardown has begun none
+    /// ever will, so the send has to fail rather than hang — `.disconnecting` included, which the
+    /// reset of the drains happens under.
+    @Test(arguments: [ConnectionState.disconnected, .disconnecting])
+    func sendDataPacketFailsWhileTearingDown(state: ConnectionState) async throws {
+        let room = Room()
+        room._state.mutate { $0.connectionState = state }
+
+        await #expect(throws: LiveKitError.self) {
+            try await room.send(dataPacket: Livekit_DataPacket())
+        }
+    }
+
+    @Test func sendDataPacket() async throws {
+        try await TestEnvironment.withRoom { room in
+            try await confirmation("Should send data packet") { confirm in
+                let mockDataChannel = MockDataChannelPair { packet in
+                    #expect(packet.participantIdentity == room.localParticipant.identity?.stringValue ?? "")
+                    confirm()
+                }
+                room.publisherDataChannel = mockDataChannel
+
+                try await room.send(dataPacket: Livekit_DataPacket())
+            }
+        }
+    }
+
+    @Test func publishDtmfSendsSipDtmfPacket() async throws {
+        try await TestEnvironment.withRoom { room in
+            try await confirmation("Should send SIP DTMF packet") { confirm in
+                let mockDataChannel = MockDataChannelPair { packet in
+                    #expect(packet.kind == .reliable)
+                    #expect(packet.participantIdentity == room.localParticipant.identity?.stringValue ?? "")
+                    guard case let .sipDtmf(sipDtmf)? = packet.value else {
+                        Issue.record("Expected sipDtmf packet")
+                        return
+                    }
+                    #expect(sipDtmf.code == 10)
+                    #expect(sipDtmf.digit == "*")
+                    confirm()
+                }
+                room.publisherDataChannel = mockDataChannel
+
+                try await room.localParticipant.publishDtmf(code: 10, digit: "*")
+            }
+        }
+    }
+}
+
+private struct WeakRoomRefs: @unchecked Sendable {
+    weak var signalClient: SignalClient?
+    weak var socket: WebSocket?
+    weak var publisher: Transport?
+    weak var subscriber: Transport?
+    weak var publisherDataChannel: DataChannelPair?
+    weak var subscriberDataChannel: DataChannelPair?
+    weak var dataStreams: DataStreams?
+    weak var e2eeManager: E2EEManager?
+    weak var preConnectBuffer: PreConnectAudioBuffer?
+    weak var rpcClient: RpcClientManager?
+    weak var rpcServer: RpcServerManager?
+    weak var metricsManager: MetricsManager?
+    weak var delegates: MulticastDelegate<RoomDelegate>?
+    weak var activeParticipantCompleters: CompleterMapActor<Void>?
+    weak var primaryTransportConnectedCompleter: AsyncCompleter<Void>?
+    weak var publisherTransportConnectedCompleter: AsyncCompleter<Void>?
+    weak var localParticipant: LocalParticipant?
+    var remoteParticipantChecks: [() -> Bool] = []
+    weak var state: StateSync<Room.State>?
+    weak var room: Room?
+
+    mutating func capture(from room: Room) async {
+        signalClient = room.signalClient
+        socket = await room.signalClient._state.socket
+
+        if let transport = room._state.transport {
+            publisher = transport.publisher
+            subscriber = transport.subscriber
+        }
+
+        publisherDataChannel = room.publisherDataChannel
+        subscriberDataChannel = room.subscriberDataChannel
+        dataStreams = room.dataStreams
+        if let mgr = room.e2eeManager { e2eeManager = mgr }
+        preConnectBuffer = room.preConnectBuffer
+        rpcClient = room.rpcClient
+        rpcServer = room.rpcServer
+        metricsManager = room.metricsManager
+        delegates = room.delegates
+        activeParticipantCompleters = room.activeParticipantCompleters
+        primaryTransportConnectedCompleter = room.primaryTransportConnectedCompleter
+        publisherTransportConnectedCompleter = room.publisherTransportConnectedCompleter
+        localParticipant = room.localParticipant
+
+        for remoteParticipant in room.remoteParticipants.values {
+            remoteParticipantChecks.append { [weak remoteParticipant] in remoteParticipant == nil }
+        }
+
+        state = room._state
+        self.room = room
+    }
+
+    func expectAllNil() {
+        #expect(signalClient == nil, "Leaked object: SignalClient")
+        #expect(socket == nil, "Leaked object: WebSocket")
+        #expect(publisher == nil, "Leaked object: Publisher Transport")
+        #expect(subscriber == nil, "Leaked object: Subscriber Transport")
+        #expect(publisherDataChannel == nil, "Leaked object: Publisher DataChannel")
+        #expect(subscriberDataChannel == nil, "Leaked object: Subscriber DataChannel")
+        #expect(dataStreams == nil, "Leaked object: DataStreams")
+        #expect(e2eeManager == nil, "Leaked object: E2EEManager")
+        #expect(preConnectBuffer == nil, "Leaked object: PreConnectBuffer")
+        #expect(rpcClient == nil, "Leaked object: RpcClientManager")
+        #expect(rpcServer == nil, "Leaked object: RpcServerManager")
+        #expect(metricsManager == nil, "Leaked object: MetricsManager")
+        #expect(delegates == nil, "Leaked object: Delegates")
+        #expect(activeParticipantCompleters == nil, "Leaked object: ActiveParticipantCompleters")
+        #expect(primaryTransportConnectedCompleter == nil, "Leaked object: PrimaryTransportConnectedCompleter")
+        #expect(publisherTransportConnectedCompleter == nil, "Leaked object: PublisherTransportConnectedCompleter")
+        #expect(localParticipant == nil, "Leaked object: LocalParticipant")
+        for check in remoteParticipantChecks {
+            #expect(check(), "Leaked object: RemoteParticipant")
+        }
+        #expect(state == nil, "Leaked object: Room.State")
+        #expect(room == nil, "Leaked object: Room")
+    }
+}
+
+extension RoomTests: RoomDelegate {
+    func room(_: Room, participantDidDisconnect participant: RemoteParticipant) {
+        print("participantDidDisconnect: \(participant)")
+        // Check issue: https://github.com/livekit/client-sdk-swift/issues/300
+        // participant.identity is null in participantDidDisconnect delegate
+        #expect(participant.identity != nil, "participant.identity is nil in participantDidDisconnect delegate")
+    }
+}
