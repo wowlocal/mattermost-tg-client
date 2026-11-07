@@ -177,3 +177,27 @@ The reusable test project and fixture are in
 Tests retain screenshots in their `.xcresult` bundles on the mini. These
 checks do not establish audible quality, hardware audio routing, physical
 ReplayKit broadcasting or background microphone behavior.
+
+### Direct installations and GitHub drafts on 2026-11-07
+
+An optimized iOS Release build, **1.0.0 (31900)** from `10ba1db2e1`, passed
+the complete release audit, bundle checks and strict signature verification.
+All five embedded development profiles cover the three intended devices.
+The build was installed in place on two physical iPhones and one iPad. One
+iPhone launch was verified; the other was locked, and the iPad's launch was
+deferred during an active call. These installations do not establish physical
+ReplayKit or hardware audio quality.
+
+The macOS Release build, **1.0.3 (38)** from `8c8b689`, is Developer ID signed,
+notarized, stapled and accepted by Gatekeeper. It was installed on the MacBook
+and Mac mini, with launch verified on the mini. Relay was left closed on the
+gaming MacBook. Existing application bundles were retained as local backups.
+All client compilation ran on the mini.
+
+GitHub drafts contain the installable archives and SHA-256 checksums:
+`relay-1.0.0-31900` in
+[mattermost-tg-client releases](https://github.com/wowlocal/mattermost-tg-client/releases)
+and `relay-mac-1.0.3-38` in
+[relay-mac releases](https://github.com/wowlocal/relay-mac/releases).
+The iOS IPA uses development signing for registered devices. Both releases
+remain drafts; the macOS automatic-update feed and TestFlight were not changed.
