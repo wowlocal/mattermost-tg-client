@@ -5,7 +5,7 @@
 | Dependency | Release | Import |
 | --- | --- | --- |
 | LiveKitWebRTC | [150.7871.04](https://github.com/livekit/webrtc-xcframework/releases/tag/150.7871.04) | Dynamic XCFramework |
-| RustLiveKitFFI | [0.13.1](https://github.com/livekit/livekit-uniffi-xcframework/releases/tag/0.13.1) | Static XCFramework |
+| RustLiveKitFFI | [0.13.1](https://github.com/livekit/livekit-uniffi-xcframework/releases/tag/0.13.1) | Dynamic XCFramework |
 
 SwiftPM uses the same versions through `third-party/livekit-sdk/Package.swift`.
 LiveKit's Objective-C WebRTC symbols use the `LK` prefix and its Swift module

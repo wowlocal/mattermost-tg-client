@@ -7,11 +7,11 @@
 #
 # Needs (docs/BUILD.md "Device builds"):
 #   RELAY_TEAM_ID       your 10-character team id (or set once in build-input/relay-device-team-id)
-#   RELAY_PROFILES_DIR  the four development profiles (default ~/.relay-secrets/profiles): org.relaychat.Relay,
-#                       .NotificationService, .NotificationContent, .Share; Make.py picks each by its App ID
+#   RELAY_PROFILES_DIR  the five development profiles (default ~/.relay-secrets/profiles): org.relaychat.Relay,
+#                       .NotificationService, .NotificationContent, .Share, .BroadcastUpload; Make.py picks each by its App ID
 #   an "Apple Development" identity of that team in the login keychain
 # and for `appstore` (docs/release/RELEASE.md):
-#   RELAY_APPSTORE_PROFILES_DIR  the four App Store profiles of the same App IDs (default
+#   RELAY_APPSTORE_PROFILES_DIR  the five App Store profiles of the same App IDs (default
 #                       ~/.relay-secrets/profiles-appstore), and an "Apple Distribution" identity in the login keychain
 #
 # The team id only goes into git-ignored build-input/ (the committed configs keep a placeholder).
@@ -50,11 +50,21 @@ EOF
     cp "$profiles"/*.mobileprovision build-input/relay-codesigning/profiles/
 
     build_number="$(git rev-list --count HEAD)"
-    python3 build-system/Make/Make.py --cacheDir "${RELAY_BAZEL_CACHE:-/Volumes/X5/relay-bazel-cache}" build \
+    export RELAY_SWIFT_BUILD_JOBS=1 CARGO_BUILD_JOBS=1 CMAKE_BUILD_PARALLEL_LEVEL=1 MAKEFLAGS=-j1
+    build_runner=(nice -n 10)
+    if [ "${RELAY_BACKGROUND_BUILD:-1}" = 1 ]; then
+      build_runner=(taskpolicy -b "${build_runner[@]}")
+    fi
+    bazel_options=(--cacheDir "${RELAY_BAZEL_CACHE:-/Volumes/X5/relay-bazel-cache}")
+    if [ -n "${RELAY_BAZEL_USER_ROOT:-}" ]; then
+      bazel_options+=(--bazelUserRoot "$RELAY_BAZEL_USER_ROOT")
+    fi
+    "${build_runner[@]}" python3 build-system/Make/Make.py "${bazel_options[@]}" build \
       --configurationPath build-input/relay-device-configuration.json \
       --codesigningInformationPath build-input/relay-codesigning \
       --buildNumber="$build_number" \
       --configuration="$configuration"
+    python3 tools/relay-calls-bundle-check.py bazel-bin/Telegram/Telegram.ipa
     if [ "$cmd" = appstore ]; then
       # A copy per upload, named by version and build; tag the commit when it is uploaded (RELEASE.md §8).
       version="$(python3 -c 'import json; print(json.load(open("versions.json"))["app"])')"

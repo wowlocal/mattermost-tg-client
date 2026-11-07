@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relay Calls Screen Sharing Test</title>
+<style>
+  body { margin: 0; padding: 8vw; background: #102d49; color: white; font: 28px system-ui; }
+  h1 { font-size: 52px; margin-bottom: 20px; }
+  #clock { font: 64px ui-monospace, monospace; margin: 48px 0; }
+  #bar { height: 36px; background: #4bd6b5; transform-origin: left; }
+</style>
+<h1>Relay group call</h1>
+<p>macOS → iPhone + iPad</p>
+<div id="clock"></div>
+<div id="bar"></div>
+<script>
+  function update() {
+    const now = Date.now();
+    document.getElementById('clock').textContent = new Date(now).toISOString().slice(11, 19);
+    document.getElementById('bar').style.transform = `scaleX(${0.1 + (now % 10000) / 11111})`;
+    requestAnimationFrame(update);
+  }
+  update();
+</script>
+</html>

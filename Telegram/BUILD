@@ -1788,6 +1788,7 @@ plist_fragment(
     template = """
     <key>CFBundleDevelopmentRegion</key><string>en</string>
     <key>CFBundleName</key><string>Relay Screen Sharing</string>
+    <key>CFBundleDisplayName</key><string>Relay Screen Sharing</string>
     <key>CFBundlePackageType</key><string>XPC!</string>
     <key>NSExtension</key>
     <dict>

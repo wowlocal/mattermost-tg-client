@@ -100,6 +100,7 @@ public final class RelayCallSession: ObservableObject {
 
     public func toggleMicrophone() async {
         guard isConnected, !isChangingMedia else { return }
+        error = nil
         isChangingMedia = true
         defer { isChangingMedia = false }
         do {
@@ -110,6 +111,7 @@ public final class RelayCallSession: ObservableObject {
 
     public func toggleScreenShare() async {
         guard isConnected, !isChangingMedia else { return }
+        error = nil
         isChangingMedia = true
         defer { isChangingMedia = false }
         do {
@@ -128,6 +130,7 @@ public final class RelayCallSession: ObservableObject {
     #if os(macOS)
     public func shareScreen(source: MacOSScreenCaptureSource) async {
         guard isConnected, !isChangingMedia else { return }
+        error = nil
         isChangingMedia = true
         showingScreenSources = false
         defer { isChangingMedia = false }

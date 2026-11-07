@@ -16,7 +16,7 @@ genrule(
     cmd_bash =
 """
 set -x
-    core_count=$$(nproc 2>/dev/null || PATH="$$PATH:/usr/sbin" sysctl -n hw.logicalcpu 2>/dev/null || echo 4)
+    core_count=$${RELAY_NATIVE_BUILD_JOBS:-1}
     BUILD_DIR="$(RULEDIR)/build"
     rm -rf "$$BUILD_DIR"
     mkdir -p "$$BUILD_DIR"

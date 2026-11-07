@@ -218,7 +218,7 @@ then
 			echo "$CONFIGURE_FLAGS" > "$CONFIGURED_MARKER"
 		fi
 
-		CORE_COUNT=$(nproc 2>/dev/null || PATH="$PATH:/usr/sbin" sysctl -n hw.logicalcpu 2>/dev/null || echo 4)
+		CORE_COUNT=${RELAY_NATIVE_BUILD_JOBS:-1}
 		make -j$CORE_COUNT install $EXPORT || exit 1
 
 		popd

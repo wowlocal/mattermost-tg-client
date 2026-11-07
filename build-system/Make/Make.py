@@ -25,7 +25,7 @@ class ResolvedCodesigningData:
 
 
 class BazelCommandLine:
-    def __init__(self, bazel, override_bazel_version, override_xcode_version, bazel_user_root):
+    def __init__(self, bazel, override_bazel_version, override_xcode_version, bazel_user_root, additional_args=None):
         self.build_environment = BuildEnvironment(
             base_path=os.getcwd(),
             bazel_path=bazel,
@@ -37,7 +37,6 @@ class BazelCommandLine:
         self.lock = False
         self.remote_cache = None
         self.cache_dir = None
-        self.additional_args = None
         self.build_number = None
         self.configuration_args = None
         self.split_submodules = False
@@ -74,12 +73,17 @@ class BazelCommandLine:
 
             # Asynchronously upload cache artifacts
             '--remote_cache_async',
-        ]
+            '--jobs=4',
+            '--local_resources=cpu=4',
+            '--action_env=CARGO_BUILD_JOBS=1',
+            '--action_env=CMAKE_BUILD_PARALLEL_LEVEL=1',
+            '--action_env=MAKEFLAGS=-j1',
+        ] + shlex.split(additional_args or '')
 
         self.common_build_args = [
         ]
 
-        num_threads = max(os.cpu_count() - 2, 2)
+        num_threads = max(1, int(os.environ.get('RELAY_SWIFT_BUILD_JOBS', '1')))
         self.common_debug_args = [
             '--@build_bazel_rules_swift//swift:copt="-j"',
             f'--@build_bazel_rules_swift//swift:copt="{num_threads}"',
@@ -118,7 +122,7 @@ class BazelCommandLine:
         self.cache_dir = path
 
     def add_additional_args(self, additional_args):
-        self.additional_args = additional_args
+        self.common_args += shlex.split(additional_args or '')
 
     def set_build_number(self, build_number):
         self.build_number = build_number
@@ -436,7 +440,8 @@ def clean(bazel, arguments):
         bazel=bazel,
         override_bazel_version=arguments.overrideBazelVersion,
         override_xcode_version=arguments.overrideXcodeVersion,
-        bazel_user_root=arguments.bazelUserRoot
+        bazel_user_root=arguments.bazelUserRoot,
+        additional_args=arguments.bazelArguments
     )
 
     bazel_command_line.invoke_clean()
@@ -544,7 +549,8 @@ def generate_project(bazel, arguments):
         bazel=bazel,
         override_bazel_version=arguments.overrideBazelVersion,
         override_xcode_version=arguments.overrideXcodeVersion,
-        bazel_user_root=arguments.bazelUserRoot
+        bazel_user_root=arguments.bazelUserRoot,
+        additional_args=arguments.bazelArguments
     )
 
     if arguments.cacheDir is not None:
@@ -649,7 +655,8 @@ def build(bazel, arguments):
         bazel=bazel,
         override_bazel_version=arguments.overrideBazelVersion,
         override_xcode_version=arguments.overrideXcodeVersion,
-        bazel_user_root=arguments.bazelUserRoot
+        bazel_user_root=arguments.bazelUserRoot,
+        additional_args=arguments.bazelArguments
     )
 
     if arguments.lock:
@@ -733,7 +740,8 @@ def test(bazel, arguments):
         bazel=bazel,
         override_bazel_version=arguments.overrideBazelVersion,
         override_xcode_version=arguments.overrideXcodeVersion,
-        bazel_user_root=arguments.bazelUserRoot
+        bazel_user_root=arguments.bazelUserRoot,
+        additional_args=arguments.bazelArguments
     )
 
     if arguments.cacheDir is not None:
@@ -759,7 +767,8 @@ def query(bazel, arguments):
         bazel=bazel,
         override_bazel_version=arguments.overrideBazelVersion,
         override_xcode_version=arguments.overrideXcodeVersion,
-        bazel_user_root=arguments.bazelUserRoot
+        bazel_user_root=arguments.bazelUserRoot,
+        additional_args=arguments.bazelArguments
     )
 
     if arguments.cacheDir is not None:
@@ -789,7 +798,8 @@ def build_spm(bazel, arguments):
         bazel=bazel,
         override_bazel_version=arguments.overrideBazelVersion,
         override_xcode_version=arguments.overrideXcodeVersion,
-        bazel_user_root=arguments.bazelUserRoot
+        bazel_user_root=arguments.bazelUserRoot,
+        additional_args=arguments.bazelArguments
     )
 
     if arguments.cacheDir is not None:

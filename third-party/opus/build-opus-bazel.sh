@@ -43,7 +43,7 @@ if [ "${ARCH}" = "linux_x86_64" ] || [ "${ARCH}" = "linux_arm64" ]; then
     CFLAGS="$CFLAGS ${OPT_CFLAGS} -fPIC" \
     LDFLAGS="$LDFLAGS ${OPT_LDFLAGS}"
 
-  make -j"$(getconf _NPROCESSORS_ONLN || echo 4)"
+  make -j"${RELAY_NATIVE_BUILD_JOBS:-1}"
   make install
   exit 0
 elif [ "${ARCH}" == "x86_64" ]; then
@@ -73,5 +73,5 @@ mkdir -p "${INTERDIR}"
   LDFLAGS="$LDFLAGS ${OPT_LDFLAGS} -fPIE -miphoneos-version-min=${MINIOSVERSION} -L${OUTPUTDIR}/lib" \
   CFLAGS="$CFLAGS ${EXTRA_CFLAGS} ${OPT_CFLAGS} -fPIE -miphoneos-version-min=${MINIOSVERSION} -I${OUTPUTDIR}/include -isysroot ${SDK_PATH}" \
 
-make -j
+make -j"${RELAY_NATIVE_BUILD_JOBS:-1}"
 make install

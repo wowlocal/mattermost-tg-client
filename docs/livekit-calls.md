@@ -83,6 +83,18 @@ deployment; a multi-node Mattermost deployment requires distributed locking.
 
 ## Validation
 
+After each build, check the freshly packaged IPA before installing it:
+
+```sh
+python3 tools/relay-calls-bundle-check.py bazel-bin/Telegram/Telegram.ipa
+```
+
+Then install and launch that IPA on a dedicated simulator. Compilation alone
+does not validate extension metadata or embedded dynamic libraries. Integration
+testing found that a missing broadcast display name prevented installation,
+and importing RustLiveKitFFI as a static framework omitted its runtime binary
+and caused a dyld launch failure. Both dependencies are dynamic frameworks.
+
 `swift test` in `submodules/RelayCalls` checks account authorization, URL path
 prefixes, invalid server responses, channel traversal and stale call errors.
 The Go tests check member access, room reuse, token grants, end permissions,
@@ -97,3 +109,36 @@ For an authenticated deployment, set `RELAY_TEST_CREDENTIALS_STDIN=1` and pass
 one JSON line with `url` and three `tokens` through stdin. Tokens must never
 be put in command-line arguments, logs or committed files. Setting
 `RELAY_TEST_RELAY_ONLY=1` requires TURN rather than direct ICE transport.
+
+### Native integration run on 2026-11-07
+
+VMPal controlled a real Mac mini, with a native macOS client plus dedicated
+iPhone 17 Pro and iPad Pro 11-inch simulators running iOS 26.5. All three used
+the `relaytester` account with separate device identities in a private channel.
+The gaming Mac ran no client builds or simulators during this run.
+
+- Joined all three clients through the phone controls; the UI and server both
+  showed three participants with unmuted microphone publications.
+- Seven XCTest checks passed: mute/unmute on each simulator, three-participant
+  screen presentation on each simulator, iPhone leave, and remote end-of-call
+  on both receivers.
+- Shared a macOS browser window containing the test clock and animated bar.
+  Both receivers rendered the changing content. The server reported an
+  unmuted 1920×1148 screen-video track in addition to the three microphones.
+- Leaving the iPhone reduced the room to two participants; rejoining restored
+  three. Stopping sharing removed the video publication while audio stayed
+  connected. Ending from the creator's macOS UI disconnected both receivers
+  and cleared the room. The test channel was archived.
+
+The initial iOS runtime bundle was repaired with the missing display name and
+matching Simulator FFI framework after install/launch exposed those defects.
+A clean source rebuild and install is required to validate the final Bazel
+packaging. The UI run also found a stale permission-error message after screen
+capture recovered and an undersized initial macOS call window; their fixes
+must be checked in rebuilt clients.
+
+The reusable test project and fixture are in
+[`tools/relay-calls-ui-tests`](../tools/relay-calls-ui-tests/README.md).
+Tests retain screenshots in their `.xcresult` bundles on the mini. These
+checks do not establish audible quality, hardware audio routing, physical
+ReplayKit broadcasting or background microphone behavior.

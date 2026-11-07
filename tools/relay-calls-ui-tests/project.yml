@@ -1,0 +1,25 @@
+name: RelayCallsIntegration
+options:
+  deploymentTarget:
+    iOS: "15.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGNING_ALLOWED: NO
+    COMPILER_INDEX_STORE_ENABLE: NO
+targets:
+  RelayCallsUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [RelayCallsUITests.swift]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.relaychat.CallsIntegration.UITests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  RelayCallsIntegration:
+    build:
+      targets:
+        RelayCallsUITests: [test]
+    test:
+      targets: [RelayCallsUITests]

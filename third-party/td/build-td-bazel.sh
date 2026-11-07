@@ -23,7 +23,7 @@ cd "$BUILD_DIR"
 mkdir native-build
 cd native-build
 cmake -DTD_GENERATE_SOURCE_FILES=ON ../td
-cmake --build . -- -j$(sysctl -n hw.ncpu)
+cmake --build . -- -j"${RELAY_NATIVE_BUILD_JOBS:-1}"
 cd ..
 
 if [ "$ARCH" = "arm64" ]; then
@@ -54,4 +54,4 @@ echo "set(CMAKE_SYSTEM_PROCESSOR aarch64)" >> toolchain.cmake
 echo "set(CMAKE_C_COMPILER $(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang)" >> toolchain.cmake
 
 cmake -G"Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE=toolchain.cmake -DCMAKE_OSX_SYSROOT=${IOS_SYSROOT[0]} ../td $options
-make tde2e -j$(sysctl -n hw.ncpu)
+make tde2e -j"${RELAY_NATIVE_BUILD_JOBS:-1}"

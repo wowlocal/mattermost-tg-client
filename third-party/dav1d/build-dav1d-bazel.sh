@@ -72,7 +72,7 @@ if [ -n "$CROSSFILE" ]; then
 else
     $MESON_CMD setup .. $MESON_OPTIONS
 fi
-ninja
+ninja -j"${RELAY_NATIVE_BUILD_JOBS:-1}"
 
 popd
 popd
