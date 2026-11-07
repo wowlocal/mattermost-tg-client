@@ -24,8 +24,8 @@ Related: [privacy.md](privacy.md) (App Store privacy answers and the privacy man
 1. **Team ID**: developer.apple.com → Membership details (10 characters, e.g. `AB12CD34EF`).
 2. **App Group**: Certificates, Identifiers & Profiles → Identifiers → **+** → App Groups →
    `group.org.relaychat.Relay`.
-3. **App IDs** (Identifiers → **+** → App IDs → App, *explicit* bundle id). The app ships with three extensions
-   (`Telegram/BUILD`, `extensions` of `ios_application`; the Siri intents, widget and broadcast extensions are not
+3. **App IDs** (Identifiers → **+** → App IDs → App, *explicit* bundle id). The app ships with four extensions
+   (`Telegram/BUILD`, `extensions` of `ios_application`; the Siri intents and widget extensions are not
    built for Relay):
 
 | Bundle id | Target | Capabilities |
@@ -34,6 +34,7 @@ Related: [privacy.md](privacy.md) (App Store privacy answers and the privacy man
 | `org.relaychat.Relay.NotificationService` | notification service extension (Mattermost push → readable notification, avatars, ack) | **App Groups**, **Communication Notifications** |
 | `org.relaychat.Relay.NotificationContent` | notification content extension (Telegram's expanded notification view) | **App Groups** |
 | `org.relaychat.Relay.Share` | share extension | **App Groups** |
+| `org.relaychat.Relay.BroadcastUpload` | ReplayKit screen broadcast extension | **App Groups** |
 
    - **Keychain Sharing is not needed**: Mattermost session tokens live in the app group's Keychain access group
      (`MattermostSessionKeychain`), which every target with the app group may use.
@@ -48,7 +49,7 @@ Related: [privacy.md](privacy.md) (App Store privacy answers and the privacy man
    debugging, an **Apple Development** certificate. Create the CSR in Keychain Access; install the downloaded
    certificate so that it and its private key are in the **login keychain** (`security find-identity -v -p
    codesigning` must list it).
-6. **Provisioning profiles**: one per bundle id above (4 profiles), type **App Store Connect** for
+6. **Provisioning profiles**: one per bundle id above (5 profiles), type **App Store Connect** for
    TestFlight/App Store (or **Ad Hoc** with registered devices for direct installs). Create them *after* the
    capabilities are set; regenerate them whenever a capability changes.
 
@@ -87,7 +88,7 @@ Make.py's `--codesigningInformationPath <dir>` expects the layout of `build-syst
 
 ```
 <dir>/
-  profiles/   *.mobileprovision   # the 4 profiles; any file names (matched by application-identifier)
+  profiles/   *.mobileprovision   # the 5 profiles; any file names (matched by application-identifier)
   certs/      *.p12 / *.cer       # optional here: only copied for Xcode project generation
 ```
 
@@ -103,7 +104,7 @@ that matches the profile (bazel's `rules_apple`); the `certs/` folder is not imp
 
 **As done for the first upload:** `tools/relay-device-build.sh appstore` (in a separate worktree, from a GUI
 Terminal session, because codesign needs the login keychain: [BUILD.md](../BUILD.md) "Device builds"). It writes
-the team id into the git-ignored `build-input/` configuration, uses the four App Store profiles from
+the team id into the git-ignored `build-input/` configuration, uses the five App Store profiles from
 `RELAY_APPSTORE_PROFILES_DIR` (default `~/.relay-secrets/profiles-appstore`) and copies the result to
 `build-input/Relay-<version>-<build>-appstore.ipa`. The first time, macOS asks whether codesign may use the new
 Distribution key: **Always Allow**. The equivalent manual command:
