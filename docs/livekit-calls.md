@@ -120,15 +120,20 @@ be put in command-line arguments, logs or committed files. Setting
 ### Native integration run on 2026-11-07
 
 VMPal controlled a real Mac mini, with a native macOS client plus dedicated
-iPhone 17 Pro and iPad Pro 11-inch simulators running iOS 26.5. All three used
-the `relaytester` account with separate device identities in a private channel.
-The gaming Mac ran no client builds or simulators during this run.
+iPhone 17 Pro and iPad Pro 11-inch simulators running iOS 26.5. The first
+scenario used `relaytester` on all three clients with separate device identities.
+The final source-built IPA used three distinct members: `relaytester` on macOS,
+`alex.rivera` on iPhone and `sam.lee` on iPad, in a separate private channel.
+The gaming Mac ran no client builds or simulators during this run. Builds on
+the mini used limited concurrency and low CPU priority.
 
 - Joined all three clients through the phone controls; the UI and server both
   showed three participants with unmuted microphone publications.
-- Seven XCTest checks passed: mute/unmute on each simulator, three-participant
-  screen presentation on each simulator, iPhone leave, and remote end-of-call
-  on both receivers.
+- Thirteen XCTest checks passed: seven in the same-account scenario (mute/unmute
+  on each simulator, screen presentation on each simulator, iPhone leave, and
+  remote end-of-call on both receivers), then six against the freshly built
+  IPA (distinct member names/end permissions, mute/unmute and remote end-of-call
+  on each simulator).
 - Shared a macOS browser window containing the test clock and animated bar.
   Both receivers rendered the changing content. The server reported an
   unmuted 1920×1148 screen-video track in addition to the three microphones.
@@ -137,12 +142,34 @@ The gaming Mac ran no client builds or simulators during this run.
   connected. Ending from the creator's macOS UI disconnected both receivers
   and cleared the room. The test channel was archived.
 
-The initial iOS runtime bundle was repaired with the missing display name and
-matching Simulator FFI framework after install/launch exposed those defects.
-A clean source rebuild and install is required to validate the final Bazel
-packaging. The UI run also found a stale permission-error message after screen
-capture recovered and an undersized initial macOS call window; their fixes
-must be checked in rebuilt clients.
+The initial iOS bundle needed the missing broadcast display name and matching
+Simulator FFI framework repaired after installation and launch exposed those
+defects. Both fixes were then applied to Bazel packaging. A fresh Simulator IPA
+from `a0ea749c9b` passed the bundle checker, installed and launched on both
+simulators, and passed the four distinct-member checks without bundle repairs.
+A physical-device IPA from the same revision also built, passed the bundle
+checker and passed strict recursive signature verification. The required
+broadcast app ID, app group and development provisioning profile were created.
+Physical iPad installation and testing were deferred at the user's request.
+
+The final macOS rebuild passed Xcode compilation and strict recursive signature
+verification. Disabling automatic `NSHostingController` sizing keeps its
+720×620 call content size stable when participants and shared screens update;
+all controls remain visible. Microphone mute/unmute, source selection, sharing
+and end-for-everyone were exercised in that build. Screen capture succeeded
+without a stale error message. Both freshly built iOS receivers rendered the
+shared window, and ending from macOS passed the final two receiver checks and
+cleared the server call state.
+
+A receive-only SDK probe joined that final native call for 15 seconds and
+decoded 1,500 audio frames / 720,000 samples from each of the three clients,
+with nonzero signal levels. It also decoded 217 screen frames at 1920×1148;
+15 sampled frame checksums differed. The probe published nothing and retained
+only counts, dimensions and signal statistics, then disconnected and logged
+out. This verifies media delivery; it is not a listening-quality assessment.
+Both private test channels were archived. The test Mac app and dedicated
+simulators were stopped, the six simulator sessions paused for testing were
+booted again, and VMPal input ownership was released.
 
 The reusable test project and fixture are in
 [`tools/relay-calls-ui-tests`](../tools/relay-calls-ui-tests/README.md).

@@ -42,6 +42,18 @@ final class RelayCallsUITests: XCTestCase {
     }
 
     @MainActor
+    func testDistinctMemberCall() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication(bundleIdentifier: "org.relaychat.Relay")
+        app.activate()
+        XCTAssertTrue(app.staticTexts["Connected"].waitForExistence(timeout: 15))
+        for name in ["Relay Tester", "Alex Rivera", "Sam Lee"] {
+            XCTAssertTrue(app.staticTexts[name].exists)
+        }
+        XCTAssertFalse(app.buttons["End call for everyone"].exists)
+    }
+
+    @MainActor
     func testGroupScreenPresentation() throws {
         continueAfterFailure = false
         let app = XCUIApplication(bundleIdentifier: "org.relaychat.Relay")
