@@ -8,7 +8,7 @@ public final class RelayCallSession: ObservableObject {
     public let client: RelayCallsClient
     public let channelId: String
     public let title: String
-    public let room = Room()
+    public let room: Room
     @Published public private(set) var call: RelayCall?
     @Published public private(set) var status = "Ready to join"
     @Published public private(set) var error: String?
@@ -25,6 +25,11 @@ public final class RelayCallSession: ObservableObject {
     private var lifecycle = UUID()
 
     public init(client: RelayCallsClient, channelId: String, title: String) {
+        #if os(iOS)
+        room = Room(roomOptions: RoomOptions(defaultScreenShareCaptureOptions: ScreenShareCaptureOptions(useBroadcastExtension: true, useScreenCaptureKit: false)))
+        #else
+        room = Room()
+        #endif
         self.client = client
         self.channelId = channelId
         self.title = title

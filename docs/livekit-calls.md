@@ -49,6 +49,13 @@ ReplayKit extension and its app group. Full-device broadcast needs testing on
 a physical device; Simulator compilation does not establish screen capture
 or background microphone behavior on a phone.
 
+iOS explicitly uses ReplayKit Broadcast Capture on every supported version,
+including iOS 27. The SDK otherwise switches to in-process ScreenCaptureKit on
+iOS 27, which has different entitlement and background-mode requirements.
+This keeps Relay's capture path consistent with its embedded broadcast
+extension and app-group profiles; see the SDK's
+[capture configuration guide](../third-party/livekit-sdk/Docs/ios-screen-sharing.md#opting-out).
+
 ## Server
 
 Build and test the Mattermost plugin:
