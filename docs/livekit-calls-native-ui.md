@@ -326,9 +326,19 @@ setup, the tones and `SharedCallAudioContext` without new public API):
   when the track changes), `setRequestedVideoList` sets adaptive stream sizes and visibility; frames become
   `VideoFrameData` with NV12 pixel buffers (I420 copied into pooled NV12 with libyuv; new public
   `VideoFrameData(pixelBuffer:…)` in TelegramVoip). Camera: Telegram's `OngoingCallVideoCapturer` (the screens' preview,
-  switching, mirroring; the simulator's placeholder frames too) feeds `RelayExternalCamera`; the own camera tile shows
-  the capturer's frames. Screen sharing: Telegram's broadcast picker targets the LiveKit extension, which LiveKit
-  publishes on its own.
+  switching, mirroring) feeds `RelayExternalCamera`. A capturer has a single frame output (each `video()` subscription
+  and its preview view replace the previous one), so `RelayCameraBridge` holds the one subscription and shares the
+  frames with Telegram's own local video (`frames`); turning the camera on after the Video Preview takes the output back.
+  On the simulator Telegram's placeholder picture never reaches `video()`, so the bridge sends it itself (the PiP shows
+  it and the peer receives it). Screen sharing: Telegram's broadcast picker targets the LiveKit extension, which LiveKit
+  publishes on its own (the simulator shows no broadcast picker).
+- Volume: the participant menu's slider and "Mute for Me" set this device's playback volume of a user
+  (`RelayRoomEngine.setVolume(_:forUserId:)`); admin muting stays unavailable.
+- Simulator: LiveKit's WebRTC runs Apple's network monitor on iOS and gathers only on the current path's interfaces;
+  with a full-tunnel VPN on the Mac that path is the `utun` and the dev LiveKit on `127.0.0.1` never answers, so
+  `RelaySimulatorNetwork` disables the monitor on the simulator. Debug builds launched with
+  `RELAY_DEBUG_CALLS_NO_AUDIO_DEVICE=1` run calls without an audio device (LiveKit manual rendering, no tones), for a Mac
+  whose audio device does not start: the simulator otherwise aborts in `AURemoteIO::Initialize` when an engine starts.
 - Audio: `SharedCallAudioContext` without a tgcalls device (`createsAudioDevice: false`) keeps Telegram's session,
   routes, proximity and CallKit activation; LiveKit's engine is available only while that session is active
   (`RelayCallAudio`, `RelayCallKitAudio`). Tones play with `AVAudioPlayer` from `PresentationCallToneData`.
