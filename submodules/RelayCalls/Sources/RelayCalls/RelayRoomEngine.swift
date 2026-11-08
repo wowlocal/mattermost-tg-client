@@ -102,8 +102,29 @@ public final class RelayRoomEngine: RelayMediaEngine {
     public func disconnect() async {
         self.isDisconnecting = true
         await self.externalCamera?.stop()
+        // WebRTC's camera capturer raises an Objective-C assertion when it is deallocated while still capturing,
+        // and LiveKit stops a local track only when its unpublish succeeds, which a disconnect can skip (a closing
+        // transport). Stop every local video track here, before and after the disconnect, so the camera and screen
+        // capturers never outlive their capture when the room is released.
+        let videoTracks = self.localVideoTracks()
+        await Self.stop(videoTracks)
         await self.room.disconnect()
+        await Self.stop(videoTracks + self.localVideoTracks())
         self.publishSnapshot()
+    }
+
+    private func localVideoTracks() -> [LocalVideoTrack] {
+        return self.room.localParticipant.trackPublications.values.compactMap { $0.track as? LocalVideoTrack }
+    }
+
+    private static func stop(_ tracks: [LocalVideoTrack]) async {
+        for track in tracks {
+            do {
+                try await track.stop()
+            } catch {
+                RelayCallsLog.log("engine: stopping a local video track failed: \(error)")
+            }
+        }
     }
 
     public func setMicrophone(enabled: Bool) async throws {
