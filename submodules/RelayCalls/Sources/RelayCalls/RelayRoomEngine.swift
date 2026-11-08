@@ -116,7 +116,7 @@ public final class RelayRoomEngine: RelayMediaEngine {
             let capture = CameraCaptureOptions(position: self.cameraPosition, dimensions: Dimensions(width: self.options.cameraDimensions.width, height: self.options.cameraDimensions.height), fps: self.options.cameraFPS)
             try await self.room.localParticipant.setCamera(enabled: enabled, captureOptions: capture, publishOptions: Self.cameraPublishOptions)
             #else
-            try await self.room.localParticipant.setCamera(enabled: enabled, publishOptions: Self.cameraPublishOptions)
+            try await self.room.localParticipant.setCamera(enabled: enabled, captureOptions: self.macOSCameraCaptureOptions, publishOptions: Self.cameraPublishOptions)
             #endif
         }
         self.publishSnapshot()
@@ -164,6 +164,27 @@ public final class RelayRoomEngine: RelayMediaEngine {
     public var currentCameraPosition: AVCaptureDevice.Position {
         return self.cameraPosition
     }
+
+    #if os(macOS)
+    /// The camera LiveKit captures from on macOS (nil: the system default). The Mac app picks cameras by
+    /// `AVCaptureDevice.uniqueID`; set it before `setCamera(enabled: true)`, or call `setCameraDevice(_:)` to switch a
+    /// running camera.
+    public private(set) var cameraDevice: AVCaptureDevice?
+
+    public func setCameraDevice(_ device: AVCaptureDevice?) async throws {
+        self.cameraDevice = device
+        guard self.externalCamera == nil,
+              let track = self.room.localParticipant.relayPublication(.camera)?.track as? LocalVideoTrack,
+              let capturer = track.capturer as? CameraCapturer else {
+            return
+        }
+        _ = try await capturer.set(options: self.macOSCameraCaptureOptions)
+    }
+
+    private var macOSCameraCaptureOptions: CameraCaptureOptions {
+        return CameraCaptureOptions(device: self.cameraDevice, dimensions: Dimensions(width: self.options.cameraDimensions.width, height: self.options.cameraDimensions.height), fps: self.options.cameraFPS)
+    }
+    #endif
 
     // MARK: Screen sharing (macOS)
 

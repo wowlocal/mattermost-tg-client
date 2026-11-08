@@ -55,7 +55,7 @@ Mostly as in this repository's iOS app, at the matching places of the macOS app:
 - The connection status, the chat header and the wakeup manager read `Account.externalIsUpdating` (Telegram's state
   manager never runs). Sparkle never checks Telegram's feeds.
 - Hidden with the shared `MattermostFeatures` flags: Contacts and Calls tabs (the tab indices follow from the
-  flags), call buttons, Telegram's settings rows (premium, stars, stories, wallet, proxy, privacy, sessions,
+  flags; Relay has no call history), Telegram's settings rows (premium, stars, stories, wallet, proxy, privacy, sessions,
   language packs, stickers, Passport, support), the attach menu's polls, checklists, location, gifts and rich text.
 - A Threads tab after Chats (`RelayThreadsController` on `MattermostSync.threadList`, as the iOS tab).
 - The chat list's compose menu is New Message (people search, opens a DM), New Channel and Browse Channels
@@ -68,6 +68,21 @@ Mostly as in this repository's iOS app, at the matching places of the macOS app:
 Threads: reply counts show on posts, and opening replies builds the thread location locally (`ChatReplyThreadMessage` with `isForumPost`, as on iOS; Telegram's `fetchAndPreloadReplyThreadInfo` would wait for a discussion message forever). The Mattermost token's Keychain service is per build channel (`MattermostSessionKeychain.service`): with one service a Release launch's token cleanup removed the Debug account's token.
 
 Notifications: macOS has no push, so MattermostSync hands a new post by someone else (live, not a system post) to `AccountStateManager.mattermostNotifyMessages`, which runs Telegram's own notify decision (`messagesForNotification`: mute and chat settings) and puts the result on the notification pipe the app listens to. The app's notification manager combined that pipe with Telegram's reaction notifications, which never emit with Mattermost, so it starts them empty.
+
+Calls (`docs/livekit-calls-native-ui.md`): Telegram-Mac's own call screens run on the shared core through
+`packages/RelayTelegramCalls`. `PCallSession`'s uses go through a `PresentationPeerCall` protocol (TelegramCallsCore)
+that `RelayPeerCallSession` (over `RelayDirectCall`) also implements, so a DM call is `PeerCallScreen`, the call
+header and Telegram's tones; `RelayPresentationGroupCall` implements `PresentationGroupCall` over `RelayGroupCall`
+for `GroupCallContext`. CallsUI and GroupCallScreenUI reach the package through `RelayCallHooks` (installed in
+`main.swift`; those packages stay at macOS 10.13): `phoneCall`, `requestOrJoinGroupCall`, `createVoiceChat`,
+`selectGroupCallJoiner` and the join panel's `getGroupCallPanelData` branch on it. `SharedWakeupManager` rings from
+`relayCallEvents` (a ring while another call runs is declined as busy, Telegram's policy); a group message ring shows
+`PeerCallScreen` in its conference mode and, once answered, moves the window into the group call, as Telegram's
+incoming group calls do. Video is LiveKit's camera (picked by `AVCaptureDevice.uniqueID`) and ScreenCaptureKit
+screen share (Telegram's source picker, matched by display or window id), drawn by Telegram's Metal renderer through
+`LiveKitVideoSource`. Call entry points follow `MattermostFeatures.relayCalls` (DM call buttons, Voice Chat for
+channels and group messages a member can call in). `PrivateCallScreen` processes its asset catalog (it was copied
+uncompiled, and `NSImage(resource:)` trapped: the old crash on Call).
 
 Not done: localization of the Relay screens (Relay is English-only, as on iOS), Mattermost-specific chat and profile
 screens, notifications while Relay isn't running (no push on macOS), sharing, voice transcoding. The emoji panel shows emoji only (no sticker or GIF tabs).
