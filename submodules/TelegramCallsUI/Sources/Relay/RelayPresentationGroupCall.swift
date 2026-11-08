@@ -64,6 +64,10 @@ final class RelayPresentationGroupCall: PresentationGroupCall, PresentationGroup
     private var knownJoinedUserIds: Set<String>?
     /// Users seen in the room during this call: an invitee who joined and left is a former participant, not invited.
     private var everJoinedUserIds = Set<String>()
+    /// Telegram's participant volume slider and "Mute for Me": this device's playback only, by user (all devices).
+    /// Volumes in Telegram's units (10000 = 100%).
+    private var volumes: [String: Int32] = [:]
+    private var mutedForMe = Set<String>()
 
     private let statePromise: ValuePromise<PresentationGroupCallState>
     private let stateVersionPromise = ValuePromise<Int>(0)
@@ -215,13 +219,16 @@ final class RelayPresentationGroupCall: PresentationGroupCall, PresentationGroup
             guard let peer else {
                 continue
             }
-            if participant.isSpeaking {
+            // Someone muted for me is not heard here: no speaking indicator, as in Telegram.
+            let isHeard = !self.mutedForMe.contains(participant.userId)
+            let isSpeaking = participant.isSpeaking && isHeard
+            if isSpeaking {
                 self.lastSpoke[participant.userId] = now
                 speaking.insert(peer.id)
             }
             let ssrc = RelayCallIds.ssrc(userId: participant.userId)
             if !participant.isSelf {
-                levels.append((peer.id, ssrc, participant.audioLevel, participant.isSpeaking))
+                levels.append((peer.id, ssrc, isHeard ? participant.audioLevel : 0.0, isSpeaking))
             }
             participants.append(self.participant(peer: peer, userId: participant.userId, ssrc: ssrc, participant: participant, isSelf: participant.isSelf, isMuted: participant.isSelf ? snapshot.isMuted : !participant.isMicrophoneEnabled))
         }
@@ -297,8 +304,8 @@ final class RelayPresentationGroupCall: PresentationGroupCall, PresentationGroup
             hasRaiseHand: false,
             activityTimestamp: self.lastSpoke[userId],
             activityRank: nil,
-            muteState: isMuted ? GroupCallParticipantsContext.Participant.MuteState(canUnmute: true, mutedByYou: false) : nil,
-            volume: nil,
+            muteState: self.mutedForMe.contains(userId) ? GroupCallParticipantsContext.Participant.MuteState(canUnmute: true, mutedByYou: true) : (isMuted ? GroupCallParticipantsContext.Participant.MuteState(canUnmute: true, mutedByYou: false) : nil),
+            volume: self.volumes[userId],
             about: nil,
             joinedVideo: true,
             paidStarsTotal: nil
@@ -610,6 +617,32 @@ final class RelayPresentationGroupCall: PresentationGroupCall, PresentationGroup
     }
 
     func setVolume(peerId: EnginePeer.Id, volume: Int32, sync: Bool) {
+        relayOnMain { [weak self] in
+            guard let self, peerId != self.account.peerId, let userId = self.userId(peerId: peerId) else {
+                return
+            }
+            if volume == 10000 {
+                self.volumes[userId] = nil
+            } else {
+                self.volumes[userId] = volume
+            }
+            if volume > 0 {
+                self.mutedForMe.remove(userId)
+            }
+            self.applyVolume(userId: userId)
+            self.updated(self.controller.snapshot)
+        }
+    }
+
+    private func userId(peerId: EnginePeer.Id) -> String? {
+        return self.peers.first(where: { $0.value.id == peerId })?.key
+    }
+
+    private func applyVolume(userId: String) {
+        let volume = self.mutedForMe.contains(userId) ? 0.0 : Double(self.volumes[userId] ?? 10000) / 10000.0
+        MainActor.assumeIsolated {
+            self.engine.setVolume(volume, forUserId: userId)
+        }
     }
 
     func setRequestedVideoList(items: [PresentationGroupCallRequestedVideo]) {
@@ -653,8 +686,25 @@ final class RelayPresentationGroupCall: PresentationGroupCall, PresentationGroup
         }
     }
 
+    /// "Mute for Me" / "Unmute for Me" (no admin muting: `canManageCall` is false). Called by Telegram's menu on the
+    /// main thread.
     func updateMuteState(peerId: EnginePeer.Id, isMuted: Bool) -> GroupCallParticipantsContext.Participant.MuteState? {
-        return nil
+        guard Thread.isMainThread, peerId != self.account.peerId, let userId = self.userId(peerId: peerId) else {
+            return nil
+        }
+        if isMuted {
+            self.mutedForMe.insert(userId)
+        } else {
+            self.mutedForMe.remove(userId)
+            if self.volumes[userId] == 0 {
+                self.volumes[userId] = nil
+            }
+        }
+        self.applyVolume(userId: userId)
+        MainActor.assumeIsolated {
+            self.updated(self.controller.snapshot)
+        }
+        return isMuted ? GroupCallParticipantsContext.Participant.MuteState(canUnmute: true, mutedByYou: true) : nil
     }
 
     func setShouldBeRecording(_ shouldBeRecording: Bool, title: String?, videoOrientation: Bool?) {

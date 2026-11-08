@@ -39,6 +39,10 @@ public final class RelayRoomEngine: RelayMediaEngine {
 
     private let observer: RoomObserver
     private var isDisconnecting = false
+    /// Playback volumes set on this device, by user id (`setVolume(_:forUserId:)`), and the volume applied to each
+    /// remote audio track (by track sid).
+    private var userVolumes: [String: Double] = [:]
+    private var appliedVolumes: [String: Double] = [:]
     private var updateScheduled = false
     private var cameraPosition: AVCaptureDevice.Position = .front
 
@@ -246,6 +250,45 @@ public final class RelayRoomEngine: RelayMediaEngine {
         self.videoTrack(sid: sid)?.remove(videoRenderer: sink)
     }
 
+    // MARK: Audio
+
+    /// The playback volume of a user's audio on this device, over all of its devices and tracks: `0` silences it
+    /// ("Mute for Me"), `1` plays it unchanged, up to `10`. Kept for tracks published later.
+    public func setVolume(_ volume: Double, forUserId userId: String) {
+        if volume == 1.0 {
+            self.userVolumes[userId] = nil
+        } else {
+            self.userVolumes[userId] = volume
+        }
+        self.applyVolumes()
+    }
+
+    private func applyVolumes() {
+        if self.userVolumes.isEmpty && self.appliedVolumes.isEmpty {
+            return
+        }
+        var applied: [String: Double] = [:]
+        for participant in self.room.remoteParticipants.values {
+            guard let identity = participant.identity?.stringValue, let userId = RelayParticipantIdentity(identity)?.userId else {
+                continue
+            }
+            let volume = self.userVolumes[userId] ?? 1.0
+            for publication in participant.audioTracks {
+                guard let track = publication.track as? RemoteAudioTrack else {
+                    continue
+                }
+                let sid = publication.sid.stringValue
+                if (self.appliedVolumes[sid] ?? 1.0) != volume {
+                    track.volume = volume
+                }
+                if volume != 1.0 {
+                    applied[sid] = volume
+                }
+            }
+        }
+        self.appliedVolumes = applied
+    }
+
     // MARK: Snapshot
 
     private func scheduleUpdate() {
@@ -260,6 +303,7 @@ public final class RelayRoomEngine: RelayMediaEngine {
     }
 
     private func publishSnapshot(connectionState: RelayMediaConnectionState? = nil) {
+        self.applyVolumes()
         let snapshot = RelayMediaSnapshot(connectionState: connectionState ?? Self.map(self.room.connectionState), participants: self.currentParticipants())
         guard snapshot != self.snapshot else {
             return
