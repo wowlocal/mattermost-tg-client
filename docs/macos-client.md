@@ -89,7 +89,18 @@ compiled against) and LiveKit's `LiveKitWebRTC.framework`. The app target names 
 so that it comes before the package frameworks on the link line; otherwise the linker binds tgcalls' references to
 LiveKit's copy (other sources, other layouts) and Telegram's screen source picker crashed on open. Check a build with
 `nm -m Relay.debug.dylib | grep '(from LiveKitWebRTC)' | grep 6webrtc` (no output). Tones and LiveKit device selection
-run off the main thread: a slow audio server froze the call screen otherwise. Scripted peers for the dev server:
+run off the main thread: a slow audio server froze the call screen otherwise. Calls use WebRTC's
+platform audio device module (`AudioManager.set(audioDeviceModuleType: .platformDefault)` at launch: Core Audio HAL
+units, WebRTC's echo cancellation), as Telegram's own calls do, not LiveKit's AVAudioEngine module with Apple voice
+processing: that module built and tore down a voice-processing aggregate device three or four times per call setup,
+ducked every other app to −15/−4 dB while the caller still rang, and on this Mac mini (SoundSource's ARK capture driver)
+left new audio clients waiting a minute each. Debug builds take the AVAudioEngine module back with
+`RELAY_DEBUG_AUDIO_ENGINE_ADM=1`. The caller's microphone publishes only after the answer (core). LiveKit stays on the
+system default devices unless Telegram's call settings pick another device, applied only when that choice changes
+(`RelayAudioDevices`); Telegram's launch warm-up of the call tones runs off the main thread. The call core's
+diagnostics and the adapter's (`RelayCallsLog`, engine starts and stops with devices and voice processing when the
+AVAudioEngine module runs, tones, device choices, call states) go to the unified log as `RelayCalls:` lines
+(`log show --predicate 'subsystem == "org.relaychat.RelayMac" AND category == "calls"'`). Scripted peers for the dev server:
 `tools/relay-calls-peer.py` (ring, answer, decline, channel calls, tone and test-pattern media, received frame stats).
 
 Not done: localization of the Relay screens (Relay is English-only, as on iOS), Mattermost-specific chat and profile
@@ -133,7 +144,10 @@ screens, notifications while Relay isn't running (no push on macOS), sharing, vo
   permissions), `call-accept`, `call-decline`, `call-hangup [end=1]`, `call-mute on|off`, `call-video on|off`,
   `call-screen on|off` (Telegram's source picker), `join-call channel=` (the join panel), `messages`, `windows`,
   `click text= [window= event= row=1]`, `screen-list`, `screen-picker`, `accounts`, `add-account`, `switch-account id=`
-  (a bare first word is the action, a second one its value). `RELAY_DEBUG_NO_PERMISSION_PROMPTS=1` lets calls start
+  (a bare first word is the action, a second one its value). `call-audio` (LiveKit's audio state, devices and, in debug builds, the levels of the microphone as sent and of the
+remote audio as mixed for playout: frames, RMS/peak dBFS, frequency), `call-mic-processing on|off` (WebRTC's audio
+processing of the microphone, to see the raw level), `logout id=` (an account), `RELAY_DEBUG_RTC_LOG=1` (WebRTC's own
+log in the unified log under `io.livekit.sdk`). `RELAY_DEBUG_NO_PERMISSION_PROMPTS=1` lets calls start
   while a microphone or camera prompt is unanswered; `RELAY_DEBUG_NO_AUDIO_ENGINE=1` keeps LiveKit's audio engine off
   (a Mac whose audio server stalls); a crash's stack is scanned into `relay-debug/crash-scan.txt`. Screen captures need a permission the agent's
   terminal lacks, and neither `layer.render` nor `cacheDisplay` draws TGUIKit's content, so `snapshot` writes each
