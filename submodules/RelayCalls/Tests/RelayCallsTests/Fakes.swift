@@ -88,6 +88,9 @@ final class FakeEngine: RelayMediaEngine {
     var cameraError: Error?
     private(set) var microphoneRequests: [Bool] = []
     private(set) var cameraRequests: [Bool] = []
+    /// `setMicrophone` waits until `releaseMicrophone()` while set (a publish that never answers).
+    var microphoneHangs = false
+    private var hangingMicrophone: [CheckedContinuation<Void, Never>] = []
     let localIdentity: String
 
     init(localIdentity: String) {
@@ -112,6 +115,11 @@ final class FakeEngine: RelayMediaEngine {
 
     func setMicrophone(enabled: Bool) async throws {
         self.microphoneRequests.append(enabled)
+        if self.microphoneHangs {
+            await withCheckedContinuation { continuation in
+                self.hangingMicrophone.append(continuation)
+            }
+        }
         if let microphoneError {
             throw microphoneError
         }
@@ -134,6 +142,14 @@ final class FakeEngine: RelayMediaEngine {
     }
 
     // Test controls.
+
+    func releaseMicrophone() {
+        let waiting = self.hangingMicrophone
+        self.hangingMicrophone = []
+        for continuation in waiting {
+            continuation.resume()
+        }
+    }
 
     func addRemote(_ participant: RelayMediaParticipant) {
         self.snapshot.participants.append(participant)

@@ -65,7 +65,9 @@ public enum RelayCallKitAudio {
         }
         let inputs = session.currentRoute.inputs.map { $0.portType.rawValue }.joined(separator: ",")
         let outputs = session.currentRoute.outputs.map { $0.portType.rawValue }.joined(separator: ",")
-        return "category=\(session.category.rawValue) mode=\(session.mode.rawValue) options=\(session.categoryOptions.rawValue) engineInput=\(availability.isInputAvailable) engineOutput=\(availability.isOutputAvailable) engineRunning=\(AudioManager.shared.isEngineRunning) microphonePermission=\(permission) inputs=[\(inputs)] outputs=[\(outputs)]"
+        // `sessionInput=false` (a category that does not record): LiveKit builds its engine output-only ("inputFormat -"
+        // in the AURemoteIO log) and the microphone fails.
+        return "category=\(session.category.rawValue) mode=\(session.mode.rawValue) options=\(session.categoryOptions.rawValue) sessionInput=\(session.isInputAvailable) engineInput=\(availability.isInputAvailable) engineOutput=\(availability.isOutputAvailable) engineRunning=\(AudioManager.shared.isEngineRunning) engineMicMuted=\(AudioManager.shared.isMicrophoneMuted) manualRendering=\(AudioManager.shared.isManualRenderingMode) microphonePermission=\(permission) inputs=[\(inputs)] outputs=[\(outputs)]"
     }
 
     /// `CXProviderDelegate.provider(_:didDeactivate:)`.

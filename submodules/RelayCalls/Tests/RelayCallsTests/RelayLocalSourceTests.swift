@@ -188,6 +188,31 @@ final class RelayLocalSourceTests: XCTestCase {
         XCTAssertEqual(self.engine.microphoneRequests, [true])
     }
 
+    func testAMicrophoneRequestThatNeverAnswersTimesOutAndRetries() async {
+        self.engine.microphoneHangs = true
+        let call = await self.answeredOutgoing()
+        self.scheduler.advance(by: 14)
+        await settle()
+        XCTAssertFalse(self.logged("no answer after"))
+        self.scheduler.advance(by: 1)
+        await waitUntil("timeout logged") { self.logged("microphone on failed (attempt 1): no answer after 15.0 s; retrying in 0.5 s") }
+        XCTAssertFalse(call.snapshot.isMuted)
+
+        // The engine answers again: the retry publishes.
+        self.engine.microphoneHangs = false
+        self.scheduler.advance(by: 0.5)
+        await waitUntil("published") { self.engine.microphone == true }
+        XCTAssertFalse(call.snapshot.isMuted)
+
+        // The first request answering late changes nothing.
+        self.engine.releaseMicrophone()
+        await waitUntil("late answer logged") { self.logged("microphone on answered after its timeout: succeeded") }
+        XCTAssertEqual(self.engine.microphoneRequests, [true, true])
+        self.scheduler.advance(by: 30)
+        await settle()
+        XCTAssertEqual(self.engine.microphoneRequests, [true, true])
+    }
+
     func testCameraRetriesThenTurnsOff() async {
         self.engine.cameraError = FakeMediaError("No first camera frame")
         let call = await self.answeredOutgoing(video: true)

@@ -134,11 +134,11 @@ public final class RelayGroupCall {
         self.mode = mode
         self.call = call
         self.callId = call?.id
-        self.microphone = RelayLocalSource(name: "microphone", wanted: true, scheduler: scheduler, retryDelays: RelayLocalSource.microphoneRetryDelays, apply: { [engine] enabled in
+        self.microphone = RelayLocalSource(name: "microphone", wanted: true, scheduler: scheduler, retryDelays: RelayLocalSource.microphoneRetryDelays, requestTimeout: RelayLocalSource.microphoneRequestTimeout, apply: { [engine] enabled in
             try await engine.setMicrophone(enabled: enabled)
         })
         // Nothing to turn off before the camera was ever published.
-        self.camera = RelayLocalSource(name: "camera", wanted: video, applied: false, scheduler: scheduler, retryDelays: RelayLocalSource.cameraRetryDelays, apply: { [engine] enabled in
+        self.camera = RelayLocalSource(name: "camera", wanted: video, applied: false, scheduler: scheduler, retryDelays: RelayLocalSource.cameraRetryDelays, requestTimeout: RelayLocalSource.cameraRequestTimeout, apply: { [engine] enabled in
             try await engine.setCamera(enabled: enabled)
         })
         if case .incoming = mode {

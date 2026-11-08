@@ -107,13 +107,24 @@ public final class RelayRoomEngine: RelayMediaEngine {
     }
 
     public func setMicrophone(enabled: Bool) async throws {
+        #if os(iOS)
+        if enabled {
+            // What LiveKit's engine and the session look like as the microphone publishes (read off the main thread: it
+            // waits on WebRTC's worker thread).
+            let audio = await Task.detached {
+                return RelayCallKitAudio.diagnostics
+            }.value
+            RelayCallsLog.log("engine: microphone on requested with audio \(audio)")
+        }
+        #endif
         do {
             try await self.room.localParticipant.setMicrophone(enabled: enabled)
         } catch {
             #if os(iOS)
-            // The core logs the failure; this adds what LiveKit's engine and the session looked like.
+            // The core logs the failure; this adds the audio state after it.
+            let failure = String(describing: error)
             Task.detached {
-                RelayCallsLog.log("engine: microphone \(enabled ? "on" : "off") failed with audio \(RelayCallKitAudio.diagnostics)")
+                RelayCallsLog.log("engine: microphone \(enabled ? "on" : "off") failed (\(failure)) with audio \(RelayCallKitAudio.diagnostics)")
             }
             #endif
             self.publishSnapshot()

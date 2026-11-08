@@ -130,11 +130,11 @@ public final class RelayDirectCall {
         self.peerUserId = peerUserId
         self.isOutgoing = isOutgoing
         self.isVideo = isVideo
-        self.microphone = RelayLocalSource(name: "microphone", wanted: true, scheduler: scheduler, retryDelays: RelayLocalSource.microphoneRetryDelays, apply: { [engine] enabled in
+        self.microphone = RelayLocalSource(name: "microphone", wanted: true, scheduler: scheduler, retryDelays: RelayLocalSource.microphoneRetryDelays, requestTimeout: RelayLocalSource.microphoneRequestTimeout, apply: { [engine] enabled in
             try await engine.setMicrophone(enabled: enabled)
         })
         // Nothing to turn off before the camera was ever published.
-        self.camera = RelayLocalSource(name: "camera", wanted: isVideo && isOutgoing, applied: false, scheduler: scheduler, retryDelays: RelayLocalSource.cameraRetryDelays, apply: { [engine] enabled in
+        self.camera = RelayLocalSource(name: "camera", wanted: isVideo && isOutgoing, applied: false, scheduler: scheduler, retryDelays: RelayLocalSource.cameraRetryDelays, requestTimeout: RelayLocalSource.cameraRequestTimeout, apply: { [engine] enabled in
             try await engine.setCamera(enabled: enabled)
         })
         self.call = call

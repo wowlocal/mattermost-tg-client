@@ -1,13 +1,23 @@
 import Foundation
 
+/// A request to the engine that did not answer in time.
+struct RelayLocalSourceTimeout: Error, CustomStringConvertible {
+    var seconds: TimeInterval
+
+    var description: String {
+        return "no answer after \(self.seconds) s"
+    }
+}
+
 /// Keeps a local source of a call (the microphone, the camera) in the state the user asked for.
 ///
 /// `wanted` is the user's choice and is what the controllers' snapshots show: a failed publish never turns it off by
 /// itself. While the media is up (`setReady(true)`) the source applies `wanted` through the engine, one request at a
-/// time; a failure is logged and retried after a short, growing delay (`retryDelays`), and again whenever the
-/// adapter reports that the reason may be gone (`retry(reason:)`: the audio engine became available, the room
-/// reconnected). On a device the microphone can fail while CallKit has not activated the audio session yet, or while
-/// the session's category does not record; the next attempt then succeeds.
+/// time; a failure (or a request that does not answer within `requestTimeout`) is logged and retried after a short,
+/// growing delay (`retryDelays`), and again whenever the adapter reports that the reason may be gone
+/// (`retry(reason:)`: the audio engine became available, the room reconnected). On a device the microphone fails while
+/// the audio session's category does not record (LiveKit then builds its engine output-only), or before CallKit
+/// activated the session; the next attempt then succeeds.
 @MainActor
 final class RelayLocalSource {
     /// The microphone retries for about 40 s, then waits for `retry(reason:)` or a new `wanted`.
@@ -15,10 +25,15 @@ final class RelayLocalSource {
     /// The camera retries three times (each attempt may wait 5 s for the first frame), then calls
     /// `onRetriesExhausted`.
     static let cameraRetryDelays: [TimeInterval] = [1, 2, 4]
+    /// LiveKit answers a microphone publish within a second or two (its engine start, the server's track answer).
+    static let microphoneRequestTimeout: TimeInterval = 15
+    /// The external camera waits up to 5 s for its first frame before publishing.
+    static let cameraRequestTimeout: TimeInterval = 20
 
     let name: String
     private let scheduler: RelayCallScheduler
     private let retryDelays: [TimeInterval]
+    private let requestTimeout: TimeInterval
     private let apply: @MainActor (Bool) async throws -> Void
     /// Names the call in log lines.
     var describe: @MainActor () -> String = { "call" }
@@ -35,16 +50,20 @@ final class RelayLocalSource {
     /// Failed attempts since the last success (the log).
     private var failedAttempts = 0
     private var retryTimer: RelayCancellable?
+    private var timeoutTimer: RelayCancellable?
+    /// The request in flight; an older one finishing late (after its timeout) only logs.
+    private var requestId = 0
     /// Invalidates requests still running when the media went away.
     private var generation = 0
 
     /// `applied`: what the room has before anything is applied (`false` skips turning off what was never published).
-    init(name: String, wanted: Bool, applied: Bool? = nil, scheduler: RelayCallScheduler, retryDelays: [TimeInterval], apply: @escaping @MainActor (Bool) async throws -> Void) {
+    init(name: String, wanted: Bool, applied: Bool? = nil, scheduler: RelayCallScheduler, retryDelays: [TimeInterval], requestTimeout: TimeInterval, apply: @escaping @MainActor (Bool) async throws -> Void) {
         self.name = name
         self.wanted = wanted
         self.applied = applied
         self.scheduler = scheduler
         self.retryDelays = retryDelays
+        self.requestTimeout = requestTimeout
         self.apply = apply
     }
 
@@ -84,6 +103,8 @@ final class RelayLocalSource {
     func stop() {
         self.isReady = false
         self.cancelRetry()
+        self.timeoutTimer?.cancel()
+        self.timeoutTimer = nil
         self.generation += 1
         self.isApplying = false
         self.applied = nil
@@ -94,37 +115,77 @@ final class RelayLocalSource {
             return
         }
         self.isApplying = true
+        self.requestId += 1
+        let request = self.requestId
         let target = self.wanted
         let generation = self.generation
+        self.timeoutTimer?.cancel()
+        self.timeoutTimer = self.scheduler.schedule(at: self.scheduler.now().addingTimeInterval(self.requestTimeout)) { [weak self] in
+            self?.timedOut(request: request, target: target)
+        }
         Task { @MainActor in
             do {
                 try await self.apply(target)
-                guard generation == self.generation else {
-                    return
-                }
-                self.isApplying = false
-                self.applied = target
-                if self.failedAttempts > 0 {
-                    RelayCallsLog.log("\(self.describe()): \(self.name) \(Self.word(target)) succeeded after \(self.failedAttempts) failed attempt(s)")
-                } else {
-                    RelayCallsLog.log("\(self.describe()): \(self.name) \(Self.word(target))")
-                }
-                self.failures = 0
-                self.failedAttempts = 0
-                self.cancelRetry()
-                // The user may have changed it meanwhile.
-                self.sync()
+                self.finished(request: request, generation: generation, target: target, error: nil)
             } catch {
-                guard generation == self.generation else {
-                    return
-                }
-                self.isApplying = false
-                self.applied = nil
-                self.failures += 1
-                self.failedAttempts += 1
-                self.failed(target: target, error: error)
+                self.finished(request: request, generation: generation, target: target, error: error)
             }
         }
+    }
+
+    private func finished(request: Int, generation: Int, target: Bool, error: Error?) {
+        guard generation == self.generation else {
+            return
+        }
+        guard request == self.requestId, self.isApplying else {
+            // It timed out before: a newer request (or a retry) took over.
+            if let error {
+                RelayCallsLog.log("\(self.describe()): \(self.name) \(Self.word(target)) answered after its timeout: failed: \(error)")
+            } else {
+                RelayCallsLog.log("\(self.describe()): \(self.name) \(Self.word(target)) answered after its timeout: succeeded")
+                if !self.isApplying && target == self.wanted {
+                    self.applied = target
+                    self.failures = 0
+                    self.failedAttempts = 0
+                    self.cancelRetry()
+                }
+            }
+            return
+        }
+        self.timeoutTimer?.cancel()
+        self.timeoutTimer = nil
+        self.isApplying = false
+        if let error {
+            self.applied = nil
+            self.failures += 1
+            self.failedAttempts += 1
+            self.failed(target: target, error: error)
+            return
+        }
+        self.applied = target
+        if self.failedAttempts > 0 {
+            RelayCallsLog.log("\(self.describe()): \(self.name) \(Self.word(target)) succeeded after \(self.failedAttempts) failed attempt(s)")
+        } else {
+            RelayCallsLog.log("\(self.describe()): \(self.name) \(Self.word(target))")
+        }
+        self.failures = 0
+        self.failedAttempts = 0
+        self.cancelRetry()
+        // The user may have changed it meanwhile.
+        self.sync()
+    }
+
+    /// The request in flight did not answer: counted as failed (it may still answer later; that only logs).
+    private func timedOut(request: Int, target: Bool) {
+        guard request == self.requestId, self.isApplying else {
+            return
+        }
+        self.timeoutTimer = nil
+        self.isApplying = false
+        self.applied = nil
+        self.failures += 1
+        self.failedAttempts += 1
+        self.failed(target: target, error: RelayLocalSourceTimeout(seconds: self.requestTimeout))
     }
 
     private func failed(target: Bool, error: Error) {

@@ -146,7 +146,7 @@ push instead (not when the server sends id-only push contents). Relay maps it to
 
 ## Shared client core (`submodules/RelayCalls`)
 
-Implemented (phase 1). `swift test` in `submodules/RelayCalls` runs the core suite (101 tests: client, events,
+Implemented (phase 1). `swift test` in `submodules/RelayCalls` runs the core suite (102 tests: client, events,
 every direct-call transition, group merging and flows, microphone and camera publishing failures, over fakes); use
 Xcode's toolchain (`xcrun swift test`) when another `swift` comes first in `PATH`. Bazel has the same suite as the host
 test `//submodules/RelayCalls:RelayCallsCoreTests`. Everything below is `public`.
@@ -245,7 +245,8 @@ Threading: controllers and the engine are main-actor objects; feed events from `
 observed on the main queue.
 
 Microphone and camera (both controllers): `isMuted` and `isCameraEnabled` are the user's choice, never the result of a
-publish. While the room is up the controller applies them through the engine, one request at a time; a failure is
+publish. While the room is up the controller applies them through the engine, one request at a time; a failure (or a
+request that does not answer within 15 s, camera 20 s: logged `no answer after 15.0 s`, a late answer only logs) is
 logged and retried after 0.5, 1, 2, 4, 8, 8, 8, 8 s (microphone; then it waits) or 1, 2, 4 s (camera; then the camera
 turns off, as before), and again right away on `setMuted`/`setCameraEnabled`, after a reconnect, and on
 `audioBecameAvailable()` (microphone): the adapter calls it when the platform's audio engine may record (iOS: after
@@ -283,8 +284,8 @@ decline, received). Nothing is logged until an adapter installs it.
   `CXProviderDelegate`, `activateWithoutCallKit()`, `isEngineAvailable`, `setSpeakerOutputPreferred(_:)`,
   `ensureCallCategory(_:)` (`.playAndRecord`/`.voiceChat` with Telegram's call options unless the session already
   plays and records; returns whether it changed it), `diagnostics` (category, mode, engine availability, engine
-  running, microphone permission, route; not on the main thread). `RelayRoomEngine` logs `diagnostics` when
-  `setMicrophone` fails.
+  running, microphone permission, route; not on the main thread). `RelayRoomEngine` logs `diagnostics` before every
+  microphone publish (`engine: microphone on requested with audio category=… sessionInput=…`) and when it fails.
 
 The first pass's `RelayCallSession`/`RelayCallView` are removed (Telegram's own screens show the calls).
 
@@ -366,7 +367,9 @@ setup, the tones and `SharedCallAudioContext` without new public API):
   `OngoingCallContext.setupAudioSession()`), and LiveKit's automatic configuration is off. CallKit then activated the
   session in the app's old category (`.soloAmbient`, `.playback` after media) and LiveKit refused the microphone
   ("Audio session category does not support recording"): the microphone never published on a device (the simulator
-  sets the category through `ManagedAudioSession`, and its e2e runs had no audio device). So
+  sets the category through `ManagedAudioSession`, and its e2e runs had no audio device). In a device's syslog that
+  is LiveKit's `_publish … LocalAudioTrack microphone` followed by an `AURemoteIO` with `inputFormat -` (no input in
+  the session's category) and its engine stopped within milliseconds; LiveKit itself logs no error. So
   `RelayCallAudio.prepareSessionForCallKit()` sets `.playAndRecord` before CallKit activates the session (outgoing:
   inside the start action; incoming: inside the answer action), and `setEngineAvailable(true)` checks it again before
   the engine may run (re-applying the output route when it had to change it), retries a failed availability twice,
