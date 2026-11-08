@@ -440,7 +440,7 @@ extension ChatControllerImpl {
             presentationInterfaceState = presentationInterfaceState.updatedPinnedMessageId(contentData.state.pinnedMessageId)
             presentationInterfaceState = presentationInterfaceState.updatedPinnedMessage(contentData.state.pinnedMessage)
             presentationInterfaceState = presentationInterfaceState.updatedPeerIsBlocked(contentData.state.peerIsBlocked)
-            presentationInterfaceState = presentationInterfaceState.updatedCallsAvailable(MattermostFeatures.calls && contentData.state.callsAvailable)
+            presentationInterfaceState = presentationInterfaceState.updatedCallsAvailable((MattermostFeatures.calls || MattermostFeatures.relayCalls) && contentData.state.callsAvailable)
             presentationInterfaceState = presentationInterfaceState.updatedCallsPrivate(contentData.state.callsPrivate)
             presentationInterfaceState = presentationInterfaceState.updatedActiveGroupCallInfo(contentData.state.activeGroupCallInfo)
             presentationInterfaceState = presentationInterfaceState.updatedSlowmodeState(contentData.state.slowmodeState)
@@ -5544,7 +5544,7 @@ extension ChatControllerImpl {
         
         self.hasActiveGroupCallDisposable?.dispose()
         let hasActiveCalls: Signal<Bool, NoError>
-        if let callManager = self.context.sharedContext.callManager as? PresentationCallManagerImpl {
+        if let callManager = self.context.sharedContext.callManager {
             hasActiveCalls = callManager.hasActiveCalls
             
             self.hasActiveGroupCallDisposable = ((callManager.currentGroupCallSignal

@@ -633,7 +633,8 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
             self.areControlsHidden = false
         }
         
-        if let previousParams = self.params, case .active = params.state.lifecycleState {
+        // MATTERMOST: a call without an end-to-end key (Relay) has no emoji to explain.
+        if let previousParams = self.params, case let .active(activeState) = params.state.lifecycleState, !activeState.emojiKey.isEmpty {
             switch previousParams.state.lifecycleState {
             case .requesting, .ringing, .connecting, .reconnecting:
                 if self.hideEmojiTooltipTimer == nil && !self.areControlsHidden && self.activeRemoteVideoSource == nil && self.activeLocalVideoSource == nil {
@@ -1362,7 +1363,8 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
         var emojiTransition = transition
         var emojiAlphaTransition = genericAlphaTransition
         let emojiViewWasExpanded = self.emojiView?.isExpanded ?? false
-        if case let .active(activeState) = params.state.lifecycleState {
+        // MATTERMOST: no key, no emoji (Relay calls have no end-to-end key).
+        if case let .active(activeState) = params.state.lifecycleState, !activeState.emojiKey.isEmpty {
             let emojiView: KeyEmojiView
             if let current = self.emojiView {
                 emojiView = current

@@ -1972,7 +1972,7 @@ extension ChatControllerImpl {
             var enablePhoto = true
             var enableVideo = true
 
-            if let callManager = strongSelf.context.sharedContext.callManager as? PresentationCallManagerImpl, callManager.hasActiveCall {
+            if let callManager = strongSelf.context.sharedContext.callManager, callManager.hasActiveCall {
                 enableVideo = false
             }
 

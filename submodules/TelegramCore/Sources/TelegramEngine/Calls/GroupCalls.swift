@@ -308,6 +308,15 @@ public enum CreateGroupCallError {
 }
 
 func _internal_createGroupCall(account: Account, peerId: PeerId, title: String?, scheduleDate: Int32?, isExternalStream: Bool) -> Signal<GroupCallInfo, CreateGroupCallError> {
+    // MATTERMOST: Relay calls are started by joining (docs/livekit-calls-native-ui.md): Telegram's "Start Voice Chat"
+    // gets a call with `MattermostFeatures.relayNewGroupCallId`, which the Relay call manager's `joinGroupCall` starts
+    // in the chat. Nothing to schedule, no external streams.
+    if MattermostBackend.isEnabled {
+        if scheduleDate != nil || isExternalStream || !MattermostFeatures.relayCalls {
+            return .fail(.generic)
+        }
+        return .single(GroupCallInfo(id: MattermostFeatures.relayNewGroupCallId, accessHash: 0, participantCount: 0, streamDcId: nil, title: nil, scheduleTimestamp: nil, subscribedToScheduled: false, recordingStartTimestamp: nil, sortAscending: true, defaultParticipantsAreMuted: nil, messagesAreEnabled: nil, isVideoEnabled: true, unmutedVideoLimit: 0, isStream: false, isCreator: true, defaultSendAs: nil))
+    }
     return account.postbox.transaction { transaction -> Api.InputPeer? in
         let callPeer = transaction.getPeer(peerId).flatMap(apiInputPeer)
         return callPeer

@@ -875,13 +875,14 @@ public final class SharedAccountContextImpl: SharedAccountContext {
             self.webProxyCarrierHost = webProxyCarrierHost
             WebProxyTransport.shared.setViewHost(webProxyCarrierHost)
 
-            let callManager = PresentationCallManagerImpl(accountManager: self.accountManager, getDeviceAccessData: { [self] in
-                return (self.currentPresentationData.with { $0 }, { [weak self] c, a in
+            let getDeviceAccessData: () -> (presentationData: PresentationData, present: (ViewController, Any?) -> Void, openSettings: () -> Void) = { [weak self] in
+                return (self?.currentPresentationData.with { $0 } ?? initialPresentationDataAndSettings.presentationData, { [weak self] c, a in
                     self?.presentGlobalController(c, a)
                 }, {
                     applicationBindings.openSettings()
                 })
-            }, isMediaPlaying: { [weak self] in
+            }
+            let isMediaPlaying: () -> Bool = { [weak self] in
                 guard let strongSelf = self else {
                     return false
                 }
@@ -894,14 +895,24 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                     }
                 })
                 return result
-            }, resumeMediaPlayback: { [weak self] in
+            }
+            let resumeMediaPlayback: () -> Void = { [weak self] in
                 guard let strongSelf = self else {
                     return
                 }
                 strongSelf.mediaManager.playlistControl(.playback(.play), type: nil)
-            }, audioSession: self.mediaManager.audioSession, activeAccounts: self.activeAccountContexts |> map { _, accounts, _ in
+            }
+            let activeAccounts = self.activeAccountContexts |> map { _, accounts, _ in
                 return Array(accounts.map({ $0.1 }))
-            })
+            }
+            let callManager: PresentationCallManager
+            // MATTERMOST: Relay calls (docs/livekit-calls-native-ui.md) drive Telegram's call UI; MTProto calls never
+            // ring with the null network engine.
+            if MattermostBackend.isEnabled && MattermostFeatures.relayCalls {
+                callManager = RelayCallManager(accountManager: self.accountManager, getDeviceAccessData: getDeviceAccessData, isMediaPlaying: isMediaPlaying, resumeMediaPlayback: resumeMediaPlayback, audioSession: self.mediaManager.audioSession, activeAccounts: activeAccounts)
+            } else {
+                callManager = PresentationCallManagerImpl(accountManager: self.accountManager, getDeviceAccessData: getDeviceAccessData, isMediaPlaying: isMediaPlaying, resumeMediaPlayback: resumeMediaPlayback, audioSession: self.mediaManager.audioSession, activeAccounts: activeAccounts)
+            }
             self.callManager = callManager
             
             self.callDisposable = (callManager.currentCallSignal
@@ -1677,10 +1688,19 @@ public final class SharedAccountContextImpl: SharedAccountContext {
         // MATTERMOST: each Mattermost account attaches the APNs token to its own session
         // (`PUT /users/sessions/device`, MattermostSync); Telegram's MTProto registration never runs.
         if MattermostBackend.isEnabled {
-            self.registeredNotificationTokensDisposable.set((self.apsNotificationToken
+            let disposables = DisposableSet()
+            disposables.add((self.apsNotificationToken
             |> deliverOnMainQueue).start(next: { token in
                 MattermostSync.setPushToken(token)
             }))
+            // Relay calls: VoIP pushes ring through CallKit (each account registers the token, `POST /devices/voip`).
+            if MattermostFeatures.relayCalls {
+                disposables.add((self.voipNotificationToken
+                |> deliverOnMainQueue).start(next: { token in
+                    MattermostSync.setVoIPPushToken(token)
+                }))
+            }
+            self.registeredNotificationTokensDisposable.set(disposables)
             return
         }
         let sandbox: Bool

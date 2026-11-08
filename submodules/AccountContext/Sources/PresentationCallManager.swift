@@ -594,6 +594,8 @@ public protocol PresentationCallManager: AnyObject {
     var currentGroupCallSignal: Signal<VideoChatCall?, NoError> { get }
     var hasActiveCall: Bool { get }
     var hasActiveGroupCall: Bool { get }
+    /// A 1:1 or group call is running (media in chats pauses meanwhile).
+    var hasActiveCalls: Signal<Bool, NoError> { get }
     
     func requestCall(context: AccountContext, peerId: EnginePeer.Id, isVideo: Bool, endCurrentIfAny: Bool) -> RequestCallResult
     func joinGroupCall(context: AccountContext, peerId: EnginePeer.Id, invite: String?, requestJoinAsPeerId: ((@escaping (EnginePeer.Id?) -> Void) -> Void)?, initialCall: EngineGroupCallDescription, endCurrentIfAny: Bool) -> JoinGroupCallManagerResult

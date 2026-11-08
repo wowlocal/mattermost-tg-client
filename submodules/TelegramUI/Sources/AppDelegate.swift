@@ -1044,8 +1044,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         }
 
         let pushRegistry = PKPushRegistry(queue: .main)
-        // MATTERMOST: no calls, so no VoIP pushes (and no `voip` background mode).
-        if #available(iOS 9.0, *), MattermostFeatures.calls {
+        // MATTERMOST: no Telegram calls; Relay calls ring with VoIP pushes (`RelayCallManager.handleVoIPPush`).
+        if #available(iOS 9.0, *), MattermostFeatures.calls || MattermostFeatures.relayCalls {
             pushRegistry.desiredPushTypes = Set([.voIP])
         }
         self.pushRegistry = pushRegistry
@@ -2232,12 +2232,19 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     public func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType, completion: @escaping () -> Void) {
         Logger.shared.log("App \(self.episodeId) PushRegistry", "pushRegistry didReceiveIncomingPushWith \(payload.dictionaryPayload)")
         
+        // MATTERMOST: a Relay ring is reported to CallKit right here, every time (iOS terminates apps that do not).
+        if MattermostFeatures.relayCalls, RelayCallManager.handleVoIPPush(payload.dictionaryPayload, completion: completion) {
+            return
+        }
         self.pushRegistryImpl(registry, didReceiveIncomingPushWith: payload, for: type, completion: completion)
     }
     
     public func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType) {
         Logger.shared.log("App \(self.episodeId) PushRegistry", "pushRegistry didReceiveIncomingPushWith \(payload.dictionaryPayload)")
         
+        if MattermostFeatures.relayCalls, RelayCallManager.handleVoIPPush(payload.dictionaryPayload, completion: {}) {
+            return
+        }
         self.pushRegistryImpl(registry, didReceiveIncomingPushWith: payload, for: type, completion: {})
     }
     

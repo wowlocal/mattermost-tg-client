@@ -25,7 +25,7 @@ clients, driven by LiveKit-backed adapters behind Telegram's existing call proto
 Telegram UI (unchanged screens)        iOS: CallController / PrivateCallScreen, VideoChatScreen, CallKit, status bar
         │ PresentationCall / PresentationGroupCall (AccountContext)      macOS: PeerCallScreen via a peer-call protocol,
         │                                                                     GroupCallContext(call: PresentationGroupCall)
-Platform adapters  (iOS: submodules/RelayCalls/Sources/RelayCallsTelegram; macOS: packages/RelayTelegramCalls)
+Platform adapters  (iOS: submodules/TelegramCallsUI/Sources/Relay; macOS: packages/RelayTelegramCalls)
         │ RelayDirectCall / RelayGroupCall controllers, RelayRoomEngine, video frame sinks
 Shared core        submodules/RelayCalls (RelayCallsCore: REST + events, Foundation only; RelayCalls: LiveKit engine)
         │ REST + WebSocket events (custom_org.relaychat.calls_*) + VoIP push
@@ -267,7 +267,7 @@ observed on the main queue.
   configuration, engine availability `.none`), `didActivate(_:configureSession:)` / `didDeactivate(_:)` from the
   `CXProviderDelegate`, `activateWithoutCallKit()`, `isEngineAvailable`, `setSpeakerOutputPreferred(_:)`.
 
-The first pass's `RelayCallSession`/`RelayCallView` still compile; the adapters remove them.
+The first pass's `RelayCallSession`/`RelayCallView` are removed (Telegram's own screens show the calls).
 
 ### MattermostSync (both clients)
 
@@ -301,15 +301,48 @@ The first pass's `RelayCallSession`/`RelayCallView` still compile; the adapters 
 
 ## Platform adapters
 
-**iOS** (new `RelayCallsTelegram` target): `RelayCallManager: PresentationCallManager` (requests, incoming rings from
-events and VoIP pushes, CallKit), `RelayPresentationCall: PresentationCall`, `RelayPresentationGroupCall:
-PresentationGroupCall`, LiveKit→`VideoFrameData` adapter (needs a public init in TelegramVoip), audio through
-`ManagedAudioSession` with LiveKit's engine gated by CallKit activation. Patches: a `PresentationCallVideoProviding`
-protocol replacing the `as! PresentationCallImpl`/`PresentationGroupCallImpl` casts in `VideoChatScreen` and
-`CallControllerNodeV2`; public CallKit setup gated on `MattermostFeatures.relayCalls`; a no-device mode for
-`SharedCallAudioContext`; the Relay manager created in `SharedAccountContext` when Mattermost is on; join-panel data
-from MattermostSync; no emoji key when there is no key; PushKit branch in `AppDelegate`, `voip` background mode.
-Remove `.relayCall` and the SwiftUI window.
+**iOS** (implemented, `submodules/TelegramCallsUI/Sources/Relay`, inside TelegramCallsUI so that it reaches CallKit
+setup, the tones and `SharedCallAudioContext` without new public API):
+
+- `RelayCallManager: PresentationCallManager`, created by `SharedAccountContextImpl` instead of
+  `PresentationCallManagerImpl` while Mattermost is on. Rings from every active account's `relayCallEvents`
+  (`incoming`, own rings in `.activeCalls`) and from VoIP pushes (`RelayCallManager.handleVoIPPush`, called first by
+  `AppDelegate`'s `PKPushRegistryDelegate`: every `relay_call` push is reported to CallKit synchronously, with a
+  name-based UUID of the call id so that the push and the event are one CallKit call; a call known to be over is
+  reported with a fresh UUID and ended at once; the ring is set up once its account's sync runs, early lock-screen
+  answers and declines are kept). A second call while one runs is declined `busy`. `requestCall` rings a DM through
+  CallKit's start call action as in Telegram (directly without CallKit); `joinGroupCall` joins the join panel's call
+  (`MattermostSync.relayCall(groupCallId:)`), starts a channel call, or rings a group message's members.
+- `RelayPresentationCall: PresentationCall` over `RelayDirectCall`: Telegram's state, tones (ringback once the callee's
+  device rings, connecting, busy/ended/failed), CallKit reports (connected, ended with `answeredElsewhere`,
+  `declinedElsewhere`, `unanswered`). Also an incoming group ring while it rings: answering hands its `RelayGroupCall`
+  (same room, same CallKit call) to a `RelayPresentationGroupCall`, so the ring is Telegram's call ring and the call is
+  `VideoChatScreen`.
+- `RelayPresentationGroupCall: PresentationGroupCall` over `RelayGroupCall`: one participant per user peer, synthetic
+  SSRCs and endpoint ids `relay:camera:<user>`/`relay:screen:<user>` (`RelayCallIds`), audio levels, "X joined" member
+  events, invitees of a group ring as Telegram's invited peers, group tones. `canManageCall` is false (no admin
+  muting, title, recording or end-for-everyone menu), invite links nil, messages off, no invite button.
+- Video: `RelayVideoRouter` attaches a `RelayVideoSink` per subscriber to the track an endpoint resolves to (re-attached
+  when the track changes), `setRequestedVideoList` sets adaptive stream sizes and visibility; frames become
+  `VideoFrameData` with NV12 pixel buffers (I420 copied into pooled NV12 with libyuv; new public
+  `VideoFrameData(pixelBuffer:…)` in TelegramVoip). Camera: Telegram's `OngoingCallVideoCapturer` (the screens' preview,
+  switching, mirroring; the simulator's placeholder frames too) feeds `RelayExternalCamera`; the own camera tile shows
+  the capturer's frames. Screen sharing: Telegram's broadcast picker targets the LiveKit extension, which LiveKit
+  publishes on its own.
+- Audio: `SharedCallAudioContext` without a tgcalls device (`createsAudioDevice: false`) keeps Telegram's session,
+  routes, proximity and CallKit activation; LiveKit's engine is available only while that session is active
+  (`RelayCallAudio`, `RelayCallKitAudio`). Tones play with `AVAudioPlayer` from `PresentationCallToneData`.
+
+Telegram patches: `PresentationCallVideoProviding`/`PresentationGroupCallVideoProviding` (adopted by the Impl classes)
+replace the casts in `VideoChatScreen` and `CallControllerNodeV2`; `PresentationCallManager.hasActiveCalls` replaces the
+`PresentationCallManagerImpl` casts in the chat; CallKit is available for `relayCalls` (no tgcalls audio setup, no Siri
+donations, an always-reporting `reportIncomingRelayCall`, `reportCallEnded(reason:)`); no emoji key without key data
+(`PrivateCallScreen`); the join panel's `AccountGroupCallContextImpl` reads `relayLiveCallsSignal`; under Mattermost
+`createGroupCall` answers `MattermostFeatures.relayNewGroupCallId`, so Telegram's "Start Voice Chat" (profile menu,
+call service message) starts the Relay call; the profile's Call/Video/Voice Chat buttons and call bubbles' call back are
+on for `relayCalls` (schedule and stream items hidden; members start channel calls); `voip` background mode; each
+account registers the PushKit token (`MattermostSync.setVoIPPushToken`). The first pass's `.relayCall` button,
+`MattermostCalls.swift` and `RelayCallSession`/`RelayCallView` are gone.
 
 **macOS** (new `packages/RelayTelegramCalls`): `LiveKitVideoSource: VideoSource`, `RelayPresentationGroupCall:
 PresentationGroupCall` (macOS protocol) for `GroupCallContext`, `RelayPeerCallSession` behind a new

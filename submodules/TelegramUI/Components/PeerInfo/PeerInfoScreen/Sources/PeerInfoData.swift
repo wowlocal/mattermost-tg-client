@@ -2719,7 +2719,8 @@ func peerInfoHeaderButtons(peer: EnginePeer?, cachedData: CachedPeerData?, isOpe
             result.append(.search)
         } else {
             let hasVoiceChat = channel.flags.contains(.hasVoiceChat)
-            let canStartVoiceChat = !hasVoiceChat && (channel.flags.contains(.isCreator) || channel.hasPermission(.manageCalls))
+            // MATTERMOST: Relay calls in channels and group messages need membership, not Telegram's admin right.
+            let canStartVoiceChat = !hasVoiceChat && (channel.flags.contains(.isCreator) || channel.hasPermission(.manageCalls) || MattermostFeatures.canStartRelayCall(in: channel))
             let canManage = channel.flags.contains(.isCreator) || channel.adminRights != nil
             
             let hasDiscussion: Bool
@@ -2812,8 +2813,9 @@ func peerInfoHeaderButtons(peer: EnginePeer?, cachedData: CachedPeerData?, isOpe
         result.append(.more)
     }
     
-    // MATTERMOST: no calls; `callsAvailable` is true for users without cached data.
-    if !MattermostFeatures.calls {
+    // MATTERMOST: no Telegram calls; Relay calls (`relayCalls`) use the same buttons: DM users are callable through
+    // `CachedUserData` (MattermostSync), channels through `MattermostFeatures.canStartRelayCall(in:)`.
+    if !MattermostFeatures.calls && !MattermostFeatures.relayCalls {
         result.removeAll(where: { $0 == .call || $0 == .videoCall || $0 == .voiceChat })
     }
     

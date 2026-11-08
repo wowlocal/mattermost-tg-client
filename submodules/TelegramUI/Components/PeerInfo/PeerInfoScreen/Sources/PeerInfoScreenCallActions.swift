@@ -321,11 +321,14 @@ extension PeerInfoScreenNode {
                 self?.createAndJoinGroupCall(peerId: peerId, joinAsPeerId: defaultJoinAsPeerId)
             })))
             
-            items.append(.action(ContextMenuActionItem(text: scheduleVoiceChatTitle, icon: { theme in return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Schedule"), color: theme.contextMenu.primaryColor) }, action: { _, f in
-                f(.dismissWithoutContent)
-                
-                self?.scheduleGroupCall()
-            })))
+            // MATTERMOST: Relay calls cannot be scheduled or streamed.
+            if !MattermostBackend.isEnabled {
+                items.append(.action(ContextMenuActionItem(text: scheduleVoiceChatTitle, icon: { theme in return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Schedule"), color: theme.contextMenu.primaryColor) }, action: { _, f in
+                    f(.dismissWithoutContent)
+                    
+                    self?.scheduleGroupCall()
+                })))
+            }
             
             var credentialsPromise: Promise<GroupCallStreamCredentials>?
             var canCreateStream = false
@@ -344,7 +347,7 @@ extension PeerInfoScreenNode {
                 break
             }
             
-            if canCreateStream {
+            if canCreateStream && !MattermostBackend.isEnabled {
                 items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.ChannelInfo_CreateExternalStream, icon: { theme in return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/VoiceChat"), color: theme.contextMenu.primaryColor) }, action: { _, f in
                     f(.dismissWithoutContent)
                     

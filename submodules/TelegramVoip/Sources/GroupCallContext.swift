@@ -452,6 +452,26 @@ public final class OngoingGroupCallContext {
             self.mirrorHorizontally = frameData.mirrorHorizontally
             self.mirrorVertically = frameData.mirrorVertically
         }
+
+        /// A frame that does not come from tgcalls (MATTERMOST: Relay's LiveKit video, docs/livekit-calls-native-ui.md):
+        /// an NV12 pixel buffer (`.native`, what the call renderers draw) or a 32ARGB/32BGRA one. `width` and `height`
+        /// are the buffer's, before `orientation` is applied.
+        public init(pixelBuffer: CVPixelBuffer, width: Int, height: Int, orientation: OngoingCallVideoOrientation, deviceRelativeOrientation: OngoingCallVideoOrientation? = nil, mirrorHorizontally: Bool = false, mirrorVertically: Bool = false) {
+            switch CVPixelBufferGetPixelFormatType(pixelBuffer) {
+            case kCVPixelFormatType_32ARGB:
+                self.buffer = .argb(NativeBuffer(pixelBuffer: pixelBuffer))
+            case kCVPixelFormatType_32BGRA:
+                self.buffer = .bgra(NativeBuffer(pixelBuffer: pixelBuffer))
+            default:
+                self.buffer = .native(NativeBuffer(pixelBuffer: pixelBuffer))
+            }
+            self.width = width
+            self.height = height
+            self.orientation = orientation
+            self.deviceRelativeOrientation = deviceRelativeOrientation
+            self.mirrorHorizontally = mirrorHorizontally
+            self.mirrorVertically = mirrorVertically
+        }
     }
 
     public struct Stats {

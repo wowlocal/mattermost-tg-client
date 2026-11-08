@@ -27,7 +27,9 @@ public final class SharedCallAudioContext {
     private(set) var audioSessionControl: ManagedAudioSessionControl?
     
     private let isAudioSessionActivePromise = Promise<Bool>(false)
-    private var isAudioSessionActive: Signal<Bool, NoError> {
+    /// Whether the call may use the audio session now: CallKit activated it (`provider(_:didActivate:)`), or, without
+    /// CallKit, ManagedAudioSession did. Relay's LiveKit engine runs only while this is true.
+    var isAudioSessionActive: Signal<Bool, NoError> {
         return self.isAudioSessionActivePromise.get()
     }
     
@@ -66,7 +68,9 @@ public final class SharedCallAudioContext {
         return appConfiguration.data?[self.legacyBehaviorKillswitchKey] != nil
     }
 
-    static func get(audioSession: ManagedAudioSession, callKitIntegration: CallKitIntegration?, defaultToSpeaker: Bool = false, reuseCurrent: Bool = false, enableMicrophone: Bool = true, legacyBehavior: Bool = false) -> SharedCallAudioContext {
+    /// `createsAudioDevice: false` (MATTERMOST: Relay calls) leaves out tgcalls' audio device: the session, its
+    /// routes and CallKit activation stay Telegram's, and another engine (LiveKit's) plays and records.
+    static func get(audioSession: ManagedAudioSession, callKitIntegration: CallKitIntegration?, defaultToSpeaker: Bool = false, reuseCurrent: Bool = false, enableMicrophone: Bool = true, legacyBehavior: Bool = false, createsAudioDevice: Bool = true) -> SharedCallAudioContext {
         // Devices read the switch at creation, so it must be applied before the context is built.
         OngoingCallContext.AudioDevice.setLegacyBehaviorEnabled(legacyBehavior)
         
@@ -78,7 +82,7 @@ public final class SharedCallAudioContext {
         // CallKit-bound context is retired below like any other finished context, and the new
         // context activates through ManagedAudioSession. The killswitch restores unconditional
         // reuse.
-        if let current = self.current, reuseCurrent, legacyBehavior || current.callKitIntegration === callKitIntegration {
+        if let current = self.current, reuseCurrent, (current.audioDevice != nil) == createsAudioDevice, legacyBehavior || current.callKitIntegration === callKitIntegration {
             // The reused context was configured for the call that created it (a 1:1 audio call
             // defaults to the receiver), so without this the caller's defaultToSpeaker is dropped
             // and a group call silently inherits the earpiece.
@@ -91,7 +95,7 @@ public final class SharedCallAudioContext {
             return current
         }
         let previous = self.current
-        let context = SharedCallAudioContext(audioSession: audioSession, callKitIntegration: callKitIntegration, defaultToSpeaker: defaultToSpeaker, enableMicrophone: enableMicrophone)
+        let context = SharedCallAudioContext(audioSession: audioSession, callKitIntegration: callKitIntegration, defaultToSpeaker: defaultToSpeaker, enableMicrophone: enableMicrophone, createsAudioDevice: createsAudioDevice)
         self.current = context
         // A finished call's device kept running until its PresentationCallImpl was released and
         // kept following the process-wide CallKit activation signal. A redial inside that window
@@ -133,7 +137,7 @@ public final class SharedCallAudioContext {
         self.audioSessionDisposable = nil
     }
     
-    private init(audioSession: ManagedAudioSession, callKitIntegration: CallKitIntegration?, defaultToSpeaker: Bool = false, enableMicrophone: Bool = true) {
+    private init(audioSession: ManagedAudioSession, callKitIntegration: CallKitIntegration?, defaultToSpeaker: Bool = false, enableMicrophone: Bool = true, createsAudioDevice: Bool = true) {
         self.callKitIntegration = callKitIntegration
         
         // Align the shared WebRTC audio session configuration with the one ManagedAudioSession
@@ -144,11 +148,15 @@ public final class SharedCallAudioContext {
         // calls have no CallKit integration and were left with the stock configuration.
         // Streams pass enableMicrophone: false, which makes the device module skip the category
         // block entirely, so they need no alignment.
-        if enableMicrophone {
+        if enableMicrophone && createsAudioDevice {
             OngoingCallContext.setupSharedAudioSessionConfiguration()
         }
         
-        self.audioDevice = OngoingCallContext.AudioDevice.create(enableSystemMute: false, enableMicrophone: enableMicrophone)
+        if createsAudioDevice {
+            self.audioDevice = OngoingCallContext.AudioDevice.create(enableSystemMute: false, enableMicrophone: enableMicrophone)
+        } else {
+            self.audioDevice = nil
+        }
         
         self.wantsSpeakerByDefault = defaultToSpeaker
         var defaultToSpeaker = defaultToSpeaker

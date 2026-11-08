@@ -71,6 +71,12 @@ public final class AccountGroupCallContextImpl: AccountGroupCallContext {
     
     public init(account: Account, engine: TelegramEngine, peerId: EnginePeer.Id?, isChannel: Bool, call: EngineGroupCallDescription) {
         self.panelDataPromise.set(.single(nil))
+        // MATTERMOST: Relay calls (docs/livekit-calls-native-ui.md): the panel follows the plugin's call; MTProto's
+        // participant list never answers.
+        if MattermostFeatures.relayCalls {
+            self.panelDataPromise.set(AccountGroupCallContextImpl.relayPanelData(account: account, engine: engine, peerId: peerId, call: call))
+            return
+        }
         let state = engine.calls.getGroupCallParticipants(reference: .id(id: call.id, accessHash: call.accessHash), offset: "", ssrcs: [], limit: 100, sortAscending: nil)
         |> map(Optional.init)
         |> `catch` { _ -> Signal<GroupCallParticipantsContext.State?, NoError> in

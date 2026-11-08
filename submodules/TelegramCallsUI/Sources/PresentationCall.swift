@@ -15,7 +15,7 @@ import DeviceProximity
 import PhoneNumberFormat
 import LiquidGlassShapes
 
-public final class PresentationCallImpl: PresentationCall {
+public final class PresentationCallImpl: PresentationCall, PresentationCallVideoProviding {
     public let context: AccountContext
     private let audioSession: ManagedAudioSession
     private let callSessionManager: CallSessionManager
@@ -1693,7 +1693,11 @@ public final class PresentationCallImpl: PresentationCall {
         }
     }
 
-    func disableScreencast(reset: Bool = true) {
+    public func disableScreencast() {
+        self.disableScreencast(reset: true)
+    }
+    
+    func disableScreencast(reset: Bool) {
         if self.isMovedToConference {
             return
         }
@@ -1779,7 +1783,7 @@ public final class PresentationCallImpl: PresentationCall {
         return self.debugInfoValue.get()
     }
     
-    func video(isIncoming: Bool) -> Signal<OngoingGroupCallContext.VideoFrameData, NoError>? {
+    public func video(isIncoming: Bool) -> Signal<OngoingGroupCallContext.VideoFrameData, NoError>? {
         if self.isMovedToConference {
             return nil
         }
@@ -1882,6 +1886,13 @@ public final class PresentationCallImpl: PresentationCall {
         }
         self.useFrontCamera = !self.useFrontCamera
         self.videoCapturer?.switchVideoInput(isFront: self.useFrontCamera)
+    }
+    
+    public var isAudioOutputBuiltin: Bool {
+        if let sharedAudioContext = self.sharedAudioContext, case .builtin = sharedAudioContext.currentAudioOutputValue {
+            return true
+        }
+        return false
     }
     
     public func playRemoteCameraTone() {

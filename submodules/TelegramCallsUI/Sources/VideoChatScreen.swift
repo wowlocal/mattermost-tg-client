@@ -66,12 +66,12 @@ extension VideoChatCall {
     func video(endpointId: String) -> Signal<OngoingGroupCallContext.VideoFrameData, NoError>? {
         switch self {
         case let .group(group):
-            return (group as! PresentationGroupCallImpl).video(endpointId: endpointId)
+            return (group as? PresentationGroupCallVideoProviding)?.video(endpointId: endpointId)
         case let .conferenceSource(conferenceSource):
             if endpointId == "temp-local" {
-                return (conferenceSource as! PresentationCallImpl).video(isIncoming: false)
+                return (conferenceSource as? PresentationCallVideoProviding)?.video(isIncoming: false)
             } else {
-                return (conferenceSource as! PresentationCallImpl).video(isIncoming: true)
+                return (conferenceSource as? PresentationCallVideoProviding)?.video(isIncoming: true)
             }
         }
     }
@@ -99,7 +99,7 @@ extension VideoChatCall {
         case let .group(group):
             return group.hasVideo
         case let .conferenceSource(conferenceSource):
-            return (conferenceSource as! PresentationCallImpl).hasVideo
+            return (conferenceSource as? PresentationCallVideoProviding)?.hasVideo ?? false
         }
     }
     
@@ -108,7 +108,7 @@ extension VideoChatCall {
         case let .group(group):
             return group.hasScreencast
         case let .conferenceSource(conferenceSource):
-            return (conferenceSource as! PresentationCallImpl).hasScreencast
+            return (conferenceSource as? PresentationCallVideoProviding)?.hasScreencast ?? false
         }
     }
     
@@ -126,7 +126,7 @@ extension VideoChatCall {
         case let .group(group):
             group.disableScreencast()
         case let .conferenceSource(conferenceSource):
-            (conferenceSource as! PresentationCallImpl).disableScreencast()
+            (conferenceSource as? PresentationCallVideoProviding)?.disableScreencast()
         }
     }
     
@@ -147,9 +147,9 @@ extension VideoChatCall {
     func requestVideo(capturer: OngoingCallVideoCapturer, useFrontCamera: Bool) {
         switch self {
         case let .group(groupCall):
-            (groupCall as! PresentationGroupCallImpl).requestVideo(capturer: capturer, useFrontCamera: useFrontCamera)
+            (groupCall as? PresentationGroupCallVideoProviding)?.requestVideo(capturer: capturer, useFrontCamera: useFrontCamera)
         case let .conferenceSource(conferenceSource):
-            (conferenceSource as! PresentationCallImpl).requestVideo(capturer: capturer)
+            (conferenceSource as? PresentationCallVideoProviding)?.requestVideo(capturer: capturer)
         }
     }
     
@@ -1192,7 +1192,7 @@ final class VideoChatScreenComponent: Component {
         
         static func groupCallStateForConferenceSource(conferenceSource: PresentationCall) -> Signal<(state: PresentationGroupCallState, invitedPeers: [InvitedPeer]), NoError> {
             let invitedPeers = conferenceSource.context.engine.data.subscribe(
-                EngineDataList((conferenceSource as! PresentationCallImpl).pendingInviteToConferencePeerIds.map { TelegramEngine.EngineData.Item.Peer.Peer(id: $0.id) })
+                EngineDataList(((conferenceSource as? PresentationCallVideoProviding)?.pendingInviteToConferencePeerIds ?? []).map { TelegramEngine.EngineData.Item.Peer.Peer(id: $0.id) })
             )
             
             let accountPeerId = conferenceSource.context.account.peerId
@@ -2177,6 +2177,10 @@ final class VideoChatScreenComponent: Component {
                             inviteIsLink = true
                         }
                     }
+                }
+                // MATTERMOST: Relay calls have no invitations (members join from the chat; group messages ring).
+                if MattermostFeatures.relayCalls {
+                    canInvite = false
                 }
                 var inviteOptions: [VideoChatParticipantsComponent.Participants.InviteOption] = []
                 if case let .group(groupCall) = self.currentCall, groupCall.isConference {

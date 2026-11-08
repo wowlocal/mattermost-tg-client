@@ -89,6 +89,10 @@ public enum MattermostFeatures {
 }
 
 public extension MattermostFeatures {
+    /// Relay calls: the group call id of a call still to be started in a chat (what `createGroupCall` answers while the
+    /// Mattermost backend is on; the call manager's `joinGroupCall` then starts or joins the chat's call).
+    static let relayNewGroupCallId: Int64 = 0
+
     /// Relay calls: whether the user can start (or join) a call in a Mattermost channel or group message (a member of a
     /// channel that is not archived; the plugin checks membership). Telegram's own entry points ask for
     /// `hasPermission(.manageCalls)`, an admin right Mattermost channels never carry: their `MATTERMOST:` call sites

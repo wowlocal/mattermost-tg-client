@@ -444,7 +444,8 @@ final class CallControllerNodeV2: ViewControllerTracingNode, CallControllerNodeP
         if let emojiKey = self.emojiKey, emojiKey.data == data {
             return emojiKey.resolvedKey
         }
-        let resolvedKey = stringForEmojiHashOfData(data, 4) ?? []
+        // MATTERMOST: Relay calls have no end-to-end key (empty key data): no emoji.
+        let resolvedKey = data.isEmpty ? [] : (stringForEmojiHashOfData(data, 4) ?? [])
         self.emojiKey = (data, resolvedKey)
         return resolvedKey
     }
@@ -546,7 +547,7 @@ final class CallControllerNodeV2: ViewControllerTracingNode, CallControllerNodeP
                     self.localVideo = nil
                 } else {
                     if self.localVideo == nil {
-                        if let call = self.call as? PresentationCallImpl, let videoStreamSignal = call.video(isIncoming: false) {
+                        if let call = self.call as? PresentationCallVideoProviding, let videoStreamSignal = call.video(isIncoming: false) {
                             self.localVideo = AdaptedCallVideoSource(videoStreamSignal: videoStreamSignal)
                         }
                     }
@@ -558,7 +559,7 @@ final class CallControllerNodeV2: ViewControllerTracingNode, CallControllerNodeP
             switch callState.remoteVideoState {
             case .active, .paused:
                 if self.remoteVideo == nil {
-                    if let call = self.call as? PresentationCallImpl, let videoStreamSignal = call.video(isIncoming: true) {
+                    if let call = self.call as? PresentationCallVideoProviding, let videoStreamSignal = call.video(isIncoming: true) {
                         self.remoteVideo = AdaptedCallVideoSource(videoStreamSignal: videoStreamSignal)
                     }
                 }
@@ -569,7 +570,7 @@ final class CallControllerNodeV2: ViewControllerTracingNode, CallControllerNodeP
         
         if var callScreenState = self.callScreenState {
             if callScreenState.remoteVideo == nil && self.remoteVideo != nil {
-                if let call = self.call as? PresentationCallImpl, let sharedAudioContext = call.sharedAudioContext, case .builtin = sharedAudioContext.currentAudioOutputValue {
+                if let call = self.call as? PresentationCallVideoProviding, call.isAudioOutputBuiltin {
                     call.playRemoteCameraTone()
                 }
             }

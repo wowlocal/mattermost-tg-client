@@ -1061,7 +1061,8 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                             } else {
                                 var canManageGroupCalls = false
                                 if let channel = self.presentationInterfaceState.renderedPeer?.chatMainPeer as? TelegramChannel {
-                                    if channel.flags.contains(.isCreator) || channel.hasPermission(.manageCalls) {
+                                    // MATTERMOST: members start Relay calls (no admin right in Mattermost channels).
+                                    if channel.flags.contains(.isCreator) || channel.hasPermission(.manageCalls) || MattermostFeatures.canStartRelayCall(in: channel) {
                                         canManageGroupCalls = true
                                     }
                                 } else if let group = self.presentationInterfaceState.renderedPeer?.chatMainPeer as? TelegramGroup {
@@ -3634,13 +3635,8 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         }, presentGlobalOverlayController: { [weak self] controller, arguments in
             self?.presentInGlobalOverlay(controller, with: arguments)
         }, callPeer: { [weak self] peerId, isVideo in
-            // MATTERMOST: voice calls use the Relay calling service.
-            if MattermostBackend.isEnabled, let self {
-                mattermostPresentCall(from: self, context: context, peerId: peerId)
-                return
-            }
-            // MATTERMOST: no calls (call bubbles, phone-number menu, `beginCall`).
-            if !MattermostFeatures.calls {
+            // MATTERMOST: no Telegram calls; Relay calls take Telegram's path (call bubbles' "call back", `beginCall`).
+            if !MattermostFeatures.calls && !MattermostFeatures.relayCalls {
                 return
             }
             if let strongSelf = self {

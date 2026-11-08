@@ -401,7 +401,7 @@ class OngoingGroupCallEncryptionContextImpl: OngoingGroupCallEncryptionContext {
     }
 }
 
-public final class PresentationGroupCallImpl: PresentationGroupCall {
+public final class PresentationGroupCallImpl: PresentationGroupCall, PresentationGroupCallVideoProviding {
     private enum InternalState {
         case requesting
         case active(GroupCallInfo)
@@ -4020,7 +4020,7 @@ public final class PresentationGroupCallImpl: PresentationGroupCall {
         self.participantsContext?.updateMessagesEnabled(isEnabled: isEnabled, sendPaidMessageStars: sendPaidMessageStars)
     }
     
-    func video(endpointId: String) -> Signal<OngoingGroupCallContext.VideoFrameData, NoError>? {
+    public func video(endpointId: String) -> Signal<OngoingGroupCallContext.VideoFrameData, NoError>? {
         return Signal { [weak self] subscriber in
             guard let self else {
                 return EmptyDisposable

@@ -136,6 +136,10 @@ swift_library(
         "//submodules/TelegramUI/Components/AlertComponent",
         "//submodules/TelegramUI/Components/AlertComponent/AlertInputFieldComponent",
         "//submodules/TelegramUI/Components/GlassControls",
+        # MATTERMOST: Relay calls on Telegram's call UI (Sources/Relay, docs/livekit-calls-native-ui.md).
+        "//submodules/RelayCalls:RelayCalls",
+        "//submodules/RelayCalls:RelayCallsCore",
+        "//submodules/MattermostSync:MattermostSync",
     ],
     visibility = [
         "//visibility:public",

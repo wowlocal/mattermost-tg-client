@@ -121,13 +121,8 @@ import ChatMediaInputStickerGridItem
 
 extension ChatControllerImpl {
     func navigationButtonAction(_ action: ChatNavigationButtonAction) {
-        // MATTERMOST: calling uses LiveKit and Mattermost channel permissions.
-        if action == .relayCall, let peerId = self.chatLocation.peerId {
-            mattermostPresentCall(from: self, context: self.context, peerId: peerId)
-            return
-        }
         switch action {
-        case .spacer, .toggleInfoPanel, .relayCall:
+        case .spacer, .toggleInfoPanel:
             break
         case .cancelMessageSelection:
             self.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState { $0.withoutSelectionState() } })

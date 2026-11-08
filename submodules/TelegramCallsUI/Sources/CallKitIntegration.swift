@@ -16,8 +16,8 @@ private let sharedProviderDelegate: CallKitProviderDelegate? = {
 
 public final class CallKitIntegration {
     public static var isAvailable: Bool {
-        // MATTERMOST: no calls.
-        if !MattermostFeatures.calls {
+        // MATTERMOST: no Telegram calls; Relay calls ring through CallKit too (RelayCallManager).
+        if !MattermostFeatures.calls && !MattermostFeatures.relayCalls {
             return false
         }
         #if targetEnvironment(simulator)
@@ -67,7 +67,8 @@ public final class CallKitIntegration {
     /// failure — the caller must surface it.
     func startCall(context: AccountContext, peerId: EnginePeer.Id, phoneNumber: String?, localContactId: String?, isVideo: Bool, displayTitle: String, completion: ((Error?) -> Void)? = nil) {
         sharedProviderDelegate?.startCall(context: context, peerId: peerId, phoneNumber: phoneNumber, isVideo: isVideo, displayTitle: displayTitle, completion: { [weak self] error in
-            if error == nil {
+            // MATTERMOST: no Siri intents (their extension is not shipped), so no donations.
+            if error == nil && MattermostFeatures.calls {
                 self?.donateIntent(peerId: peerId, displayTitle: displayTitle, localContactId: localContactId)
             }
             completion?(error)
@@ -97,6 +98,22 @@ public final class CallKitIntegration {
     
     func reportOutgoingCallConnected(uuid: UUID, at date: Date) {
         sharedProviderDelegate?.reportOutgoingCallConnected(uuid: uuid, at: date)
+    }
+    
+    func reportOutgoingCallConnecting(uuid: UUID, at date: Date) {
+        sharedProviderDelegate?.reportOutgoingCallConnecting(uuid: uuid, at: date)
+    }
+    
+    /// MATTERMOST: a Relay ring (WebSocket event or VoIP push). Unlike `reportIncomingCall` this always reaches
+    /// CallKit, also for a call reported before: iOS terminates an app that does not report every VoIP push, and a
+    /// repeated report of a known call only answers `callUUIDAlreadyExists`.
+    func reportIncomingRelayCall(uuid: UUID, handle: String, isVideo: Bool, displayTitle: String, completion: ((NSError?) -> Void)?) {
+        sharedProviderDelegate?.reportIncomingRelayCall(uuid: uuid, handle: handle, isVideo: isVideo, displayTitle: displayTitle, completion: completion)
+    }
+    
+    /// MATTERMOST: ends a call for CallKit with a reason (`dropCall` always reports `remoteEnded`).
+    func reportCallEnded(uuid: UUID, reason: CXCallEndedReason) {
+        sharedProviderDelegate?.reportCallEnded(uuid: uuid, reason: reason)
     }
     
     private func donateIntent(peerId: EnginePeer.Id, displayTitle: String, localContactId: String?) {
@@ -296,7 +313,10 @@ class CallKitProviderDelegate: NSObject, CXProviderDelegate {
         
         Logger.shared.log("CallKitIntegration", "report incoming call \(uuid)")
         
-        OngoingCallContext.setupAudioSession()
+        // MATTERMOST: Relay calls play through LiveKit's engine, not tgcalls' audio session.
+        if MattermostFeatures.calls {
+            OngoingCallContext.setupAudioSession()
+        }
         
         self.provider.reportNewIncomingCall(with: uuid, update: update, completion: { error in
             if error == nil {
@@ -305,6 +325,38 @@ class CallKitProviderDelegate: NSObject, CXProviderDelegate {
             
             completion?(error as NSError?)
         })
+    }
+    
+    func reportIncomingRelayCall(uuid: UUID, handle: String, isVideo: Bool, displayTitle: String, completion: ((NSError?) -> Void)?) {
+        self.alreadyReportedIncomingCalls.insert(uuid)
+        
+        let update = CXCallUpdate()
+        update.remoteHandle = CXHandle(type: .generic, value: handle)
+        update.localizedCallerName = displayTitle
+        update.supportsHolding = false
+        update.supportsGrouping = false
+        update.supportsUngrouping = false
+        update.supportsDTMF = false
+        update.hasVideo = isVideo
+        
+        Logger.shared.log("CallKitIntegration", "report incoming Relay call \(uuid)")
+        
+        self.provider.reportNewIncomingCall(with: uuid, update: update, completion: { error in
+            if error == nil {
+                self.activeCalls.insert(uuid)
+            }
+            completion?(error as NSError?)
+        })
+    }
+    
+    func reportCallEnded(uuid: UUID, reason: CXCallEndedReason) {
+        self.alreadyReportedIncomingCalls.insert(uuid)
+        
+        Logger.shared.log("CallKitIntegration", "report call ended \(uuid) (\(reason.rawValue))")
+        
+        self.provider.reportCall(with: uuid, endedAt: nil, reason: reason)
+        
+        self.activeCalls.remove(uuid)
     }
     
     func reportOutgoingCallConnecting(uuid: UUID, at date: Date) {

@@ -10,7 +10,7 @@ swift_library(
 )
 
 # LiveKit: RelayRoomEngine (the controllers' media engine), the external camera, RelayVideoSink and the CallKit audio
-# hooks; plus the first pass's SwiftUI call window (RelayCallSession, RelayCallView) until the adapters replace it.
+# hooks. Telegram's own call screens show the calls (iOS: TelegramCallsUI/Sources/Relay).
 swift_library(
     name = "RelayCalls",
     module_name = "RelayCalls",

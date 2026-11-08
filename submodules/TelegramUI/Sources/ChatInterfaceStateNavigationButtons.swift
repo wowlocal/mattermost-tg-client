@@ -278,14 +278,6 @@ func secondaryRightNavigationButtonForChatInterfaceState(context: AccountContext
     if presentationInterfaceState.interfaceState.selectionState != nil {
         return nil
     }
-    // MATTERMOST: native Relay group audio and screen sharing.
-    if MattermostBackend.isEnabled, case let .peer(peerId) = presentationInterfaceState.chatLocation,
-       peerId != context.account.peerId, presentationInterfaceState.subject != .scheduledMessages {
-        if currentButton?.action == .relayCall { return currentButton }
-        let item = UIBarButtonItem(image: UIImage(systemName: "phone"), style: .plain, target: target, action: selector)
-        item.accessibilityLabel = "Start or join voice call"
-        return ChatNavigationButton(action: .relayCall, buttonItem: item)
-    }
     if case .standard(.default) = presentationInterfaceState.mode {
         if case .peer(context.account.peerId) = presentationInterfaceState.chatLocation, presentationInterfaceState.subject != .scheduledMessages, presentationInterfaceState.hasSavedChats {
             return moreInfoNavigationButton

@@ -1964,7 +1964,7 @@ plist_fragment(
     <!-- MATTERMOST: App Transport Security comes from RelayAppReleaseATSInfoPlist / RelayAppDebugATSInfoPlist
          (Phase 4A); Telegram's NSAllowsArbitraryLoads is gone. -->
     <key>NSCameraUsageDescription</key>
-    <string>We need this so that you can take and share photos and videos.</string>
+    <string>Relay uses the camera to take photos and videos and for video calls. During a video call, your camera is shared with the other participants.</string>
     <key>NSContactsUsageDescription</key>
     <string>Relay uses your contacts only when you choose one to share in a chat.</string>
     <key>NSFaceIDUsageDescription</key>
@@ -2025,7 +2025,9 @@ plist_fragment(
         <string>audio</string>
         <string>fetch</string>
         <string>remote-notification</string>
-        <!-- MATTERMOST: no voip (no calls), no location (no live location; App Review asks what uses it) -->
+        <!-- MATTERMOST: Relay calls ring with VoIP pushes (CallKit); no location (no live location; App Review asks
+             what uses it) -->
+        <string>voip</string>
         <string>processing</string>
     </array>
     <key>UIDeviceFamily</key>
