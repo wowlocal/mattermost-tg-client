@@ -1811,7 +1811,12 @@ ios_extension(
     name = "RelayBroadcastExtension",
     bundle_id = "{telegram_bundle_id}.BroadcastUpload".format(telegram_bundle_id = telegram_bundle_id),
     families = ["iphone", "ipad"],
-    infoplists = [":RelayBroadcastInfoPlist", ":VersionInfoPlist", ":BuildNumberInfoPlist"],
+    infoplists = [
+        ":RelayBroadcastInfoPlist",
+        ":VersionInfoPlist",
+        ":RequiredDeviceCapabilitiesPlist",
+        ":BuildNumberInfoPlist",
+    ],
     minimum_os_version = minimum_os_version,
     provisioning_profile = select({
         ":disableProvisioningProfilesSetting": None,
