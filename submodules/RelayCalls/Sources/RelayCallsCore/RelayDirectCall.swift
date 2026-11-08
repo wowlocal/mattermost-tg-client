@@ -106,9 +106,12 @@ public final class RelayDirectCall {
     private var calleeReceived = false
     private var activeSince: Date?
     private var mediaRequested = false
+    /// `connect` returned: the room can take the local tracks.
+    private var mediaConnected = false
     private var media = RelayMediaSnapshot()
-    private var isMuted = false
-    private var isCameraEnabled: Bool
+    /// The user's microphone and camera choices, applied (and retried) while the media is up.
+    private let microphone: RelayLocalSource
+    private let camera: RelayLocalSource
     private var isScreenSharing = false
     private var ringTimer: RelayCancellable?
     private enum MediaWait {
@@ -127,11 +130,29 @@ public final class RelayDirectCall {
         self.peerUserId = peerUserId
         self.isOutgoing = isOutgoing
         self.isVideo = isVideo
-        self.isCameraEnabled = isVideo && isOutgoing
+        self.microphone = RelayLocalSource(name: "microphone", wanted: true, scheduler: scheduler, retryDelays: RelayLocalSource.microphoneRetryDelays, apply: { [engine] enabled in
+            try await engine.setMicrophone(enabled: enabled)
+        })
+        // Nothing to turn off before the camera was ever published.
+        self.camera = RelayLocalSource(name: "camera", wanted: isVideo && isOutgoing, applied: false, scheduler: scheduler, retryDelays: RelayLocalSource.cameraRetryDelays, apply: { [engine] enabled in
+            try await engine.setCamera(enabled: enabled)
+        })
         self.call = call
         self.callId = callId
         self.fromPush = fromPush
         self.state = isOutgoing ? .requesting(ringing: false) : .ringing
+        self.microphone.describe = { [weak self] in
+            self?.logName ?? "direct call"
+        }
+        self.camera.describe = self.microphone.describe
+        self.camera.onRetriesExhausted = { [weak self] in
+            // A camera that cannot publish shows as off (the user can turn it on again).
+            guard let self, !self.state.isTerminated else {
+                return
+            }
+            self.camera.setWanted(false)
+            self.notify()
+        }
         self.engine.onChange = { [weak self] snapshot in
             self?.mediaChanged(snapshot)
         }
@@ -158,7 +179,9 @@ public final class RelayDirectCall {
 
     /// Declines a ring this device cannot take (another call is running) without creating a controller.
     public static func declineBusy(api: RelayCallsAPI, callId: String, deviceId: String) async {
-        try? await api.decline(callId: callId, deviceId: deviceId, reason: .busy)
+        await relayLogFailure("call \(callId): busy decline") {
+            try await api.decline(callId: callId, deviceId: deviceId, reason: .busy)
+        }
     }
 
     public var snapshot: Snapshot {
@@ -170,8 +193,8 @@ public final class RelayDirectCall {
             peerUserId: self.peerUserId,
             isOutgoing: self.isOutgoing,
             isVideo: self.isVideo,
-            isMuted: self.isMuted,
-            isCameraEnabled: self.isCameraEnabled,
+            isMuted: !self.microphone.wanted,
+            isCameraEnabled: self.camera.wanted,
             isScreenSharing: self.isScreenSharing,
             mediaState: self.media.connectionState,
             local: self.media.local,
@@ -219,7 +242,9 @@ public final class RelayDirectCall {
             do {
                 let join = try await self.api.accept(callId: callId, deviceId: self.deviceId)
                 guard !self.state.isTerminated else {
-                    try? await self.api.hangup(callId: callId, deviceId: self.deviceId)
+                    await relayLogFailure("\(self.logName): hangup") {
+                        try await self.api.hangup(callId: callId, deviceId: self.deviceId)
+                    }
                     return
                 }
                 self.apply(call: join.call)
@@ -239,8 +264,11 @@ public final class RelayDirectCall {
         if let callId = self.callId {
             let deviceId = self.deviceId
             let api = self.api
+            let logName = self.logName
             Task {
-                try? await api.decline(callId: callId, deviceId: deviceId, reason: reason)
+                await relayLogFailure("\(logName): decline") {
+                    try await api.decline(callId: callId, deviceId: deviceId, reason: reason)
+                }
             }
         }
     }
@@ -257,38 +285,31 @@ public final class RelayDirectCall {
         }
         self.terminate(.hangup)
         if let callId = self.callId {
-            let deviceId = self.deviceId
-            let api = self.api
-            Task {
-                try? await api.hangup(callId: callId, deviceId: deviceId)
-            }
+            self.sendHangup(callId: callId)
         }
     }
 
+    /// The user's microphone choice. It stays what the user chose when the microphone fails to publish: the call keeps
+    /// trying (`audioBecameAvailable()`, short retries) and logs every failure (`RelayCallsLog`).
     public func setMuted(_ muted: Bool) {
-        self.isMuted = muted
+        self.microphone.setWanted(!muted)
         self.notify()
-        if self.media.connectionState == .connected || self.media.connectionState == .reconnecting {
-            Task {
-                try? await self.engine.setMicrophone(enabled: !muted)
-            }
-        }
     }
 
-    /// Camera on or off (also during a voice call: Telegram lets either side add video).
-    public func setCameraEnabled(_ enabled: Bool) {
-        self.isCameraEnabled = enabled
-        self.notify()
-        if self.media.connectionState == .connected || self.media.connectionState == .reconnecting {
-            Task {
-                do {
-                    try await self.engine.setCamera(enabled: enabled)
-                } catch {
-                    self.isCameraEnabled = false
-                    self.notify()
-                }
-            }
+    /// The platform's audio engine may record now (iOS: CallKit activated the call's audio session and LiveKit's engine
+    /// became available, or the microphone permission was granted): a microphone that failed to publish is tried again.
+    public func audioBecameAvailable() {
+        guard !self.state.isTerminated else {
+            return
         }
+        self.microphone.retry(reason: "audio became available")
+    }
+
+    /// Camera on or off (also during a voice call: Telegram lets either side add video). A camera that keeps failing
+    /// to publish turns off after a few retries.
+    public func setCameraEnabled(_ enabled: Bool) {
+        self.camera.setWanted(enabled)
+        self.notify()
     }
 
     public func setScreenShare(enabled: Bool) {
@@ -301,6 +322,7 @@ public final class RelayDirectCall {
             do {
                 try await self.engine.setScreenShare(enabled: enabled)
             } catch {
+                RelayCallsLog.log("\(self.logName): screen share \(enabled ? "on" : "off") failed: \(error)")
                 self.isScreenSharing = false
                 self.notify()
             }
@@ -420,7 +442,9 @@ public final class RelayDirectCall {
         self.callId = join.call.id
         if self.state.isTerminated {
             // Hung up while the ring request was in flight.
-            try? await self.api.hangup(callId: join.call.id, deviceId: self.deviceId)
+            await relayLogFailure("\(self.logName): hangup") {
+                try await self.api.hangup(callId: join.call.id, deviceId: self.deviceId)
+            }
             return
         }
         self.apply(call: join.call)
@@ -481,7 +505,9 @@ public final class RelayDirectCall {
         guard !self.state.isTerminated else {
             return
         }
-        try? await self.api.received(callId: callId, deviceId: self.deviceId)
+        await relayLogFailure("\(self.logName): received") {
+            try await self.api.received(callId: callId, deviceId: self.deviceId)
+        }
     }
 
     private func acceptFailed(_ error: Error) async {
@@ -533,9 +559,10 @@ public final class RelayDirectCall {
             guard !self.state.isTerminated else {
                 return
             }
+            RelayCallsLog.log("\(self.logName): media connect failed: \(error)")
             self.terminate(.failed(error.localizedDescription))
             if let callId = self.callId {
-                try? await self.api.hangup(callId: callId, deviceId: self.deviceId)
+                self.sendHangup(callId: callId)
             }
             return
         }
@@ -543,19 +570,35 @@ public final class RelayDirectCall {
             await self.engine.disconnect()
             return
         }
-        do {
-            try await self.engine.setMicrophone(enabled: !self.isMuted)
-        } catch {
-            self.isMuted = true
-        }
-        if self.isCameraEnabled {
-            do {
-                try await self.engine.setCamera(enabled: true)
-            } catch {
-                self.isCameraEnabled = false
+        RelayCallsLog.log("\(self.logName): media connected (microphone \(self.microphone.wanted ? "on" : "off"), camera \(self.camera.wanted ? "on" : "off"))")
+        self.mediaConnected = true
+        // Publishes the microphone (and camera) now, retrying failures.
+        self.updatePublishing()
+        self.evaluate()
+    }
+
+    /// The local sources publish while the room is up.
+    private func updatePublishing() {
+        let isUp = self.media.connectionState == .connected || self.media.connectionState == .reconnecting
+        let ready = self.mediaConnected && !self.state.isTerminated && isUp
+        self.microphone.setReady(ready)
+        self.camera.setReady(ready)
+    }
+
+    private func sendHangup(callId: String) {
+        let api = self.api
+        let deviceId = self.deviceId
+        let logName = self.logName
+        Task {
+            await relayLogFailure("\(logName): hangup") {
+                try await api.hangup(callId: callId, deviceId: deviceId)
             }
         }
-        self.evaluate()
+    }
+
+    /// Names the call in log lines.
+    private var logName: String {
+        return "direct call \(self.callId ?? "(ringing \(self.peerUserId))")"
     }
 
     private func refreshFromServer() async {
@@ -707,11 +750,7 @@ public final class RelayDirectCall {
             self.mediaTimer = nil
             self.terminate(.failed(wait == .connecting ? "The call could not connect." : "The connection was lost."))
             if let callId = self.callId {
-                let api = self.api
-                let deviceId = self.deviceId
-                Task {
-                    try? await api.hangup(callId: callId, deviceId: deviceId)
-                }
+                self.sendHangup(callId: callId)
             }
         }
         self.mediaTimer = (wait, timer)
@@ -729,6 +768,11 @@ public final class RelayDirectCall {
         }
         if let local = snapshot.local {
             self.isScreenSharing = local.isScreenSharing
+        }
+        self.updatePublishing()
+        if previous.connectionState == .reconnecting && snapshot.connectionState == .connected {
+            self.microphone.retry(reason: "reconnected")
+            self.camera.retry(reason: "reconnected")
         }
         let before = self.state
         self.evaluate()
@@ -758,10 +802,11 @@ public final class RelayDirectCall {
             case .duplicateIdentity:
                 self.terminate(.answeredElsewhere)
             case let .failed(message):
+                RelayCallsLog.log("\(self.logName): media disconnected: \(message)")
                 self.terminate(.failed(message))
             }
             if let callId = self.callId {
-                try? await self.api.hangup(callId: callId, deviceId: self.deviceId)
+                self.sendHangup(callId: callId)
             }
         }
     }
@@ -786,11 +831,7 @@ public final class RelayDirectCall {
         self.terminate(.missed)
         if self.isOutgoing, let callId = self.callId {
             // The plugin's sweeper normally ended it as missed already.
-            let deviceId = self.deviceId
-            let api = self.api
-            Task {
-                try? await api.hangup(callId: callId, deviceId: deviceId)
-            }
+            self.sendHangup(callId: callId)
         }
     }
 
@@ -804,6 +845,8 @@ public final class RelayDirectCall {
         self.mediaTimer = nil
         let elapsed = self.activeSince.map { self.scheduler.now().timeIntervalSince($0) }
         self.state = .terminated(reason, duration: duration ?? elapsed)
+        self.microphone.stop()
+        self.camera.stop()
         if self.mediaRequested {
             let engine = self.engine
             Task {

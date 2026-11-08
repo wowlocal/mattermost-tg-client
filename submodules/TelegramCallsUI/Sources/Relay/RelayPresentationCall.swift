@@ -50,6 +50,10 @@ final class RelayPresentationCall: PresentationCall, PresentationCallVideoProvid
 
     /// The manager continues an answered group ring as a group call.
     var answerGroupRing: ((RelayPresentationCall) -> Void)?
+    /// Telegram's microphone (and, with `true`, camera) permission prompts; asked before answering, as
+    /// `PresentationCallImpl.answer` does.
+    private let authorizeAccess: (Bool) -> Signal<Bool, NoError>
+    private var isAnswering = false
 
     private var audioContext: SharedCallAudioContext?
     private let audioContextDisposables = DisposableSet()
@@ -100,8 +104,9 @@ final class RelayPresentationCall: PresentationCall, PresentationCallVideoProvid
     let pendingInviteToConferencePeerIds: [(id: EnginePeer.Id, isVideo: Bool)] = []
 
     @MainActor
-    init(context: AccountContext, relayAccount: MattermostRelayCallsAccount, kind: Kind, engine: RelayRoomEngine, internalId: CallSessionInternalId, peerId: EnginePeer.Id, peer: EnginePeer?, isOutgoing: Bool, isVideo: Bool, audioSession: ManagedAudioSession, callKitIntegration: CallKitIntegration?) {
+    init(context: AccountContext, relayAccount: MattermostRelayCallsAccount, kind: Kind, engine: RelayRoomEngine, internalId: CallSessionInternalId, peerId: EnginePeer.Id, peer: EnginePeer?, isOutgoing: Bool, isVideo: Bool, audioSession: ManagedAudioSession, callKitIntegration: CallKitIntegration?, authorizeAccess: @escaping (Bool) -> Signal<Bool, NoError>) {
         self.context = context
+        self.authorizeAccess = authorizeAccess
         self.relayAccount = relayAccount
         self.kind = kind
         self.engine = engine
@@ -156,10 +161,15 @@ final class RelayPresentationCall: PresentationCall, PresentationCallVideoProvid
 
     // MARK: Audio
 
+    /// Before CallKit activates the session: outgoing in `start()` (inside CallKit's start action), incoming when
+    /// answering (inside CallKit's answer action).
     @MainActor
     private func ensureAudioContext() {
         if self.audioContext != nil {
             return
+        }
+        if self.callKitIntegration != nil {
+            RelayCallAudio.prepareSessionForCallKit()
         }
         let audioContext = SharedCallAudioContext.get(audioSession: self.audioSession, callKitIntegration: self.callKitIntegration, defaultToSpeaker: self.isVideo, reuseCurrent: false, createsAudioDevice: false)
         self.audioContext = audioContext
@@ -169,11 +179,33 @@ final class RelayPresentationCall: PresentationCall, PresentationCallVideoProvid
             guard let self else {
                 return
             }
+            relayLog("call \(self.internalId.uuidString): audio session \(isActive ? "active" : "inactive")\(self.callKitIntegration != nil ? " (CallKit)" : "")")
             if !self.didTerminate {
-                RelayCallAudio.setEngineAvailable(isActive)
+                RelayCallAudio.setEngineAvailable(isActive, completion: { [weak self] availability in
+                    self?.engineAvailabilityChanged(availability)
+                })
             }
             self.tonePlayer.setAudioSessionActive(isActive)
         }))
+    }
+
+    /// LiveKit's engine may record now: a microphone that could not publish before (CallKit had not activated the
+    /// session yet) publishes.
+    @MainActor
+    private func engineAvailabilityChanged(_ availability: RelayCallAudio.EngineAvailability) {
+        guard availability.isAvailable, !self.didTerminate, !self.isHandedOver else {
+            return
+        }
+        if availability.changedCategory, let callKitIntegration = self.callKitIntegration, let audioContext = self.audioContext {
+            // A category change on the active session resets the output (the loudspeaker of a video call).
+            callKitIntegration.applyVoiceChatOutputMode(outputMode: .custom(audioContext.currentAudioOutputValue))
+        }
+        switch self.kind {
+        case let .direct(call):
+            call.audioBecameAvailable()
+        case let .groupRing(call):
+            call.audioBecameAvailable()
+        }
     }
 
     // MARK: State
@@ -450,19 +482,60 @@ final class RelayPresentationCall: PresentationCall, PresentationCallVideoProvid
             }
             switch self.kind {
             case let .direct(call):
-                guard call.state == .ringing else {
+                guard call.state == .ringing, !self.isAnswering else {
                     return
                 }
-                self.wasAnswered = true
+                // The call's category before CallKit activates the session (it does once the answer is fulfilled).
                 self.ensureAudioContext()
-                call.accept()
-                if self.isVideo {
-                    self.startCamera(capturer: nil)
-                }
+                self.answerAfterAccess(isVideo: self.isVideo, { [weak self] in
+                    guard let self, call.state == .ringing else {
+                        return
+                    }
+                    self.wasAnswered = true
+                    call.accept()
+                    if self.isVideo {
+                        self.startCamera(capturer: nil)
+                    }
+                })
             case .groupRing:
-                self.answerGroupRing?(self)
+                guard !self.isAnswering else {
+                    return
+                }
+                if self.callKitIntegration != nil {
+                    // The group call's own audio context comes after the hand over; the category is needed now.
+                    RelayCallAudio.prepareSessionForCallKit()
+                }
+                self.answerAfterAccess(isVideo: false, { [weak self] in
+                    guard let self else {
+                        return
+                    }
+                    self.answerGroupRing?(self)
+                })
             }
         }
+    }
+
+    /// As Telegram's `PresentationCallImpl.answer`: the microphone (and, for video, the camera) permission first;
+    /// declines when it is refused. Without it LiveKit cannot record (it may not prompt from the lock screen).
+    @MainActor
+    private func answerAfterAccess(isVideo: Bool, _ answer: @escaping @MainActor () -> Void) {
+        self.isAnswering = true
+        let _ = (self.authorizeAccess(isVideo)
+        |> take(1)
+        |> deliverOnMainQueue).start(next: { [weak self] granted in
+            relayOnMain {
+                guard let self, !self.didTerminate else {
+                    return
+                }
+                self.isAnswering = false
+                if granted {
+                    answer()
+                } else {
+                    relayLog("call \(self.relayCallId ?? self.internalId.uuidString): no microphone\(isVideo ? " or camera" : "") permission, declining")
+                    let _ = self.hangUp()
+                }
+            }
+        })
     }
 
     func hangUp() -> Signal<Bool, NoError> {

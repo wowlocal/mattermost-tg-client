@@ -17,6 +17,13 @@ import RelayCalls
 // threading, stable ids, Telegram's call tones without tgcalls, Telegram's camera capturer feeding LiveKit, and
 // LiveKit video tracks as Telegram's `VideoFrameData`.
 
+/// Relay call diagnostics: Telegram's log and `NSLog`, so that a device's syslog shows them too
+/// (`idevicesyslog | grep RelayCalls`). The shared core's lines (`RelayCallsLog`) come here as well.
+func relayLog(_ message: String) {
+    Logger.shared.log("RelayCalls", message)
+    NSLog("RelayCalls: %@", message)
+}
+
 /// Runs `body` on the main actor: now when already on the main thread (Telegram's call UI, CallKit's delegate queue),
 /// else on the next main queue turn.
 func relayOnMain(_ body: @escaping @MainActor () -> Void) {
@@ -721,7 +728,19 @@ func relayPresentationCallVideoView(_ view: OngoingCallContextPresentationCallVi
 
 /// LiveKit's audio engine under Telegram's audio session handling (`SharedCallAudioContext`, CallKit): the engine runs
 /// only while the call's session is active (`RelayCallKitAudio`, the LiveKit SDK's CallKit integration).
+///
+/// Under CallKit nothing in Telegram sets the call's category (tgcalls' audio device did, which Relay calls do not
+/// create), and LiveKit's automatic configuration is off: so `prepareSessionForCallKit()` sets `.playAndRecord` before
+/// CallKit activates the session, and `setEngineAvailable(true)` checks it again before the engine may start.
+/// Without that the microphone never published on a device ("Audio session category does not support recording").
 enum RelayCallAudio {
+    struct EngineAvailability {
+        /// LiveKit's engine may run now.
+        var isAvailable: Bool
+        /// The session's category had to be set while CallKit had it active (the output route may need re-applying).
+        var changedCategory: Bool
+    }
+
     private static var isPrepared = false
     /// Debug builds launched with `RELAY_DEBUG_CALLS_NO_AUDIO_DEVICE=1`: calls run without an audio device (no tones, no
     /// playback, a silent microphone). For simulator tests on a Mac whose audio device does not start, where every call
@@ -734,34 +753,104 @@ enum RelayCallAudio {
             return
         }
         self.isPrepared = true
+        self.installLogging()
         do {
             try RelayCallKitAudio.prepare()
             #if DEBUG
             if ProcessInfo.processInfo.environment["RELAY_DEBUG_CALLS_NO_AUDIO_DEVICE"] == "1" {
                 try RelayCallKitAudio.disableAudioDevice()
                 self.isAudioDeviceDisabled = true
-                Logger.shared.log("RelayCalls", "audio: no audio device (RELAY_DEBUG_CALLS_NO_AUDIO_DEVICE)")
+                relayLog("audio: no audio device (RELAY_DEBUG_CALLS_NO_AUDIO_DEVICE)")
             }
             #endif
         } catch {
-            Logger.shared.log("RelayCalls", "audio: prepare failed: \(error)")
+            relayLog("audio: prepare failed: \(error)")
+        }
+    }
+
+    /// The shared core's diagnostics go to `relayLog` (also before a call: a VoIP push can come first).
+    static func installLogging() {
+        RelayCallsLog.handler = { message in
+            relayLog(message)
+        }
+    }
+
+    /// A CallKit call is about to start or be answered: gives the session the call's category now, before CallKit
+    /// activates it (CallKit activates the category the app configured; Telegram's own calls get it from tgcalls'
+    /// `OngoingCallContext.setupAudioSession()`). The session is inactive here, so this is quick.
+    static func prepareSessionForCallKit() {
+        self.prepare()
+        if self.isAudioDeviceDisabled {
+            return
+        }
+        let session = AVAudioSession.sharedInstance()
+        let previous = session.category
+        do {
+            if try RelayCallKitAudio.ensureCallCategory(session) {
+                relayLog("audio: call category set before CallKit activation (was \(previous.rawValue))")
+            }
+        } catch {
+            relayLog("audio: setting the call category failed: \(error)")
         }
     }
 
     /// Off the main thread, in order: starting or stopping LiveKit's engine waits on the audio server.
     private static let queue = DispatchQueue(label: "org.relaychat.Relay.callAudio", qos: .userInitiated)
+    /// The latest request, on `queue`: retries of an older one stop.
+    private static var generation = 0
+    private static let maxAttempts = 3
 
-    static func setEngineAvailable(_ value: Bool) {
+    /// The engine may run (the call's session is active) or not. `completion` runs on the main thread once applied: the
+    /// call then retries a microphone that could not publish before (`audioBecameAvailable()`).
+    static func setEngineAvailable(_ value: Bool, completion: (@MainActor (EngineAvailability) -> Void)? = nil) {
         self.prepare()
         self.queue.async {
-            do {
-                if value {
-                    try RelayCallKitAudio.didActivate(AVAudioSession.sharedInstance())
-                } else {
-                    try RelayCallKitAudio.didDeactivate(AVAudioSession.sharedInstance())
+            self.generation += 1
+            self.applyEngineAvailability(value, generation: self.generation, attempt: 1, changedCategory: false, completion: completion)
+        }
+    }
+
+    /// On `queue`.
+    private static func applyEngineAvailability(_ value: Bool, generation: Int, attempt: Int, changedCategory: Bool, completion: (@MainActor (EngineAvailability) -> Void)?) {
+        guard generation == self.generation else {
+            return
+        }
+        let session = AVAudioSession.sharedInstance()
+        var changedCategory = changedCategory
+        do {
+            if value {
+                if !self.isAudioDeviceDisabled {
+                    let previous = session.category
+                    if try RelayCallKitAudio.ensureCallCategory(session) {
+                        changedCategory = true
+                        relayLog("audio: call category set on the active session (was \(previous.rawValue))")
+                    }
                 }
-            } catch {
-                Logger.shared.log("RelayCalls", "audio: engine availability \(value) failed: \(error)")
+                try RelayCallKitAudio.didActivate(session)
+            } else {
+                try RelayCallKitAudio.didDeactivate(session)
+            }
+            relayLog("audio: engine \(value ? "available" : "unavailable") (\(RelayCallKitAudio.diagnostics))")
+            if let completion {
+                let result = EngineAvailability(isAvailable: value, changedCategory: changedCategory)
+                relayOnMain {
+                    completion(result)
+                }
+            }
+        } catch {
+            relayLog("audio: engine availability \(value) failed (attempt \(attempt)): \(error) (\(RelayCallKitAudio.diagnostics))")
+            if value && attempt < self.maxAttempts {
+                // A start that failed (category, permission) leaves the engine off: make it unavailable, then try again.
+                try? RelayCallKitAudio.didDeactivate(session)
+                self.queue.asyncAfter(deadline: .now() + 0.5 * Double(attempt)) {
+                    self.applyEngineAvailability(value, generation: generation, attempt: attempt + 1, changedCategory: changedCategory, completion: completion)
+                }
+            } else if let completion {
+                // The call still tries (and logs) the microphone itself.
+                let result = EngineAvailability(isAvailable: value, changedCategory: changedCategory)
+                relayOnMain {
+                    completion(result)
+                }
             }
         }
     }

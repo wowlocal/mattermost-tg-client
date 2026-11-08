@@ -258,7 +258,7 @@ public final class RelayCallManager: PresentationCallManager {
             }
             self.startingIncomingCallIds.remove(callId)
             guard let peerId else {
-                Logger.shared.log("RelayCalls", "incoming \(callId): no chat for channel \(channelId)")
+                relayLog("incoming \(callId): no chat for channel \(channelId)")
                 if !reportToCallKit {
                     self.callKitIntegration?.dropCall(uuid: uuid)
                 }
@@ -306,7 +306,7 @@ public final class RelayCallManager: PresentationCallManager {
                 let handle = kind == .direct ? "\(peerId.id._internalGetInt64Value())" : channelId
                 callKitIntegration.reportIncomingRelayCall(uuid: uuid, handle: handle, isVideo: isVideo, displayTitle: title, completion: nil)
             }
-            let call = RelayPresentationCall(context: context, relayAccount: relayAccount, kind: callKind, engine: engine, internalId: uuid, peerId: peerId, peer: peer, isOutgoing: false, isVideo: isVideo, audioSession: self.audioSession, callKitIntegration: self.callKitIntegration)
+            let call = RelayPresentationCall(context: context, relayAccount: relayAccount, kind: callKind, engine: engine, internalId: uuid, peerId: peerId, peer: peer, isOutgoing: false, isVideo: isVideo, audioSession: self.audioSession, callKitIntegration: self.callKitIntegration, authorizeAccess: self.callAccessAuthorization())
             call.answerGroupRing = { [weak self] call in
                 relayOnMain {
                     self?.answerGroupRing(call)
@@ -344,6 +344,7 @@ public final class RelayCallManager: PresentationCallManager {
         guard let push = RelayCallPush(payload: payload) else {
             return false
         }
+        RelayCallAudio.installLogging()
         RelayCallKitBridge.install()
         let isKnownEnded = RelayCallKitBridge.isEnded(callId: push.callId)
         let uuid = isKnownEnded ? UUID() : RelayCallIds.callKitUUID(callId: push.callId)
@@ -352,11 +353,11 @@ public final class RelayCallManager: PresentationCallManager {
         if let accountId = MattermostSync.relayCallAccountId(push: push), let peerId = MattermostSync.relayCallPeerId(accountId: accountId, userId: push.callerId) {
             handle = "\(peerId.id._internalGetInt64Value())"
         }
-        Logger.shared.log("RelayCalls", "VoIP push for call \(push.callId)\(isKnownEnded ? " (already over)" : "")")
+        relayLog("VoIP push for call \(push.callId)\(isKnownEnded ? " (already over)" : "")")
         if let callKitIntegration = CallKitIntegration.shared {
             callKitIntegration.reportIncomingRelayCall(uuid: uuid, handle: handle, isVideo: push.video, displayTitle: title, completion: { error in
                 if let error {
-                    Logger.shared.log("RelayCalls", "CallKit refused the pushed ring \(push.callId): \(error)")
+                    relayLog("CallKit refused the pushed ring \(push.callId): \(error)")
                 }
                 if isKnownEnded {
                     callKitIntegration.reportCallEnded(uuid: uuid, reason: .remoteEnded)
@@ -575,6 +576,16 @@ public final class RelayCallManager: PresentationCallManager {
         return nil
     }
 
+    /// `authorizeAccess(isVideo:)` for a call to ask before it answers.
+    private func callAccessAuthorization() -> (Bool) -> Signal<Bool, NoError> {
+        return { [weak self] isVideo in
+            guard let self else {
+                return .single(false)
+            }
+            return self.authorizeAccess(isVideo: isVideo)
+        }
+    }
+
     /// Telegram's microphone (and camera, for video) permission prompts before a call.
     private func authorizeAccess(isVideo: Bool) -> Signal<Bool, NoError> {
         let (presentationData, present, openSettings) = self.getDeviceAccessData()
@@ -685,7 +696,7 @@ public final class RelayCallManager: PresentationCallManager {
                 let peer = await context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId)).get()
                 let engine = RelayRoomEngine(options: RelayRoomEngine.Options(usesExternalCamera: true))
                 let direct = RelayDirectCall.outgoing(api: relayAccount.client, engine: engine, ownUserId: relayAccount.ownUserId, deviceId: relayAccount.deviceId, channelId: channel.channelId, peerUserId: peerUserId, video: isVideo)
-                let call = RelayPresentationCall(context: context, relayAccount: relayAccount, kind: .direct(direct), engine: engine, internalId: uuid, peerId: peerId, peer: peer, isOutgoing: true, isVideo: isVideo, audioSession: self.audioSession, callKitIntegration: self.callKitIntegration)
+                let call = RelayPresentationCall(context: context, relayAccount: relayAccount, kind: .direct(direct), engine: engine, internalId: uuid, peerId: peerId, peer: peer, isOutgoing: true, isVideo: isVideo, audioSession: self.audioSession, callKitIntegration: self.callKitIntegration, authorizeAccess: self.callAccessAuthorization())
                 self.setCurrentCall(call)
                 call.start()
                 subscriber.putNext(true)

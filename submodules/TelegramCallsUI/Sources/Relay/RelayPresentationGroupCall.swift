@@ -136,6 +136,10 @@ final class RelayPresentationGroupCall: PresentationGroupCall, PresentationGroup
         if self.audioContext != nil {
             return
         }
+        if self.callKitIntegration != nil {
+            // An answered group ring: the call's category before (or as soon as possible after) CallKit activates.
+            RelayCallAudio.prepareSessionForCallKit()
+        }
         let audioContext = SharedCallAudioContext.get(audioSession: self.audioSession, callKitIntegration: self.callKitIntegration, defaultToSpeaker: true, reuseCurrent: false, createsAudioDevice: false)
         self.audioContext = audioContext
         self.audioOutputStatePromise.set(audioContext.audioOutputState)
@@ -144,11 +148,29 @@ final class RelayPresentationGroupCall: PresentationGroupCall, PresentationGroup
             guard let self else {
                 return
             }
+            relayLog("group call \(self.internalId.uuidString): audio session \(isActive ? "active" : "inactive")\(self.callKitIntegration != nil ? " (CallKit)" : "")")
             if !self.didEnd {
-                RelayCallAudio.setEngineAvailable(isActive)
+                RelayCallAudio.setEngineAvailable(isActive, completion: { [weak self] availability in
+                    self?.engineAvailabilityChanged(availability)
+                })
             }
             self.tonePlayer.setAudioSessionActive(isActive)
         }))
+    }
+
+    /// LiveKit's engine may record now: a microphone that could not publish before publishes.
+    @MainActor
+    private func engineAvailabilityChanged(_ availability: RelayCallAudio.EngineAvailability) {
+        guard availability.isAvailable, !self.didEnd else {
+            return
+        }
+        if availability.changedCategory, let audioContext = self.audioContext {
+            // A category change on the active session resets the output (the loudspeaker).
+            if let callKitIntegration = self.callKitIntegration {
+                callKitIntegration.applyVoiceChatOutputMode(outputMode: .custom(audioContext.currentAudioOutputValue))
+            }
+        }
+        self.controller.audioBecameAvailable()
     }
 
     // MARK: State

@@ -82,6 +82,12 @@ final class FakeEngine: RelayMediaEngine {
     private(set) var microphone: Bool?
     private(set) var camera: Bool?
     private(set) var screenShare: Bool?
+    /// Thrown by `setMicrophone` / `setCamera` (nothing changes) while set, like LiveKit before CallKit activated the
+    /// audio session.
+    var microphoneError: Error?
+    var cameraError: Error?
+    private(set) var microphoneRequests: [Bool] = []
+    private(set) var cameraRequests: [Bool] = []
     let localIdentity: String
 
     init(localIdentity: String) {
@@ -105,11 +111,19 @@ final class FakeEngine: RelayMediaEngine {
     }
 
     func setMicrophone(enabled: Bool) async throws {
+        self.microphoneRequests.append(enabled)
+        if let microphoneError {
+            throw microphoneError
+        }
         self.microphone = enabled
         self.updateLocal { $0.microphone = RelayMediaTrack(sid: "TR_mic", isMuted: !enabled) }
     }
 
     func setCamera(enabled: Bool) async throws {
+        self.cameraRequests.append(enabled)
+        if let cameraError {
+            throw cameraError
+        }
         self.camera = enabled
         self.updateLocal { $0.camera = enabled ? RelayMediaTrack(sid: "TR_cam") : nil }
     }
@@ -210,6 +224,41 @@ func waitUntil(_ description: String = "condition", timeout: TimeInterval = 2, f
 func settle() async {
     for _ in 0 ..< 20 {
         try? await Task.sleep(nanoseconds: 1_000_000)
+    }
+}
+
+struct FakeMediaError: Error, CustomStringConvertible {
+    var description: String
+
+    init(_ description: String = "Audio session category does not support recording") {
+        self.description = description
+    }
+}
+
+/// Collects `RelayCallsLog` lines during a test.
+final class LogCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _lines: [String] = []
+
+    var lines: [String] {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self._lines
+    }
+
+    func install() {
+        RelayCallsLog.handler = { [weak self] line in
+            guard let self else {
+                return
+            }
+            self.lock.lock()
+            self._lines.append(line)
+            self.lock.unlock()
+        }
+    }
+
+    func uninstall() {
+        RelayCallsLog.handler = nil
     }
 }
 

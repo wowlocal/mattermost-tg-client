@@ -2,6 +2,7 @@
 import AVFoundation
 import Foundation
 import LiveKit
+import RelayCallsCore
 
 /// LiveKit's audio under CallKit (the SDK README's "Integration with CallKit"): the app (Telegram's
 /// `ManagedAudioSession`) owns the `AVAudioSession`, and LiveKit's audio engine runs only between CallKit's
@@ -21,9 +22,50 @@ public enum RelayCallKitAudio {
     /// (`.playAndRecord`, `.voiceChat`); leave it off when the app configures the session itself.
     public static func didActivate(_ session: AVAudioSession, configureSession: Bool = false) throws {
         if configureSession {
-            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetoothHFP, .allowBluetoothA2DP])
+            try session.setCategory(.playAndRecord, mode: .voiceChat, options: self.callCategoryOptions)
         }
         try AudioManager.shared.setEngineAvailability(.default)
+    }
+
+    /// The options of Telegram's `.voiceCall` session (`ManagedAudioSession`).
+    public static let callCategoryOptions: AVAudioSession.CategoryOptions = [.allowBluetoothHFP, .allowBluetoothA2DP, .mixWithOthers]
+
+    /// With automatic configuration off nothing else gives the session a category that records: under CallKit
+    /// Telegram's `ManagedAudioSession` never sets up a call's session (tgcalls' audio device did), so CallKit activates
+    /// it in whatever category the app had (`.soloAmbient`, or `.playback` after media), and LiveKit's engine cannot
+    /// start the microphone ("Audio session category does not support recording"). Sets `.playAndRecord` /
+    /// `.voiceChat` unless the session already plays and records. Best before CallKit activates the session (a
+    /// category change on an active session can reset the output route). Returns whether it changed the category.
+    @discardableResult
+    public static func ensureCallCategory(_ session: AVAudioSession = .sharedInstance()) throws -> Bool {
+        if session.category == .playAndRecord {
+            return false
+        }
+        try session.setCategory(.playAndRecord, mode: .voiceChat, options: self.callCategoryOptions)
+        return true
+    }
+
+    /// The audio state behind a microphone that does not publish, for logs. Waits on WebRTC's worker thread: not on
+    /// the main thread.
+    public static var diagnostics: String {
+        let session = AVAudioSession.sharedInstance()
+        let availability = AudioManager.shared.engineAvailability
+        let permission: String
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            permission = "granted"
+        case .denied:
+            permission = "denied"
+        case .restricted:
+            permission = "restricted"
+        case .notDetermined:
+            permission = "undetermined"
+        @unknown default:
+            permission = "unknown"
+        }
+        let inputs = session.currentRoute.inputs.map { $0.portType.rawValue }.joined(separator: ",")
+        let outputs = session.currentRoute.outputs.map { $0.portType.rawValue }.joined(separator: ",")
+        return "category=\(session.category.rawValue) mode=\(session.mode.rawValue) options=\(session.categoryOptions.rawValue) engineInput=\(availability.isInputAvailable) engineOutput=\(availability.isOutputAvailable) engineRunning=\(AudioManager.shared.isEngineRunning) microphonePermission=\(permission) inputs=[\(inputs)] outputs=[\(outputs)]"
     }
 
     /// `CXProviderDelegate.provider(_:didDeactivate:)`.

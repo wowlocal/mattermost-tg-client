@@ -146,9 +146,10 @@ push instead (not when the server sends id-only push contents). Relay maps it to
 
 ## Shared client core (`submodules/RelayCalls`)
 
-Implemented (phase 1). `swift test` in `submodules/RelayCalls` runs the core suite (86 tests: client, events,
-every direct-call transition, group merging and flows, over fakes); Bazel has the same suite as the host test
-`//submodules/RelayCalls:RelayCallsCoreTests`. Everything below is `public`.
+Implemented (phase 1). `swift test` in `submodules/RelayCalls` runs the core suite (101 tests: client, events,
+every direct-call transition, group merging and flows, microphone and camera publishing failures, over fakes); use
+Xcode's toolchain (`xcrun swift test`) when another `swift` comes first in `PATH`. Bazel has the same suite as the host
+test `//submodules/RelayCalls:RelayCallsCoreTests`. Everything below is `public`.
 
 ### `RelayCallsCore` (Foundation only, iOS 15 / macOS 13)
 
@@ -204,7 +205,7 @@ joinedAt, userId, isMicrophoneEnabled, isCameraEnabled, isScreenSharing}`. Timer
 - Act: `start()` (outgoing: rings and connects the media right away; incoming: reports `received`, starts the local
   ring expiry), `accept()`, `decline(reason:)`, `hangup()` (declines an unanswered incoming ring, cancels an
   unanswered outgoing one, ends an answered call for both), `setMuted(_:)`, `setCameraEnabled(_:)` (either side, any
-  time; a `video` call starts with the camera on), `setScreenShare(enabled:)`, `handle(_ event: RelayCallsEvent)`
+  time; a `video` call starts with the camera on), `audioBecameAvailable()`, `setScreenShare(enabled:)`, `handle(_ event: RelayCallsEvent)`
   (feed every event of the account; other calls' events are ignored).
 - Observe: `state`, `snapshot: Snapshot {state, call, callId, channelId, peerUserId, isOutgoing, isVideo, isMuted,
   isCameraEnabled, isScreenSharing, mediaState, local, remote}`, `observe(_:) -> RelayCancellable`.
@@ -230,7 +231,7 @@ joinedAt, userId, isMicrophoneEnabled, isCameraEnabled, isScreenSharing}`. Timer
   `.incoming(api:engine:ownUserId:deviceId:call:)` / `.incoming(…push:)` (a group ring for this user).
 - Act: `start()`, `accept()` (a ring that stopped meanwhile joins the running call), `decline(reason:)`, `leave()`,
   `endForEveryone() async throws` (`snapshot.canEnd`), `setMuted(_:)`, `setCameraEnabled(_:)`,
-  `setScreenShare(enabled:)`, `handle(_:)`.
+  `audioBecameAvailable()`, `setScreenShare(enabled:)`, `handle(_:)`.
 - `State`: `.ringing` (incoming ring), `.connecting`, `.connected`, `.reconnecting`, `.ended(EndReason)` with
   `.left`, `.ended`, `.declined`, `.missed`, `.answeredElsewhere`, `.removed`, `.failed(String)`.
 - `snapshot: Snapshot {state, call, callId, channelId, kind, participants, invitees, isMuted, isCameraEnabled,
@@ -242,6 +243,20 @@ joinedAt, userId, isMicrophoneEnabled, isCameraEnabled, isScreenSharing}`. Timer
 
 Threading: controllers and the engine are main-actor objects; feed events from `MattermostSync.relayCallEvents`
 observed on the main queue.
+
+Microphone and camera (both controllers): `isMuted` and `isCameraEnabled` are the user's choice, never the result of a
+publish. While the room is up the controller applies them through the engine, one request at a time; a failure is
+logged and retried after 0.5, 1, 2, 4, 8, 8, 8, 8 s (microphone; then it waits) or 1, 2, 4 s (camera; then the camera
+turns off, as before), and again right away on `setMuted`/`setCameraEnabled`, after a reconnect, and on
+`audioBecameAvailable()` (microphone): the adapter calls it when the platform's audio engine may record (iOS: after
+CallKit activated the session and LiveKit's engine became available). A failed microphone publish used to show the
+call muted and was never retried, so on a device (CallKit not active yet, a session that does not record) the
+microphone never published.
+
+`RelayCallsLog.handler: ((String) -> Void)?` receives the core's diagnostics (any thread): every microphone/camera
+request and its outcome (`direct call <id>: microphone on failed (attempt 1): …; retrying in 0.5 s`, `… microphone on
+succeeded after 1 failed attempt(s)`), media connects and disconnects, and plugin requests that failed (hangup,
+decline, received). Nothing is logged until an adapter installs it.
 
 ### `RelayCalls` (LiveKit 2.19)
 
@@ -265,7 +280,11 @@ observed on the main queue.
   set `isVisible` and `viewSize` on the main actor.
 - iOS `RelayCallKitAudio`: `prepare()` once before any room connects (turns off LiveKit's automatic `AVAudioSession`
   configuration, engine availability `.none`), `didActivate(_:configureSession:)` / `didDeactivate(_:)` from the
-  `CXProviderDelegate`, `activateWithoutCallKit()`, `isEngineAvailable`, `setSpeakerOutputPreferred(_:)`.
+  `CXProviderDelegate`, `activateWithoutCallKit()`, `isEngineAvailable`, `setSpeakerOutputPreferred(_:)`,
+  `ensureCallCategory(_:)` (`.playAndRecord`/`.voiceChat` with Telegram's call options unless the session already
+  plays and records; returns whether it changed it), `diagnostics` (category, mode, engine availability, engine
+  running, microphone permission, route; not on the main thread). `RelayRoomEngine` logs `diagnostics` when
+  `setMicrophone` fails.
 
 The first pass's `RelayCallSession`/`RelayCallView` are removed (Telegram's own screens show the calls).
 
@@ -342,6 +361,21 @@ setup, the tones and `SharedCallAudioContext` without new public API):
 - Audio: `SharedCallAudioContext` without a tgcalls device (`createsAudioDevice: false`) keeps Telegram's session,
   routes, proximity and CallKit activation; LiveKit's engine is available only while that session is active
   (`RelayCallAudio`, `RelayCallKitAudio`). Tones play with `AVAudioPlayer` from `PresentationCallToneData`.
+  Under CallKit nothing in Telegram gives the session a category that records: `ManagedAudioSession` never sets up a
+  CallKit call's holder (tgcalls' audio device configured the session for Telegram's calls:
+  `OngoingCallContext.setupAudioSession()`), and LiveKit's automatic configuration is off. CallKit then activated the
+  session in the app's old category (`.soloAmbient`, `.playback` after media) and LiveKit refused the microphone
+  ("Audio session category does not support recording"): the microphone never published on a device (the simulator
+  sets the category through `ManagedAudioSession`, and its e2e runs had no audio device). So
+  `RelayCallAudio.prepareSessionForCallKit()` sets `.playAndRecord` before CallKit activates the session (outgoing:
+  inside the start action; incoming: inside the answer action), and `setEngineAvailable(true)` checks it again before
+  the engine may run (re-applying the output route when it had to change it), retries a failed availability twice,
+  then tells the call (`audioBecameAvailable()`). An incoming call asks for the microphone (and, for video, camera)
+  permission before it answers, as `PresentationCallImpl.answer` does (declines when refused): LiveKit cannot prompt
+  from the lock screen. Diagnostics (`relayLog`: Telegram's log and `NSLog`, so the device syslog has them; the core's
+  `RelayCallsLog` too) start with `RelayCalls:`: `audio: call category set …`, `call <uuid>: audio session active
+  (CallKit)`, `audio: engine available (category=AVAudioSessionCategoryPlayAndRecord …)`, `direct call <id>:
+  microphone on`.
 
 Telegram patches: `PresentationCallVideoProviding`/`PresentationGroupCallVideoProviding` (adopted by the Impl classes)
 replace the casts in `VideoChatScreen` and `CallControllerNodeV2`; `PresentationCallManager.hasActiveCalls` replaces the
@@ -354,7 +388,11 @@ on for `relayCalls` (schedule and stream items hidden; members start channel cal
 account registers the PushKit token (`MattermostSync.setVoIPPushToken`). The first pass's `.relayCall` button,
 `MattermostCalls.swift` and `RelayCallSession`/`RelayCallView` are gone.
 
-**macOS** (new `packages/RelayTelegramCalls`): `LiveKitVideoSource: VideoSource`, `RelayPresentationGroupCall:
+**macOS** (new `packages/RelayTelegramCalls`): the core's microphone/camera publishing applies there unchanged (no
+CallKit; LiveKit's engine availability stays `.default`, so `audioBecameAvailable()` is optional, e.g. after the
+microphone permission is granted). Installing `RelayCallsLog.handler` puts the core's diagnostics into the Mac log; a
+camera that fails to publish now turns off after its retries (about 7 s plus the attempts) instead of at once.
+`LiveKitVideoSource: VideoSource`, `RelayPresentationGroupCall:
 PresentationGroupCall` (macOS protocol) for `GroupCallContext`, `RelayPeerCallSession` behind a new
 `PresentationPeerCall` protocol extracted from `PCallSession` uses (call screen glue, navigation header, shared
 context hooks); incoming rings in `SharedWakeupManager` from MattermostSync events; group hooks in

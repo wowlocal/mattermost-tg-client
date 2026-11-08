@@ -114,9 +114,12 @@ public final class RelayGroupCall {
     private var started = false
     private var answered = false
     private var mediaRequested = false
+    /// `connect` returned: the room can take the local tracks.
+    private var mediaConnected = false
     private var media = RelayMediaSnapshot()
-    private var isMuted = false
-    private var isCameraEnabled: Bool
+    /// The user's microphone and camera choices, applied (and retried) while the media is up.
+    private let microphone: RelayLocalSource
+    private let camera: RelayLocalSource
     private var isScreenSharing = false
     private var ringTimer: RelayCancellable?
 
@@ -131,11 +134,29 @@ public final class RelayGroupCall {
         self.mode = mode
         self.call = call
         self.callId = call?.id
-        self.isCameraEnabled = video
+        self.microphone = RelayLocalSource(name: "microphone", wanted: true, scheduler: scheduler, retryDelays: RelayLocalSource.microphoneRetryDelays, apply: { [engine] enabled in
+            try await engine.setMicrophone(enabled: enabled)
+        })
+        // Nothing to turn off before the camera was ever published.
+        self.camera = RelayLocalSource(name: "camera", wanted: video, applied: false, scheduler: scheduler, retryDelays: RelayLocalSource.cameraRetryDelays, apply: { [engine] enabled in
+            try await engine.setCamera(enabled: enabled)
+        })
         if case .incoming = mode {
             self.state = .ringing
         } else {
             self.state = .connecting
+        }
+        self.microphone.describe = { [weak self] in
+            self?.logName ?? "group call"
+        }
+        self.camera.describe = self.microphone.describe
+        self.camera.onRetriesExhausted = { [weak self] in
+            // A camera that cannot publish shows as off (the user can turn it on again).
+            guard let self, !self.state.isEnded else {
+                return
+            }
+            self.camera.setWanted(false)
+            self.notify()
         }
         self.engine.onChange = { [weak self] snapshot in
             self?.mediaChanged(snapshot)
@@ -176,8 +197,8 @@ public final class RelayGroupCall {
             kind: self.kind,
             participants: self.participants,
             invitees: self.call?.invitees ?? [:],
-            isMuted: self.isMuted,
-            isCameraEnabled: self.isCameraEnabled,
+            isMuted: !self.microphone.wanted,
+            isCameraEnabled: self.camera.wanted,
             isScreenSharing: self.isScreenSharing,
             mediaState: self.media.connectionState,
             canEnd: self.call?.canEnd ?? false
@@ -253,8 +274,11 @@ public final class RelayGroupCall {
         if let callId = self.callId {
             let api = self.api
             let deviceId = self.deviceId
+            let logName = self.logName
             Task {
-                try? await api.decline(callId: callId, deviceId: deviceId, reason: reason)
+                await relayLogFailure("\(logName): decline") {
+                    try await api.decline(callId: callId, deviceId: deviceId, reason: reason)
+                }
             }
         }
     }
@@ -270,11 +294,7 @@ public final class RelayGroupCall {
         }
         self.end(.left)
         if let callId = self.callId {
-            let api = self.api
-            let deviceId = self.deviceId
-            Task {
-                try? await api.hangup(callId: callId, deviceId: deviceId)
-            }
+            self.sendHangup(callId: callId)
         }
     }
 
@@ -287,29 +307,26 @@ public final class RelayGroupCall {
         self.end(.ended)
     }
 
+    /// The user's microphone choice. It stays what the user chose when the microphone fails to publish: the call keeps
+    /// trying (`audioBecameAvailable()`, short retries) and logs every failure (`RelayCallsLog`).
     public func setMuted(_ muted: Bool) {
-        self.isMuted = muted
+        self.microphone.setWanted(!muted)
         self.notify()
-        if self.isMediaUp {
-            Task {
-                try? await self.engine.setMicrophone(enabled: !muted)
-            }
-        }
     }
 
-    public func setCameraEnabled(_ enabled: Bool) {
-        self.isCameraEnabled = enabled
-        self.notify()
-        if self.isMediaUp {
-            Task {
-                do {
-                    try await self.engine.setCamera(enabled: enabled)
-                } catch {
-                    self.isCameraEnabled = false
-                    self.notify()
-                }
-            }
+    /// The platform's audio engine may record now (iOS: the call's audio session became active and LiveKit's engine
+    /// available, or the microphone permission was granted): a microphone that failed to publish is tried again.
+    public func audioBecameAvailable() {
+        guard !self.state.isEnded else {
+            return
         }
+        self.microphone.retry(reason: "audio became available")
+    }
+
+    /// A camera that keeps failing to publish turns off after a few retries.
+    public func setCameraEnabled(_ enabled: Bool) {
+        self.camera.setWanted(enabled)
+        self.notify()
     }
 
     public func setScreenShare(enabled: Bool) {
@@ -322,6 +339,7 @@ public final class RelayGroupCall {
             do {
                 try await self.engine.setScreenShare(enabled: enabled)
             } catch {
+                RelayCallsLog.log("\(self.logName): screen share \(enabled ? "on" : "off") failed: \(error)")
                 self.isScreenSharing = false
                 self.notify()
             }
@@ -378,13 +396,14 @@ public final class RelayGroupCall {
             join = try await request()
         } catch {
             if !self.state.isEnded {
+                RelayCallsLog.log("\(self.logName): join failed: \(error)")
                 self.end(.failed(error.localizedDescription))
             }
             return
         }
         self.callId = join.call.id
         if self.state.isEnded {
-            try? await self.api.hangup(callId: join.call.id, deviceId: self.deviceId)
+            self.sendHangup(callId: join.call.id)
             return
         }
         self.apply(call: join.call)
@@ -396,8 +415,9 @@ public final class RelayGroupCall {
             try await self.engine.connect(url: join.url, token: join.token)
         } catch {
             if !self.state.isEnded {
+                RelayCallsLog.log("\(self.logName): media connect failed: \(error)")
                 self.end(.failed(error.localizedDescription))
-                try? await self.api.hangup(callId: join.call.id, deviceId: self.deviceId)
+                self.sendHangup(callId: join.call.id)
             }
             return
         }
@@ -405,20 +425,35 @@ public final class RelayGroupCall {
             await self.engine.disconnect()
             return
         }
-        do {
-            try await self.engine.setMicrophone(enabled: !self.isMuted)
-        } catch {
-            self.isMuted = true
-        }
-        if self.isCameraEnabled {
-            do {
-                try await self.engine.setCamera(enabled: true)
-            } catch {
-                self.isCameraEnabled = false
-            }
-        }
+        RelayCallsLog.log("\(self.logName): media connected (microphone \(self.microphone.wanted ? "on" : "off"), camera \(self.camera.wanted ? "on" : "off"))")
+        self.mediaConnected = true
+        // Publishes the microphone (and camera) now, retrying failures.
+        self.updatePublishing()
         self.evaluate()
         self.notify()
+    }
+
+    /// The local sources publish while the room is up.
+    private func updatePublishing() {
+        let ready = self.mediaConnected && !self.state.isEnded && self.isMediaUp
+        self.microphone.setReady(ready)
+        self.camera.setReady(ready)
+    }
+
+    private func sendHangup(callId: String) {
+        let api = self.api
+        let deviceId = self.deviceId
+        let logName = self.logName
+        Task {
+            await relayLogFailure("\(logName): hangup") {
+                try await api.hangup(callId: callId, deviceId: deviceId)
+            }
+        }
+    }
+
+    /// Names the call in log lines.
+    private var logName: String {
+        return "\(self.kind == .channel ? "channel" : "group") call \(self.callId ?? "(channel \(self.channelId))")"
     }
 
     private func reportReceived(fromPush: Bool) async {
@@ -438,7 +473,9 @@ public final class RelayGroupCall {
         guard !self.state.isEnded else {
             return
         }
-        try? await self.api.received(callId: callId, deviceId: self.deviceId)
+        await relayLogFailure("\(self.logName): received") {
+            try await self.api.received(callId: callId, deviceId: self.deviceId)
+        }
     }
 
     private func refreshFromServer() async {
@@ -505,9 +542,15 @@ public final class RelayGroupCall {
     }
 
     private func mediaChanged(_ snapshot: RelayMediaSnapshot) {
+        let previous = self.media
         self.media = snapshot
         guard !self.state.isEnded else {
             return
+        }
+        self.updatePublishing()
+        if previous.connectionState == .reconnecting && snapshot.connectionState == .connected {
+            self.microphone.retry(reason: "reconnected")
+            self.camera.retry(reason: "reconnected")
         }
         self.participants = Self.mergeParticipants(snapshot.participants, ownUserId: self.ownUserId)
         if let local = snapshot.local {
@@ -537,9 +580,10 @@ public final class RelayGroupCall {
             case .removed, .duplicateIdentity:
                 self.end(.removed)
             case let .failed(message):
+                RelayCallsLog.log("\(self.logName): media disconnected: \(message)")
                 self.end(.failed(message))
                 if let callId = self.callId {
-                    try? await self.api.hangup(callId: callId, deviceId: self.deviceId)
+                    self.sendHangup(callId: callId)
                 }
             }
         }
@@ -563,6 +607,8 @@ public final class RelayGroupCall {
         self.ringTimer?.cancel()
         self.ringTimer = nil
         self.state = .ended(reason)
+        self.microphone.stop()
+        self.camera.stop()
         if self.mediaRequested {
             let engine = self.engine
             Task {
