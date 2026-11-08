@@ -61,9 +61,14 @@ All routes are under `/plugins/org.relaychat.calls`, authenticated by the Matter
 ```
 
 `participants` stays the connected device count (version 1 clients read it). `participant_ids` are distinct
-connected users. `invitees` is present for `direct`/`group`. `ring_expires_at` only while ringing. `end_*` and
-`duration_ms` only when ended (`duration_ms` counts from the first answer). `can_end` is computed for the caller of
-the request.
+connected users. `invitees` is present for `direct`/`group` calls that rang (omitted when empty). `ring_expires_at`
+only while ringing. `end_*` and `duration_ms` only when ended (`duration_ms` counts from the first answer, `0`
+when nobody answered). `can_end` is computed for the caller of the request; in event payloads it is true only for
+the starter.
+
+A call is `ringing` exactly while some invitee is still `ringing`/`received`: a `group` call stays `ringing` after
+the first answers until the others answer, decline or time out, then turns `active`. When a call ends, invitees
+still ringing become `missed` (also on `cancelled`).
 
 ### Routes
 
@@ -127,14 +132,156 @@ with a short plain message for other Mattermost clients. Relay maps it to `Teleg
 
 ## Shared client core (`submodules/RelayCalls`)
 
-- `RelayCallsCore` (Foundation only): call/config models above; `RelayCallsClient` with every route;
-  `RelayCallsEvent.decode(eventName:data:)`; `RelayParticipantIdentity` (`<user id>:<device id>`).
-- `RelayCalls` (LiveKit): `RelayRoomEngine` (connect/disconnect, microphone, camera, screen share, participant
-  snapshots with speaking/audio level/track sids/connection quality, change callback, adaptive stream + dynacast,
-  H.264 preferred so remote frames decode to `CVPixelBuffer`); `RelayVideoSink` (a LiveKit `VideoRenderer` that
-  hands frames to a callback: `CVPixelBuffer` plus rotation, or I420 planes); an external-camera publisher fed with
-  pixel buffers (iOS reuses Telegram's own `OngoingCallVideoCapturer`); `RelayDirectCall` and `RelayGroupCall`
-  controllers (UI-free state machines over the client, events and the engine); CallKit audio hooks for iOS.
+Implemented (phase 1). `swift test` in `submodules/RelayCalls` runs the core suite (84 tests: client, events,
+every direct-call transition, group merging and flows, over fakes); Bazel has the same suite as the host test
+`//submodules/RelayCalls:RelayCallsCoreTests`. Everything below is `public`.
+
+### `RelayCallsCore` (Foundation only, iOS 15 / macOS 13)
+
+Models (`RelayCallModels.swift`), decoded leniently (a version 1 call is an active channel call):
+
+- `RelayCall`: `id, channelId, room, kind: RelayCallKind (.direct/.group/.channel), state: RelayCallState
+  (.ringing/.active/.ended), video, startedBy, startedAt, ringExpiresAt: Int64?, endReason: RelayCallEndReason?,
+  endAt: Int64?, durationMs: Int64?, participants, participantIds, invitees: [String: RelayInviteeState]?, postId:
+  String?, canEnd`; helpers `isRinging(for: userId)`, `isLive`, `ringExpiryDate`.
+- `RelayInviteeState` (`.ringing/.received/.accepted/.declined/.busy/.missed`, `isRinging`), `RelayCallEndReason`,
+  `RelayCallJoin {url, token, call}`, `RelayCallsConfiguration {enabled, version, maxParticipants, screenSharing,
+  camera, ringing, ringTimeoutSeconds, supportsRinging}`, `RelayCaller {id, username, displayName}`,
+  `RelayDeclineReason (.declined/.busy)`, `RelayVoIPEnvironment (.sandbox/.production)`.
+- `RelayCallPush` (the `relay_call` VoIP payload): `init?(payload: [AnyHashable: Any])` from
+  `PKPushPayload.dictionaryPayload`; `callId, channelId, callerId, callerName, video, ringExpiresAt, serverURL,
+  recipientId`.
+- `RelayParticipantIdentity(userId:deviceId:)`, `init?(_ identity: String)`, `stringValue`.
+
+`RelayCallsClient` (implements `protocol RelayCallsAPI`, which the controllers take): `init(serverURL:token:session:)`
+(fixed values, as before) or `init(serverURL:token: @escaping () -> String?, session: @escaping () -> URLSession)`
+(looked up per request; MattermostSync passes the account's token and `MattermostURLSession.current`). Routes:
+`configuration()`, `call(channelId:) -> RelayCall?`, `join(channelId:callId:deviceId:)`, `ring(channelId:video:deviceId:)`
+(a running call throws `RelayCallsError.callInProgress(RelayCall)`), `end(channelId:callId:)`, `call(id:) -> RelayCall?`
+(nil on `404`), `activeCalls() -> [RelayCall]`, `received(callId:deviceId:)`, `accept(callId:deviceId:) ->
+RelayCallJoin`, `decline(callId:deviceId:reason:)`, `hangup(callId:deviceId:)`, `registerVoIPDevice(deviceId:token:
+environment:bundleId:)` (token in hex), `unregisterVoIPDevice(deviceId:)`. Media addresses must be `wss`/`https`;
+`ws`/`http` only for `localhost`, `127.x.x.x` and `::1` (`RelayCallsClient.isAllowedMediaURL`). Errors:
+`RelayCallsError` (`.server(status, message)`, `.callInProgress`, `.invalidServer`, …; `statusCode`).
+
+Events: `RelayCallsEvent.decode(eventName:data:) -> RelayCallsEvent?` (`data` = the WebSocket event's `data` object
+as JSON; nested objects may also be JSON strings), cases `.incoming(call:caller:)`, `.callState(call:userId:deviceId:
+action: RelayCallStateAction)`, `.callUpdated(RelayCall)`, `.callEnded(RelayCall)`, and `.activeCalls([RelayCall])`
+(synthesized by MattermostSync after each (re)connect, not a WebSocket event); `event.call`,
+`RelayCallsEvent.isRelayCallsEvent(name)`.
+
+Media engine protocol (`@MainActor protocol RelayMediaEngine`): `snapshot: RelayMediaSnapshot`, `onChange:
+((RelayMediaSnapshot) -> Void)?`, `onDisconnect: ((RelayMediaDisconnectReason) -> Void)?` (`.removed`,
+`.duplicateIdentity`, `.failed(String)`; only for disconnects not asked for), `connect(url:token:)`, `disconnect()`,
+`setMicrophone(enabled:)`, `setCamera(enabled:)`, `setScreenShare(enabled:)`. `RelayMediaSnapshot {connectionState:
+RelayMediaConnectionState (.disconnected/.connecting/.connected/.reconnecting), participants (local first), local,
+remote}`; `RelayMediaParticipant {identity, name, isLocal, isSpeaking, audioLevel (0…1), connectionQuality:
+RelayConnectionQuality, microphone/camera/screenShare: RelayMediaTrack? {sid, isMuted, width, height, isLive},
+joinedAt, userId, isMicrophoneEnabled, isCameraEnabled, isScreenSharing}`. Timers go through `RelayCallScheduler`
+(default `RelaySystemScheduler.shared`); observations return a `RelayCancellable` (cancelled on `cancel()` or deinit).
+
+`@MainActor final class RelayDirectCall` (1:1, `kind: direct`):
+
+- Create: `.outgoing(api:engine:ownUserId:deviceId:channelId:peerUserId:video:scheduler:)`,
+  `.incoming(api:engine:ownUserId:deviceId:call:)` (the `incoming` event or an own ring in `.activeCalls`),
+  `.incoming(api:engine:ownUserId:deviceId:push:)` (VoIP push; `start()` first checks `GET /calls/<id>` and ends the
+  call if it no longer rings for this user). `static declineBusy(api:callId:deviceId:)` declines a ring this device
+  cannot take without a controller.
+- Act: `start()` (outgoing: rings and connects the media right away; incoming: reports `received`, starts the local
+  ring expiry), `accept()`, `decline(reason:)`, `hangup()` (declines an unanswered incoming ring, cancels an
+  unanswered outgoing one, ends an answered call for both), `setMuted(_:)`, `setCameraEnabled(_:)` (either side, any
+  time; a `video` call starts with the camera on), `setScreenShare(enabled:)`, `handle(_ event: RelayCallsEvent)`
+  (feed every event of the account; other calls' events are ignored).
+- Observe: `state`, `snapshot: Snapshot {state, call, callId, channelId, peerUserId, isOutgoing, isVideo, isMuted,
+  isCameraEnabled, isScreenSharing, mediaState, local, remote}`, `observe(_:) -> RelayCancellable`.
+- `State` mirrors Telegram's `PresentationCallState.State`: `.requesting(ringing: Bool)` (outgoing; `true` once a
+  callee device reported `received`: ringback), `.ringing` (incoming), `.connecting` (answered, the other device not
+  in the room yet), `.active(since: Date)`, `.reconnecting(since: Date)` (media reconnecting, or the other device
+  dropped out after the call was up), `.terminated(EndReason, duration: TimeInterval?)` (duration from the answer;
+  the plugin's `duration_ms` when it sent one).
+- `EndReason` and the suggested Telegram mapping (`CallSessionTerminationReason`): `.hangup` (this device; an
+  unanswered outgoing call was cancelled) and `.remoteHangup` → `.ended(.hungUp)`; `.declined` (callee declined) and
+  `.busy` → `.ended(.busy)`; `.missed` → `.ended(.missed)`; `.cancelled` (incoming: the caller hung up first) →
+  `.ended(.missed)`; `.declinedLocally` → `.ended(.hungUp)`; `.answeredElsewhere`/`.declinedElsewhere` → end the
+  CallKit call as answered/declined elsewhere (`CXCallEndedReason.answeredElsewhere`/`.declinedElsewhere`); `.ended`
+  → `.ended(.hungUp)`; `.failed(String)` → `.error(.generic)`.
+
+`@MainActor final class RelayGroupCall` (`group` and `channel` calls):
+
+- Create: `.join(api:engine:ownUserId:deviceId:channelId:callId:kind:scheduler:)` (joins the channel's call or
+  starts a channel call; `callId` from the join panel), `.ring(api:engine:ownUserId:deviceId:channelId:video:)`
+  (group message: rings the other members; joins the running call if there is one),
+  `.incoming(api:engine:ownUserId:deviceId:call:)` / `.incoming(…push:)` (a group ring for this user).
+- Act: `start()`, `accept()` (a ring that stopped meanwhile joins the running call), `decline(reason:)`, `leave()`,
+  `endForEveryone() async throws` (`snapshot.canEnd`), `setMuted(_:)`, `setCameraEnabled(_:)`,
+  `setScreenShare(enabled:)`, `handle(_:)`.
+- `State`: `.ringing` (incoming ring), `.connecting`, `.connected`, `.reconnecting`, `.ended(EndReason)` with
+  `.left`, `.ended`, `.declined`, `.missed`, `.answeredElsewhere`, `.removed`, `.failed(String)`.
+- `snapshot: Snapshot {state, call, callId, channelId, kind, participants, invitees, isMuted, isCameraEnabled,
+  isScreenSharing, mediaState, canEnd}`; `participants: [Participant]`, one per Mattermost user (Telegram keys by
+  peer): `userId, name, isSelf, devices: [RelayMediaParticipant] (this device first), isSpeaking (any device),
+  audioLevel (loudest), isMicrophoneEnabled (any), camera/screenShare: Video? {identity, track, isLocal} (a live
+  track of any device, this device first), connectionQuality (best), joinedAt (earliest)`; the own user first, then
+  by join time. `static mergeParticipants(_:ownUserId:)` is the pure merge.
+
+Threading: controllers and the engine are main-actor objects; feed events from `MattermostSync.relayCallEvents`
+observed on the main queue.
+
+### `RelayCalls` (LiveKit 2.19)
+
+- `@MainActor final class RelayRoomEngine: RelayMediaEngine`: `init(options: Options)` with `Options(usesExternalCamera:
+  cameraDimensions: CMVideoDimensions (1280×720), cameraFPS (30), usesBroadcastExtension (true))`. `room: Room`,
+  `externalCamera: RelayExternalCamera?`. Rooms use adaptive stream, dynacast, simulcast camera/screen tracks with
+  H.264 preferred (VP8 backup). Camera: `switchCamera() -> AVCaptureDevice.Position`, `setCameraPosition(_:)`,
+  `currentCameraPosition` (LiveKit's capturer; front by default on iOS). Screen: iOS `setScreenShare(enabled:)` uses
+  the ReplayKit broadcast extension (as before, never ScreenCaptureKit); macOS `setScreenShare(enabled: true)` shares
+  the main display, `screenShareSources()`, `shareScreen(source:)`, `RelayRoomEngine.displayName(of:)`. Video:
+  `videoTrack(sid:) -> VideoTrack?`, `attach(_ sink:toTrackSid:) -> Bool` (false until subscribed: retry on the next
+  `onChange`), `detach(_:fromTrackSid:)`.
+- `RelayExternalCamera` (thread-safe): `push(_ pixelBuffer: CVPixelBuffer, rotation: RelayVideoRotation,
+  timestampNs: Int64?)` or `push(_ sampleBuffer:)` from the app's capturer (NV12, BGRA or ARGB);
+  `onActiveChange: ((Bool) -> Void)?` asks the app to start/stop capturing; `isActive`. `setCamera(enabled: true)`
+  creates a `BufferCapturer` track, waits up to 5 s for the first frame (LiveKit needs its dimensions), then publishes.
+- `RelayVideoSink(onFrame: (RelayVideoFrame) -> Void)`: a LiveKit `VideoRenderer`, called on WebRTC's thread.
+  `RelayVideoFrame {buffer: .pixelBuffer(CVPixelBuffer) | .i420(RelayI420Buffer), width, height (before rotation),
+  rotation: RelayVideoRotation (.rotation0/90/180/270), timestampNs}`; `RelayI420Buffer {width, height, chromaWidth,
+  chromaHeight, strideY/U/V, withPlanes { y, u, v in … }, y/u/v: Data copies}`. No BGRA conversion. Adaptive stream:
+  set `isVisible` and `viewSize` on the main actor.
+- iOS `RelayCallKitAudio`: `prepare()` once before any room connects (turns off LiveKit's automatic `AVAudioSession`
+  configuration, engine availability `.none`), `didActivate(_:configureSession:)` / `didDeactivate(_:)` from the
+  `CXProviderDelegate`, `activateWithoutCallKit()`, `isEngineAvailable`, `setSpeakerOutputPreferred(_:)`.
+
+The first pass's `RelayCallSession`/`RelayCallView` still compile; the adapters remove them.
+
+### MattermostSync (both clients)
+
+- Events: `MattermostSync.relayCallEvents(accountId:) -> Signal<RelayCallsEvent, NoError>` (plugin events are
+  forwarded before the bootstrap guard; `.activeCalls` after every WebSocket (re)connect, version 1 plugins answer
+  `404` and are skipped). `relayLiveCalls(accountId:) -> [RelayCall]`, `relayLiveCallsSignal(accountId:)`,
+  `relayLiveCall(accountId:peerId:)`, `refreshRelayCalls(accountId:) async` (works before the bootstrap: call it
+  when a VoIP push wakes the app). The WebSocket itself still opens after the first bootstrap of a launch.
+- Join panel: channels and group messages with a live call get `CachedChannelData.activeCall = ActiveCall(id:
+  relayGroupCallId(callId:), accessHash: relayGroupCallId(callId: channelId), title: nil, isStream: false)` and the
+  peer flags `.hasVoiceChat` (`.hasActiveVoiceChat` while someone is connected); a full refresh clears ended calls.
+  `MattermostSync.relayCall(groupCallId:) -> MattermostRelayCallReference? {accountId, peerId, channelId, callId,
+  kind}` maps the id back while the call is live.
+- Call records: `custom_relay_call` posts become `.phoneCall(callId:discardReason:duration:isVideo:)` (`direct`;
+  missed/cancelled → `.missed`, declined/busy → `.busy`, hangup/ended → `.hangup`, failed → `.disconnect`; incoming
+  when the post's author, the caller, is someone else) or `.groupPhoneCall(callId:accessHash:scheduleDate: nil,
+  duration:)` (nil while running) with the same ids as `activeCall`. Mapping in MattermostSyncCore
+  `RelayCallRecord`.
+- Callable chats: DM users' `CachedUserData` has `voiceCallsAvailable`/`videoCallsAvailable` (false for bots,
+  deactivated users and Saved Messages), `callsPrivate = false`. Channels: TelegramCore
+  `MattermostFeatures.canStartRelayCall(in: TelegramChannel)` (member, not archived) replaces Telegram's
+  `hasPermission(.manageCalls)` at the `MATTERMOST:` call sites; `MattermostFeatures.relayCalls` gates the feature
+  (`calls` still means Telegram's own calls).
+- Helpers (`MattermostCalls.swift`): `relayCallsAccount(accountId:) -> MattermostRelayCallsAccount? {accountId,
+  ownUserId, ownPeerId, deviceId, serverURL, client, identity}`, `relayCallsClient(accountId:)`,
+  `relayCallsDeviceId(accountId:)` (a UUID per install and account, kept in the account's sync store),
+  `relayCallAccountId(push:)`, `relayCallChannel(accountId:peerId:) async throws -> MattermostRelayCallChannel
+  {channelId, peerId, kind, peerUserId, title}` (opens a DM when needed), `relayCallChannel(accountId:channelId:)`,
+  `relayCallPeerId(accountId:userId:)`, `relayCallPeerId(accountId:participantIdentity:)`,
+  `relayCallUserId(accountId:peerId:)`, `ensureRelayCallUsers(accountId:userIds:) async`.
 
 ## Platform adapters
 
