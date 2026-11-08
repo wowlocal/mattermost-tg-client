@@ -36,6 +36,10 @@ public enum MattermostFeatures {
     public static let contacts = telegram
     /// 1:1 and group calls, Calls tab, CallKit, PushKit.
     public static let calls = telegram
+    /// Relay's own calls (self-hosted LiveKit through the `org.relaychat.calls` plugin, docs/livekit-calls-native-ui.md)
+    /// in Telegram's call UI: DM calls ring (CallKit, VoIP pushes), group messages and channels get group calls. On
+    /// whenever the Mattermost backend is. Independent of `calls`, which stays Telegram's own (MTProto) calls.
+    public static let relayCalls = !telegram
     /// "New Channel", Channels search tab.
     public static let broadcastChannels = telegram
     /// Inline mode, attach-menu bots, mini apps, web-app menu button.
@@ -82,4 +86,20 @@ public enum MattermostFeatures {
     /// Relay's own screens that replace Telegram ones (About Relay, slim Privacy and Security).
     public static let relayScreens = !telegram
     public static let mattermostLogin = !telegram
+}
+
+public extension MattermostFeatures {
+    /// Relay calls: whether the user can start (or join) a call in a Mattermost channel or group message (a member of a
+    /// channel that is not archived; the plugin checks membership). Telegram's own entry points ask for
+    /// `hasPermission(.manageCalls)`, an admin right Mattermost channels never carry: their `MATTERMOST:` call sites
+    /// check this instead. DMs are callable through `CachedUserData.voiceCallsAvailable`.
+    static func canStartRelayCall(in channel: TelegramChannel) -> Bool {
+        guard self.relayCalls, channel.participationStatus == .member else {
+            return false
+        }
+        if let access = channel.mattermostAccess, access.contains(.archived) {
+            return false
+        }
+        return true
+    }
 }

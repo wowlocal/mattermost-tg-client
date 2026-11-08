@@ -4,10 +4,17 @@ import Postbox
 import TelegramCore
 import MattermostKit
 import MattermostSyncCore
+import RelayCallsCore
 
 /// WebSocket events → Postbox (design: "Live events and catch-up").
 extension MattermostAccountSync {
     func handleEvent(_ event: WebSocketEvent) async {
+        // Relay calls (`RelayCalls.swift`) before the bootstrap guard: a ring must reach an app that is still
+        // bootstrapping (woken by a VoIP push).
+        if RelayCallsEvent.isRelayCallsEvent(event.event) {
+            await self.handleRelayCallsEvent(event)
+            return
+        }
         guard self.state.with({ $0.isBootstrapped }) else {
             return
         }

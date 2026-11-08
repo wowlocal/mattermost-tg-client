@@ -95,6 +95,10 @@ public enum ServiceAction: Hashable, Sendable {
             return .channelMoved(actor: author, message: message)
         case "system_gm_to_channel":
             return .convertedFromGroupMessage(actor: author, message: message)
+        case RelayCallRecord.postType:
+            // A Relay call record shows as Telegram's call message (`RelayCallRecord`); one without a readable record
+            // shows the plugin's own text, not the unsupported-plugin badge.
+            return .generic(text: message)
         default:
             if type.hasPrefix("system_") {
                 return .generic(text: message)

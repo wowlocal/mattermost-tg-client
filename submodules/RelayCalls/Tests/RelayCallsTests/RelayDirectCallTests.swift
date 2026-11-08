@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import RelayCallsCore
+import RelayCallsCore
 
 @MainActor
 final class RelayDirectCallTests: XCTestCase {

@@ -20,6 +20,8 @@ let package = Package(
         .package(name: "MattermostSyncCore", path: "../MattermostSyncCore"),
         .package(name: "MattermostPush", path: "../MattermostPush"),
         .package(name: "MattermostShare", path: "../MattermostShare"),
+        // Relay calls: the plugin client, events and call models (RelayCallsCore, Foundation only).
+        .package(name: "RelayCalls", path: "../RelayCalls"),
         // The macOS app's WebP (relay-mac/submodules/libwebp), used by MattermostPlatformImage.
         .package(name: "libwebp", path: "../../../libwebp"),
     ],
@@ -34,6 +36,7 @@ let package = Package(
                 .product(name: "MattermostSyncCore", package: "MattermostSyncCore"),
                 .product(name: "MattermostPush", package: "MattermostPush"),
                 .product(name: "MattermostShare", package: "MattermostShare"),
+                .product(name: "RelayCallsCore", package: "RelayCalls"),
                 .product(name: "libwebp", package: "libwebp"),
             ],
             path: "Sources"

@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import RelayCallsCore
+import RelayCallsCore
 
 final class RelayCallsEventTests: XCTestCase {
     private let call: [String: Any] = [

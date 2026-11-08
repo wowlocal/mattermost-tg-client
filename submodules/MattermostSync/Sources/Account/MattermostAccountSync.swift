@@ -345,6 +345,10 @@ public final class MattermostAccountSync: @unchecked Sendable {
             self.isWaitingToReconnect.with { $0 = false }
             self.connectionGeneration.with { $0 += 1 }
             self.account.network.mattermostSetConnectionState(isConnected: true, isNetworkAvailable: true)
+            // Relay calls: the plugin's events are not replayed, so every (re)connect reloads the live calls.
+            self.addTask(Task { [weak self] in
+                await self?.refreshRelayCalls(reason: info.resumed ? "resumed connection" : "new connection")
+            })
             if !info.resumed {
                 self.addTask(Task { [weak self] in
                     await self?.catchUp()
@@ -562,6 +566,11 @@ public final class MattermostAccountSync: @unchecked Sendable {
                 .withUpdatedPeerStatusSettings(PeerStatusSettings())
                 // Phase 3C: Mattermost pins posts in DMs and the self-DM too (the message menu's Pin).
                 .withUpdatedCanPinMessages(true)
+                // Relay calls: active users can be called (voice and video) from their DM; bots and deactivated
+                // users cannot, nor the own user (Saved Messages).
+                .withUpdatedVoiceCallsAvailable(self.isRelayCallable(peerId: peerId, user: usersByPeerId[peerId]))
+                .withUpdatedVideoCallsAvailable(self.isRelayCallable(peerId: peerId, user: usersByPeerId[peerId]))
+                .withUpdatedCallsPrivate(false)
         })
         let changed = self.state.with { state -> (ids: Set<String>, usernames: Set<String>) in
             var changed: (ids: Set<String>, usernames: Set<String>) = ([], [])
@@ -581,6 +590,14 @@ public final class MattermostAccountSync: @unchecked Sendable {
         if users.contains(where: { $0.customStatus?.expiryDate != nil }) {
             self.scheduleCustomStatusExpiry()
         }
+    }
+
+    /// Whether a user's DM offers calls (`CachedUserData.voiceCallsAvailable`/`videoCallsAvailable`).
+    func isRelayCallable(peerId: PeerId, user: User?) -> Bool {
+        guard let user, peerId != self.ownPeerId else {
+            return false
+        }
+        return !user.isBot && !user.isDeactivated
     }
 
     func writePresences(_ statuses: [UserStatus], transaction: Transaction) {

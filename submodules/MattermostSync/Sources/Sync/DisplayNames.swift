@@ -144,10 +144,15 @@ extension MattermostAccountSync {
     /// Mattermost's clients do. Group messages and channels are pictured with members' pictures (`MattermostGroupAvatar`,
     /// `ChannelPictures.swift`; Mattermost has no picture for either).
     func channelPeer(_ channel: Channel, peerId: PeerId, access: MattermostChannelAccess) -> TelegramChannel {
+        let peer: TelegramChannel
         if channel.type == .groupMessage {
-            return PeerConverter.channel(channel, title: self.groupMessageTitle(channel), peerId: peerId, access: access, photo: MattermostGroupAvatar.photo(members: self.groupMessageAvatarMembers(channel)))
+            peer = PeerConverter.channel(channel, title: self.groupMessageTitle(channel), peerId: peerId, access: access, photo: MattermostGroupAvatar.photo(members: self.groupMessageAvatarMembers(channel)))
+        } else {
+            peer = PeerConverter.channel(channel, title: channel.displayName.isEmpty ? channel.name : channel.displayName, peerId: peerId, access: access, photo: MattermostGroupAvatar.photo(members: self.channelPictureMembers(channel)))
         }
-        return PeerConverter.channel(channel, title: channel.displayName.isEmpty ? channel.name : channel.displayName, peerId: peerId, access: access, photo: MattermostGroupAvatar.photo(members: self.channelPictureMembers(channel)))
+        // A live Relay call keeps Telegram's voice chat flags (`RelayCalls.swift`) when the channel is rewritten.
+        let callFlags = self.relayCallFlags(channelId: channel.id)
+        return callFlags.isEmpty ? peer : peer.withUpdatedFlags(peer.flags.union(callFlags))
     }
 
     /// A group message's other members as its picture shows them, in the title's order: their own picture, or the

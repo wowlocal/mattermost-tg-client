@@ -18,6 +18,8 @@ swift_library(
         "//submodules/MattermostPush:MattermostPush",
         # Phase 3F: the share extension's posting (accounts, chats, planning, upload).
         "//submodules/MattermostShare:MattermostShare",
+        # Relay calls (docs/livekit-calls-native-ui.md): plugin client, events and models; Foundation only.
+        "//submodules/RelayCalls:RelayCallsCore",
         "//submodules/WebPBinding:WebPBinding",
         # Phase 5A: voice recordings transcoded to AAC, waveforms of received voice messages (FFmpeg decoding).
         "//submodules/Media/ConvertOpusToAAC:ConvertOpusToAAC",

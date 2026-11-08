@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import RelayCallsCore
+import RelayCallsCore
 
 /// Plugin routes as the controllers call them.
 enum APIRequest: Equatable {

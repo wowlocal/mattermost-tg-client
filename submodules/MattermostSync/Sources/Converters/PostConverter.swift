@@ -124,7 +124,14 @@ enum PostConverter {
         var textTags: MessageTags = []
         var media: [[Media]] = Array(repeating: [], count: layout.count)
         var partTags: [MessageTags] = Array(repeating: [], count: layout.count)
-        if post.type.hasPrefix("system_") {
+        if post.type == RelayCallRecord.postType {
+            // A Relay call record: Telegram's call service message (an unreadable record shows the plugin's text).
+            if let record = RelayCallRecord(postType: post.type, propsValue: post.props[RelayCallRecord.propsKey]?.foundationObject) {
+                media[0].append(PostConverter.callAction(record, channelId: post.channelId))
+            } else {
+                media[0].append(self.serviceAction(post: post, context: context))
+            }
+        } else if post.type.hasPrefix("system_") {
             media[0].append(self.serviceAction(post: post, context: context))
         } else {
             var builder = FormattedTextBuilder()
@@ -290,6 +297,33 @@ enum PostConverter {
     /// (`hasCommentButton`) instead of the small count next to the time.
     static func replyThreadAttribute(count: Int32, latestUsers: [PeerId], context: PostConversionContext) -> ReplyThreadMessageAttribute {
         return ReplyThreadMessageAttribute(count: count, latestUsers: latestUsers, commentsPeerId: context.collapsedThreads ? context.chatPeerId : nil, maxMessageId: nil, maxReadMessageId: nil)
+    }
+
+    /// A Relay call record (`custom_relay_call`) as Telegram's call message: a 1:1 call (`direct`; incoming or outgoing
+    /// follows the post's author, the caller) or a group call (`group`/`channel`: "started"/"ended (duration)").
+    static func callAction(_ record: RelayCallRecord, channelId: String) -> TelegramMediaAction {
+        let callId = record.telegramCallId
+        if record.isDirect {
+            let discardReason: PhoneCallDiscardReason?
+            switch record.discardReason {
+            case .missed?:
+                discardReason = .missed
+            case .busy?:
+                discardReason = .busy
+            case .hangup?:
+                discardReason = .hangup
+            case .disconnect?:
+                discardReason = .disconnect
+            case nil:
+                discardReason = nil
+            }
+            return TelegramMediaAction(action: .phoneCall(callId: callId, discardReason: discardReason, duration: record.durationSeconds, isVideo: record.video))
+        }
+        // An ended group call that nobody answered still ends: Telegram shows "ended" only with a duration. The id and
+        // access hash are those of the chat's `CachedChannelData.activeCall` (`RelayCalls.swift`), so tapping the
+        // message of a running call joins it.
+        let duration: Int32? = record.isEnded ? (record.durationSeconds ?? 0) : nil
+        return TelegramMediaAction(action: .groupPhoneCall(callId: callId, accessHash: RelayCallRecord.telegramCallId(channelId), scheduleDate: nil, duration: duration))
     }
 
     /// A system post as a service message (centered bubble): Telegram's custom-text action, with the users

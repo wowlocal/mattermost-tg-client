@@ -89,7 +89,7 @@ public final class RelayDirectCall {
     private let scheduler: RelayCallScheduler
     private let observers = RelayObservers<Snapshot>()
     /// Seconds to wait for the plugin's `call_ended` after the ring expired before ending locally.
-    static let ringExpiryGrace: TimeInterval = 3
+    public static let ringExpiryGrace: TimeInterval = 3
     static let defaultRingTimeout: TimeInterval = 45
 
     public private(set) var state: State

@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import RelayCallsCore
+import RelayCallsCore
 
 private final class CallURLProtocol: URLProtocol {
     static var handler: ((URLRequest) throws -> (Int, Data))?
