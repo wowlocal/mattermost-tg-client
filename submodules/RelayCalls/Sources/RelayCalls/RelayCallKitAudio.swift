@@ -10,6 +10,9 @@ public enum RelayCallKitAudio {
     /// Call once, before any room connects (app launch, when calls go through CallKit): turns off LiveKit's own
     /// session configuration and keeps its engine off until CallKit activates the session.
     public static func prepare() throws {
+        #if targetEnvironment(simulator)
+        RelaySimulatorNetwork.install()
+        #endif
         AudioManager.shared.audioSession.isAutomaticConfigurationEnabled = false
         try AudioManager.shared.setEngineAvailability(.none)
     }
@@ -38,6 +41,14 @@ public enum RelayCallKitAudio {
     public static var isEngineAvailable: Bool {
         let availability = AudioManager.shared.engineAvailability
         return availability.isInputAvailable && availability.isOutputAvailable
+    }
+
+    /// Calls without an audio device (LiveKit's manual rendering): remote audio is not played and the microphone
+    /// sends silence. Only for tests on a host whose audio device does not start, where the simulator aborts in
+    /// `AURemoteIO::Initialize` ("RPC timeout. Apparently deadlocked") as soon as an engine starts. Before any room
+    /// connects.
+    public static func disableAudioDevice() throws {
+        try AudioManager.shared.setManualRenderingMode(true)
     }
 
     /// Prefer the loudspeaker (video calls) or the receiver.

@@ -76,12 +76,30 @@ enum RelayCallIds {
 // MARK: - Tones
 
 /// Telegram's call tones (`PresentationCallToneData`) without tgcalls' audio device: played with `AVAudioPlayer` on
-/// the call's audio session while it is active.
+/// the call's audio session while it is active. Called on the main thread; the work runs on a serial queue, because
+/// decoding a tone (`AVAssetReader` mixes it down through an offline audio queue) and starting a player wait on the
+/// audio server: on the simulator such a call blocked for minutes, and on the main thread it froze the app right after
+/// a call was answered.
 final class RelayCallTonePlayer {
-    private var player: AVAudioPlayer?
+    private final class Output {
+        var player: AVAudioPlayer?
+    }
+
+    private static let queue = DispatchQueue(label: "org.relaychat.Relay.callTones", qos: .userInitiated)
+    /// Decoded tones, on `queue` only.
+    private static var cache: [String: Data] = [:]
+
+    private let output = Output()
     private(set) var tone: PresentationCallTone?
     private var isAudioSessionActive = false
-    private static var cache: [String: Data] = [:]
+
+    deinit {
+        let output = self.output
+        Self.queue.async {
+            output.player?.stop()
+            output.player = nil
+        }
+    }
 
     func setAudioSessionActive(_ value: Bool) {
         if self.isAudioSessionActive != value {
@@ -105,23 +123,24 @@ final class RelayCallTonePlayer {
 
     func stop() {
         self.tone = nil
-        self.player?.stop()
-        self.player = nil
+        self.apply()
     }
 
     private func apply() {
-        self.player?.stop()
-        self.player = nil
-        guard let tone = self.tone, self.isAudioSessionActive, let data = Self.wavData(tone) else {
-            return
+        let tone = self.isAudioSessionActive && !RelayCallAudio.isAudioDeviceDisabled ? self.tone : nil
+        let output = self.output
+        // The queue is serial: the last request wins.
+        Self.queue.async {
+            output.player?.stop()
+            output.player = nil
+            guard let tone, let data = Self.wavData(tone), let player = try? AVAudioPlayer(data: data) else {
+                return
+            }
+            player.numberOfLoops = tone.loopCount.map { max(0, $0 - 1) } ?? -1
+            player.prepareToPlay()
+            player.play()
+            output.player = player
         }
-        guard let player = try? AVAudioPlayer(data: data) else {
-            return
-        }
-        player.numberOfLoops = tone.loopCount.map { max(0, $0 - 1) } ?? -1
-        player.prepareToPlay()
-        player.play()
-        self.player = player
     }
 
     private static func key(_ tone: PresentationCallTone) -> String {
@@ -559,6 +578,10 @@ func relayPresentationCallVideoView(_ view: OngoingCallContextPresentationCallVi
 /// only while the call's session is active (`RelayCallKitAudio`, the LiveKit SDK's CallKit integration).
 enum RelayCallAudio {
     private static var isPrepared = false
+    /// Debug builds launched with `RELAY_DEBUG_CALLS_NO_AUDIO_DEVICE=1`: calls run without an audio device (no tones, no
+    /// playback, a silent microphone). For simulator tests on a Mac whose audio device does not start, where every call
+    /// otherwise aborts in `AURemoteIO::Initialize`.
+    private(set) static var isAudioDeviceDisabled = false
 
     /// Once, before any room connects.
     static func prepare() {
@@ -568,21 +591,33 @@ enum RelayCallAudio {
         self.isPrepared = true
         do {
             try RelayCallKitAudio.prepare()
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["RELAY_DEBUG_CALLS_NO_AUDIO_DEVICE"] == "1" {
+                try RelayCallKitAudio.disableAudioDevice()
+                self.isAudioDeviceDisabled = true
+                Logger.shared.log("RelayCalls", "audio: no audio device (RELAY_DEBUG_CALLS_NO_AUDIO_DEVICE)")
+            }
+            #endif
         } catch {
             Logger.shared.log("RelayCalls", "audio: prepare failed: \(error)")
         }
     }
 
+    /// Off the main thread, in order: starting or stopping LiveKit's engine waits on the audio server.
+    private static let queue = DispatchQueue(label: "org.relaychat.Relay.callAudio", qos: .userInitiated)
+
     static func setEngineAvailable(_ value: Bool) {
         self.prepare()
-        do {
-            if value {
-                try RelayCallKitAudio.didActivate(AVAudioSession.sharedInstance())
-            } else {
-                try RelayCallKitAudio.didDeactivate(AVAudioSession.sharedInstance())
+        self.queue.async {
+            do {
+                if value {
+                    try RelayCallKitAudio.didActivate(AVAudioSession.sharedInstance())
+                } else {
+                    try RelayCallKitAudio.didDeactivate(AVAudioSession.sharedInstance())
+                }
+            } catch {
+                Logger.shared.log("RelayCalls", "audio: engine availability \(value) failed: \(error)")
             }
-        } catch {
-            Logger.shared.log("RelayCalls", "audio: engine availability \(value) failed: \(error)")
         }
     }
 }

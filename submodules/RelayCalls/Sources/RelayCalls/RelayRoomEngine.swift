@@ -43,6 +43,9 @@ public final class RelayRoomEngine: RelayMediaEngine {
     private var cameraPosition: AVCaptureDevice.Position = .front
 
     public init(options: Options = Options()) {
+        #if os(iOS) && targetEnvironment(simulator)
+        RelaySimulatorNetwork.install()
+        #endif
         self.options = options
         let dimensions = Dimensions(width: options.cameraDimensions.width, height: options.cameraDimensions.height)
         #if os(iOS)
