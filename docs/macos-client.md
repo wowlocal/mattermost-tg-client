@@ -65,7 +65,7 @@ Mostly as in this repository's iOS app, at the matching places of the macOS app:
   entitlement), `Telegram-Mac/Relay.entitlements` (no sandbox, microphone, camera). The share extension is not
   embedded (Telegram's, needs a provisioning profile).
 
-Threads: reply counts show on posts, and opening replies builds the thread location locally (`ChatReplyThreadMessage` with `isForumPost`, as on iOS; Telegram's `fetchAndPreloadReplyThreadInfo` would wait for a discussion message forever). The Mattermost token's Keychain service is per build channel (`MattermostSessionKeychain.service`): with one service a Release launch's token cleanup removed the Debug account's token.
+Threads: reply counts show on posts, and opening replies builds the thread location locally (`ChatReplyThreadMessage` with `isForumPost`, as on iOS; Telegram's `fetchAndPreloadReplyThreadInfo` would wait for a discussion message forever). With collapsed threads on, Reply (the menu, double-click, swipe, ⌘↑/⌘↓) on a post in a chat's history opens that post's thread with the composer focused, as on iOS (`ChatController.openMattermostThread`, in `setupReplyMessage`): it is how a thread is started. Before, the reply was sent from the chat's own composer as a thread reply, which collapsed threads hide, so the post seemed to vanish, and a thread could only be opened once it had replies (View N Replies, channels only). The Mattermost token's Keychain service is per build channel (`MattermostSessionKeychain.service`): with one service a Release launch's token cleanup removed the Debug account's token.
 
 Notifications: macOS has no push, so MattermostSync hands a new post by someone else (live, not a system post) to `AccountStateManager.mattermostNotifyMessages`, which runs Telegram's own notify decision (`messagesForNotification`: mute and chat settings) and puts the result on the notification pipe the app listens to. The app's notification manager combined that pipe with Telegram's reaction notifications, which never emit with Mattermost, so it starts them empty.
 
@@ -104,7 +104,7 @@ AVAudioEngine module runs, tones, device choices, call states) go to the unified
 `tools/relay-calls-peer.py` (ring, answer, decline, channel calls, tone and test-pattern media, received frame stats).
 
 Not done: localization of the Relay screens (Relay is English-only, as on iOS), Mattermost-specific chat and profile
-screens, notifications while Relay isn't running (no push on macOS), sharing, voice transcoding. The emoji panel shows emoji only (no sticker or GIF tabs).
+screens, notifications while Relay isn't running (no push on macOS), sharing, voice transcoding. The emoji panel shows emoji only (no sticker or GIF tabs). Reaction "animations" are the static WebP images (`MattermostReactionImages`), so the message menu's reaction bar keeps them out of its Lottie player (`ReactionView.playsAnimations`): fed to it, a second hover replaced the failed animation, the released renderer reported `.stoped`, and the bar removed its static image, so the emoji disappeared.
 
 ## Building, signing, checking
 
@@ -114,7 +114,10 @@ screens, notifications while Relay isn't running (no push on macOS), sharing, vo
 - Sign: `tools/relay-mac-sign.sh [Relay.app]` in a GUI session (Rex pane, Terminal); codesign in an agent's
   background session fails with errSecInternalComponent. Apple Development by default, `RELAY_SIGN_IDENTITY` and
   `RELAY_HARDENED=1` for Developer ID with the hardened runtime. An ad-hoc signed build asks for the login keychain
-  password after every rebuild (the Keychain item's ACL follows the signature); a stable signature doesn't.
+  password after every rebuild (the Keychain item's ACL follows the signature); a stable signature doesn't. With
+  nobody to answer that prompt (a locked screen) the build's account manager waits in `PasscodeKeychain.read` and the
+  debug remote answers `authorized: false`; signing the build first fixes it (the script worked from an agent shell
+  inside Rex with the login keychain unlocked).
 - Release: `tools/relay-mac-release.sh` in a GUI session, the way Snippets ships (wowlocal/snippets
   `Distribution/Release`): Release build with CFBundleVersion = the commit count (`RELAY_VERSION` sets the marketing
   version), a stripped copy (the unstripped executable is 435 MB), Developer ID signature with the hardened runtime,
@@ -143,7 +146,7 @@ screens, notifications while Relay isn't running (no push on macOS), sharing, vo
   `call-state` (Telegram's call/group state, windows, the Relay controllers' media and per video source frame counts,
   permissions), `call-accept`, `call-decline`, `call-hangup [end=1]`, `call-mute on|off`, `call-video on|off`,
   `call-screen on|off` (Telegram's source picker), `join-call channel=` (the join panel), `messages`, `windows`,
-  `click text= [window= event= row=1]`, `screen-list`, `screen-picker`, `accounts`, `add-account`, `switch-account id=`
+  `click text= [window= event= row=1]`, `screen-list`, `screen-picker`, `accounts`, `add-account`, `switch-account id=`; for chats and menus `chat-state`, `chat-messages [count=]`, `compose text= [send=1 clear=1]` (the composer's own send), `rightclick text=` (the row's `showContextMenu`, what a right click runs once the pointer is inside), `menu-item text=`, `close-menus`, `views class= text=`, `hover class= [index= state=normal|hover wait=]` (sets the control's `controlState`, as `mouseEntered` does, and answers its subtree with the number of drawn layers), `press class= [index=]`
   (a bare first word is the action, a second one its value). `call-audio` (LiveKit's audio state, devices and, in debug builds, the levels of the microphone as sent and of the
 remote audio as mixed for playout: frames, RMS/peak dBFS, frequency), `call-mic-processing on|off` (WebRTC's audio
 processing of the microphone, to see the raw level), `logout id=` (an account), `RELAY_DEBUG_RTC_LOG=1` (WebRTC's own
