@@ -36,8 +36,10 @@ final class RelayLocalSourceTests: XCTestCase {
     private func answeredOutgoing(video: Bool = false) async -> RelayDirectCall {
         let call = self.outgoing(video: video)
         call.start()
-        await waitUntil("microphone requested") { !self.engine.microphoneRequests.isEmpty }
+        await waitUntil("media connected") { self.engine.connectedWith != nil }
+        await settle()
         call.handle(.callState(call: Fixtures.call(state: .active, invitees: [Fixtures.peer: .accepted]), userId: Fixtures.peer, deviceId: Fixtures.peerDevice, action: .accepted))
+        await waitUntil("microphone requested") { !self.engine.microphoneRequests.isEmpty }
         self.engine.addRemote(Fixtures.device(Fixtures.peer, Fixtures.peerDevice))
         XCTAssertEqual(call.state, .active(since: self.scheduler.current))
         return call
@@ -75,8 +77,10 @@ final class RelayLocalSourceTests: XCTestCase {
             }
         }
         call.start()
-        await waitUntil("microphone requested") { !self.engine.microphoneRequests.isEmpty }
+        await waitUntil("media connected") { self.engine.connectedWith != nil }
+        await settle()
         call.handle(.callState(call: Fixtures.call(state: .active, invitees: [Fixtures.peer: .accepted]), userId: Fixtures.peer, deviceId: Fixtures.peerDevice, action: .accepted))
+        await waitUntil("microphone requested") { !self.engine.microphoneRequests.isEmpty }
         self.engine.addRemote(Fixtures.device(Fixtures.peer, Fixtures.peerDevice))
         // Every automatic retry fails.
         for delay in [0.5, 1, 2, 4, 8, 8, 8, 8] {
@@ -142,8 +146,10 @@ final class RelayLocalSourceTests: XCTestCase {
         let call = self.outgoing()
         call.setMuted(true)
         call.start()
-        await waitUntil("applied muted") { self.engine.microphone == false }
+        await waitUntil("media connected") { self.engine.connectedWith != nil }
+        await settle()
         call.handle(.callState(call: Fixtures.call(state: .active, invitees: [Fixtures.peer: .accepted]), userId: Fixtures.peer, deviceId: Fixtures.peerDevice, action: .accepted))
+        await waitUntil("applied muted") { self.engine.microphone == false }
         self.engine.addRemote(Fixtures.device(Fixtures.peer, Fixtures.peerDevice))
 
         self.engine.microphoneError = FakeMediaError()
