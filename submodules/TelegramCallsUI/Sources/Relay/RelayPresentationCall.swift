@@ -418,7 +418,8 @@ final class RelayPresentationCall: PresentationCall, PresentationCallVideoProvid
     private func startCamera(capturer: OngoingCallVideoCapturer?) {
         let capturer = capturer ?? self.videoCapturer ?? OngoingCallVideoCapturer()
         self.videoCapturer = capturer
-        self.cameraBridge?.setCapturer(capturer)
+        // Takes the capturer's output back from a preview view.
+        self.cameraBridge?.setCapturer(capturer, resubscribe: true)
         if case let .direct(call) = self.kind {
             call.setCameraEnabled(true)
             self.directUpdated(call.snapshot)
@@ -603,7 +604,11 @@ final class RelayPresentationCall: PresentationCall, PresentationCallVideoProvid
 
     func video(isIncoming: Bool) -> Signal<OngoingGroupCallContext.VideoFrameData, NoError>? {
         if !isIncoming {
-            return self.videoCapturer?.video()
+            guard let videoCapturer = self.videoCapturer else {
+                return nil
+            }
+            // The capturer's single output feeds LiveKit: share its frames (`RelayCameraBridge`).
+            return self.cameraBridge?.frames ?? videoCapturer.video()
         }
         guard case let .direct(call) = self.kind else {
             return nil

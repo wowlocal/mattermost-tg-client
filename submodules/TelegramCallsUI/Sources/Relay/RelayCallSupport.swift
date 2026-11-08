@@ -1,11 +1,14 @@
 import Foundation
+import UIKit
 import AVFoundation
 import CoreVideo
 import CryptoKit
+import VideoToolbox
 import SwiftSignalKit
 import TelegramCore
 import TelegramVoip
 import AccountContext
+import AppBundle
 import LibYuvBinding
 import RelayCallsCore
 import RelayCalls
@@ -208,10 +211,21 @@ final class RelayCallTonePlayer {
 /// Telegram's own camera capturer (`OngoingCallVideoCapturer`, which the call screens create for their preview and
 /// switch between cameras) feeding the LiveKit camera track (`RelayExternalCamera`), so the preview, camera switching
 /// and mirroring stay Telegram's.
+///
+/// A capturer has a single frame output (`video()` replaces the previous subscriber, as does its preview view), so the
+/// bridge holds the one subscription and hands the frames to LiveKit and to Telegram's own local video views
+/// (`frames`). Subscribing to `capturer.video()` anywhere else would starve the published camera.
+///
+/// On the simulator Telegram's capturer injects its placeholder picture straight into tgcalls' video source, which
+/// never reaches `video()`; the bridge then sends the same placeholder itself, so the camera publishes and shows.
 final class RelayCameraBridge {
     private let camera: RelayExternalCamera
     private(set) var capturer: OngoingCallVideoCapturer?
     private let frameDisposable = MetaDisposable()
+    private let framesPipe = ValuePipe<OngoingGroupCallContext.VideoFrameData>()
+    #if targetEnvironment(simulator)
+    private var placeholderTimer: Foundation.Timer?
+    #endif
 
     init(camera: RelayExternalCamera) {
         self.camera = camera
@@ -219,28 +233,222 @@ final class RelayCameraBridge {
 
     deinit {
         self.frameDisposable.dispose()
+        #if targetEnvironment(simulator)
+        self.placeholderTimer?.invalidate()
+        #endif
     }
 
-    func setCapturer(_ capturer: OngoingCallVideoCapturer?) {
-        if self.capturer === capturer {
+    /// The camera frames for Telegram's views of this device's video.
+    var frames: Signal<OngoingGroupCallContext.VideoFrameData, NoError> {
+        return self.framesPipe.signal()
+    }
+
+    /// Starts (or with `resubscribe`, takes back after a preview view took the capturer's output) or stops the frames.
+    func setCapturer(_ capturer: OngoingCallVideoCapturer?, resubscribe: Bool = false) {
+        if self.capturer === capturer && !resubscribe {
             return
         }
         self.capturer = capturer
+        #if targetEnvironment(simulator)
+        self.placeholderTimer?.invalidate()
+        self.placeholderTimer = nil
+        #endif
         guard let capturer else {
             self.frameDisposable.set(nil)
             return
         }
         let camera = self.camera
+        let framesPipe = self.framesPipe
+        let pool = RelayNV12Pool()
         self.frameDisposable.set(capturer.video().start(next: { frame in
-            let pixelBuffer: CVPixelBuffer
+            // Camera frames are pixel buffers; software paths hand out NV12 or I420 planes, which are copied into
+            // pooled NV12 buffers.
+            let pixelBuffer: CVPixelBuffer?
             switch frame.buffer {
             case let .native(buffer), let .argb(buffer), let .bgra(buffer):
                 pixelBuffer = buffer.pixelBuffer
-            case .nv12, .i420:
+            case let .nv12(buffer):
+                pixelBuffer = pool.copy(nv12: buffer)
+            case let .i420(buffer):
+                pixelBuffer = pool.copy(i420: buffer)
+            }
+            framesPipe.putNext(frame)
+            guard let pixelBuffer else {
                 return
             }
             camera.push(pixelBuffer, rotation: RelayVideoFrameConverter.rotation(frame.orientation))
         }))
+        #if targetEnvironment(simulator)
+        if let placeholder = Self.simulatorPlaceholder {
+            let frame = OngoingGroupCallContext.VideoFrameData(pixelBuffer: placeholder, width: CVPixelBufferGetWidth(placeholder), height: CVPixelBufferGetHeight(placeholder), orientation: .rotation0)
+            self.placeholderTimer = Foundation.Timer.scheduledTimer(withTimeInterval: 1.0 / 15.0, repeats: true, block: { _ in
+                framesPipe.putNext(frame)
+                camera.push(placeholder, rotation: .rotation0)
+            })
+        }
+        #endif
+    }
+
+    #if targetEnvironment(simulator)
+    /// Telegram's simulator camera picture (`OngoingCallVideoCapturer`), 600×800 NV12 (Telegram's call renderers draw
+    /// bi-planar frames only).
+    private static let simulatorPlaceholder: CVPixelBuffer? = {
+        guard #available(iOS 16.0, *), let bgra = RelayCameraBridge.simulatorPlaceholderBGRA else {
+            return nil
+        }
+        var nv12: CVPixelBuffer?
+        let attributes: [String: Any] = [kCVPixelBufferIOSurfacePropertiesKey as String: [:] as NSDictionary]
+        guard CVPixelBufferCreate(nil, CVPixelBufferGetWidth(bgra), CVPixelBufferGetHeight(bgra), kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, attributes as CFDictionary, &nv12) == kCVReturnSuccess, let nv12 else {
+            return nil
+        }
+        var session: VTPixelTransferSession?
+        guard VTPixelTransferSessionCreate(allocator: nil, pixelTransferSessionOut: &session) == noErr, let session else {
+            return nil
+        }
+        defer {
+            VTPixelTransferSessionInvalidate(session)
+        }
+        guard VTPixelTransferSessionTransferImage(session, from: bgra, to: nv12) == noErr else {
+            return nil
+        }
+        return nv12
+    }()
+
+    private static var simulatorPlaceholderBGRA: CVPixelBuffer? {
+        guard let image = UIImage(bundleImageName: "Camera/SelfiePlaceholder")?.cgImage else {
+            return nil
+        }
+        let width = 600
+        let height = 800
+        var pixelBuffer: CVPixelBuffer?
+        let attributes: [String: Any] = [kCVPixelBufferIOSurfacePropertiesKey as String: [:] as NSDictionary, kCVPixelBufferCGImageCompatibilityKey as String: true, kCVPixelBufferCGBitmapContextCompatibilityKey as String: true]
+        guard CVPixelBufferCreate(nil, width, height, kCVPixelFormatType_32BGRA, attributes as CFDictionary, &pixelBuffer) == kCVReturnSuccess, let pixelBuffer else {
+            return nil
+        }
+        CVPixelBufferLockBaseAddress(pixelBuffer, [])
+        defer {
+            CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
+        }
+        guard let context = CGContext(data: CVPixelBufferGetBaseAddress(pixelBuffer), width: width, height: height, bitsPerComponent: 8, bytesPerRow: CVPixelBufferGetBytesPerRow(pixelBuffer), space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) else {
+            return nil
+        }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return pixelBuffer
+    }
+    #endif
+}
+
+/// Pooled NV12 pixel buffers (what Telegram's renderers draw and LiveKit publishes) and copies into them. Thread-safe.
+final class RelayNV12Pool {
+    private let lock = NSLock()
+    private var pool: CVPixelBufferPool?
+    private var poolSize: (width: Int, height: Int) = (0, 0)
+
+    /// A buffer from the pool, its base address locked; `fill` copies into it.
+    private func make(width: Int, height: Int, fill: (_ y: UnsafeMutablePointer<UInt8>, _ strideY: Int, _ uv: UnsafeMutablePointer<UInt8>, _ strideUV: Int) -> Bool) -> CVPixelBuffer? {
+        guard width > 0, height > 0 else {
+            return nil
+        }
+        self.lock.lock()
+        if self.pool == nil || self.poolSize.width != width || self.poolSize.height != height {
+            let poolOptions: [String: Any] = [kCVPixelBufferPoolMinimumBufferCountKey as String: 4 as NSNumber]
+            let bufferOptions: [String: Any] = [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange as NSNumber,
+                kCVPixelBufferWidthKey as String: width as NSNumber,
+                kCVPixelBufferHeightKey as String: height as NSNumber,
+                kCVPixelBufferIOSurfacePropertiesKey as String: [:] as NSDictionary
+            ]
+            var pool: CVPixelBufferPool?
+            CVPixelBufferPoolCreate(nil, poolOptions as CFDictionary, bufferOptions as CFDictionary, &pool)
+            self.pool = pool
+            self.poolSize = (width, height)
+        }
+        let pool = self.pool
+        self.lock.unlock()
+        guard let pool else {
+            return nil
+        }
+        var pixelBuffer: CVPixelBuffer?
+        let auxAttributes: [String: Any] = [kCVPixelBufferPoolAllocationThresholdKey as String: 6 as NSNumber]
+        let status = CVPixelBufferPoolCreatePixelBufferWithAuxAttributes(kCFAllocatorDefault, pool, auxAttributes as CFDictionary, &pixelBuffer)
+        guard status == kCVReturnSuccess, let pixelBuffer else {
+            return nil
+        }
+        guard CVPixelBufferLockBaseAddress(pixelBuffer, []) == kCVReturnSuccess else {
+            return nil
+        }
+        defer {
+            CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
+        }
+        guard let dstY = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0), let dstUV = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 1) else {
+            return nil
+        }
+        let filled = fill(dstY.assumingMemoryBound(to: UInt8.self), CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0), dstUV.assumingMemoryBound(to: UInt8.self), CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1))
+        return filled ? pixelBuffer : nil
+    }
+
+    /// LiveKit's software-decoded I420 frames.
+    func copy(i420 buffer: RelayI420Buffer) -> CVPixelBuffer? {
+        return self.make(width: buffer.width, height: buffer.height) { dstY, dstStrideY, dstUV, dstStrideUV in
+            return buffer.withPlanes { y, u, v -> Bool in
+                return libyuv_I420ToNV12(y, Int32(buffer.strideY), u, Int32(buffer.strideU), v, Int32(buffer.strideV), dstY, Int32(dstStrideY), dstUV, Int32(dstStrideUV), Int32(buffer.width), Int32(buffer.height))
+            }
+        }
+    }
+
+    /// tgcalls' I420 frames.
+    func copy(i420 buffer: OngoingGroupCallContext.VideoFrameData.I420Buffer) -> CVPixelBuffer? {
+        let width = buffer.width
+        let height = buffer.height
+        let y = buffer.y
+        let u = buffer.u
+        let v = buffer.v
+        return self.make(width: width, height: height) { dstY, dstStrideY, dstUV, dstStrideUV in
+            return y.withUnsafeBytes { yBytes in
+                u.withUnsafeBytes { uBytes in
+                    v.withUnsafeBytes { vBytes in
+                        guard let yBase = yBytes.bindMemory(to: UInt8.self).baseAddress, let uBase = uBytes.bindMemory(to: UInt8.self).baseAddress, let vBase = vBytes.bindMemory(to: UInt8.self).baseAddress else {
+                            return false
+                        }
+                        return libyuv_I420ToNV12(yBase, Int32(buffer.strideY), uBase, Int32(buffer.strideU), vBase, Int32(buffer.strideV), dstY, Int32(dstStrideY), dstUV, Int32(dstStrideUV), Int32(width), Int32(height))
+                    }
+                }
+            }
+        }
+    }
+
+    /// tgcalls' NV12 frames: the planes are copied row by row.
+    func copy(nv12 buffer: OngoingGroupCallContext.VideoFrameData.NV12Buffer) -> CVPixelBuffer? {
+        let width = buffer.width
+        let height = buffer.height
+        let y = buffer.y
+        let uv = buffer.uv
+        let strideY = buffer.strideY
+        let strideUV = buffer.strideUV
+        let chromaHeight = (height + 1) / 2
+        let chromaRowBytes = ((width + 1) / 2) * 2
+        guard y.count >= strideY * (height - 1) + width, uv.count >= strideUV * (chromaHeight - 1) + chromaRowBytes else {
+            return nil
+        }
+        return self.make(width: width, height: height) { dstY, dstStrideY, dstUV, dstStrideUV in
+            y.withUnsafeBytes { bytes in
+                guard let base = bytes.bindMemory(to: UInt8.self).baseAddress else {
+                    return
+                }
+                for row in 0 ..< height {
+                    memcpy(dstY + row * dstStrideY, base + row * strideY, min(width, dstStrideY))
+                }
+            }
+            uv.withUnsafeBytes { bytes in
+                guard let base = bytes.bindMemory(to: UInt8.self).baseAddress else {
+                    return
+                }
+                for row in 0 ..< chromaHeight {
+                    memcpy(dstUV + row * dstStrideUV, base + row * strideUV, min(chromaRowBytes, dstStrideUV))
+                }
+            }
+            return true
+        }
     }
 }
 
@@ -249,9 +457,7 @@ final class RelayCameraBridge {
 /// Converts LiveKit frames into what Telegram's call renderers draw (`VideoFrameData` with an NV12 pixel buffer;
 /// I420 frames from software decoders are copied into pooled NV12 buffers). Called on WebRTC's decoding thread.
 final class RelayVideoFrameConverter {
-    private let lock = NSLock()
-    private var pool: CVPixelBufferPool?
-    private var poolSize: (width: Int, height: Int) = (0, 0)
+    private let pool = RelayNV12Pool()
 
     static func orientation(_ rotation: RelayVideoRotation) -> OngoingCallVideoOrientation {
         switch rotation {
@@ -291,7 +497,7 @@ final class RelayVideoFrameConverter {
                 return nil
             }
         case let .i420(buffer):
-            guard let converted = self.nv12(from: buffer) else {
+            guard let converted = self.pool.copy(i420: buffer) else {
                 return nil
             }
             pixelBuffer = converted
@@ -302,67 +508,6 @@ final class RelayVideoFrameConverter {
             height: CVPixelBufferGetHeight(pixelBuffer),
             orientation: Self.orientation(frame.rotation)
         )
-    }
-
-    private func nv12(from buffer: RelayI420Buffer) -> CVPixelBuffer? {
-        let width = buffer.width
-        let height = buffer.height
-        guard width > 0, height > 0 else {
-            return nil
-        }
-        self.lock.lock()
-        if self.pool == nil || self.poolSize.width != width || self.poolSize.height != height {
-            let poolOptions: [String: Any] = [kCVPixelBufferPoolMinimumBufferCountKey as String: 4 as NSNumber]
-            let bufferOptions: [String: Any] = [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange as NSNumber,
-                kCVPixelBufferWidthKey as String: width as NSNumber,
-                kCVPixelBufferHeightKey as String: height as NSNumber,
-                kCVPixelBufferIOSurfacePropertiesKey as String: [:] as NSDictionary
-            ]
-            var pool: CVPixelBufferPool?
-            CVPixelBufferPoolCreate(nil, poolOptions as CFDictionary, bufferOptions as CFDictionary, &pool)
-            self.pool = pool
-            self.poolSize = (width, height)
-        }
-        let pool = self.pool
-        self.lock.unlock()
-        guard let pool else {
-            return nil
-        }
-        var pixelBuffer: CVPixelBuffer?
-        let auxAttributes: [String: Any] = [kCVPixelBufferPoolAllocationThresholdKey as String: 6 as NSNumber]
-        let status = CVPixelBufferPoolCreatePixelBufferWithAuxAttributes(kCFAllocatorDefault, pool, auxAttributes as CFDictionary, &pixelBuffer)
-        guard status == kCVReturnSuccess, let pixelBuffer else {
-            return nil
-        }
-        guard CVPixelBufferLockBaseAddress(pixelBuffer, []) == kCVReturnSuccess else {
-            return nil
-        }
-        defer {
-            CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
-        }
-        guard let dstY = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0), let dstUV = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 1) else {
-            return nil
-        }
-        let dstStrideY = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
-        let dstStrideUV = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1)
-        let converted = buffer.withPlanes { y, u, v -> Bool in
-            return libyuv_I420ToNV12(
-                y,
-                Int32(buffer.strideY),
-                u,
-                Int32(buffer.strideU),
-                v,
-                Int32(buffer.strideV),
-                dstY.assumingMemoryBound(to: UInt8.self),
-                Int32(dstStrideY),
-                dstUV.assumingMemoryBound(to: UInt8.self),
-                Int32(dstStrideUV),
-                Int32(width),
-                Int32(height)
-            )
-        }
-        return converted ? pixelBuffer : nil
     }
 }
 

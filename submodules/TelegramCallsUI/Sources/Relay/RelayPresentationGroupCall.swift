@@ -566,7 +566,8 @@ final class RelayPresentationGroupCall: PresentationGroupCall, PresentationGroup
     private func startCamera(capturer: OngoingCallVideoCapturer?) {
         let capturer = capturer ?? self.videoCapturer ?? OngoingCallVideoCapturer()
         self.videoCapturer = capturer
-        self.cameraBridge?.setCapturer(capturer)
+        // Takes the capturer's output back from the preview view.
+        self.cameraBridge?.setCapturer(capturer, resubscribe: true)
         self.controller.setCameraEnabled(true)
         self.updated(self.controller.snapshot)
     }
@@ -695,8 +696,9 @@ final class RelayPresentationGroupCall: PresentationGroupCall, PresentationGroup
         }
         let ownUserId = self.relayAccount.ownUserId
         if case let .camera(userId) = endpoint, userId == ownUserId, let capturer = self.videoCapturer {
-            // This device's camera: Telegram's own capturer, as for Telegram's group calls.
-            return capturer.video()
+            // This device's camera: Telegram's own capturer, as for Telegram's group calls. Its single output feeds
+            // LiveKit, so the frames are shared (`RelayCameraBridge`).
+            return self.cameraBridge?.frames ?? capturer.video()
         }
         let controller = self.controller
         return self.router.video(key: endpointId, resolve: { [weak controller] in
