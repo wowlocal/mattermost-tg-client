@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -158,8 +159,8 @@ func (p *Plugin) OnConfigurationChange() error {
 	}
 	if c.LiveKitURL != "" {
 		u, err := url.Parse(c.LiveKitURL)
-		if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "wss") || u.User != nil {
-			return errors.New("LiveKitURL must be an HTTPS or WSS URL without credentials")
+		if err != nil || !validPublicLiveKitURL(u) {
+			return errors.New("LiveKitURL must be an HTTPS or WSS URL without credentials (HTTP or WS only for a loopback host)")
 		}
 	}
 	p.mu.Lock()
@@ -525,4 +526,24 @@ func fail(w http.ResponseWriter, status int, message string) {
 func failWithCall(w http.ResponseWriter, status int, message string, call *callState, v *viewer) {
 	w.WriteHeader(status)
 	writeJSON(w, map[string]any{"message": message, "call": viewOf(call, v)})
+}
+
+// validPublicLiveKitURL accepts HTTPS/WSS addresses, and plain HTTP/WS only for a loopback host (a local
+// development LiveKit); the Relay clients apply the same rule.
+func validPublicLiveKitURL(u *url.URL) bool {
+	if u.Host == "" || u.User != nil {
+		return false
+	}
+	switch u.Scheme {
+	case "https", "wss":
+		return true
+	case "http", "ws":
+		host := u.Hostname()
+		if host == "localhost" {
+			return true
+		}
+		ip := net.ParseIP(host)
+		return ip != nil && ip.IsLoopback()
+	}
+	return false
 }

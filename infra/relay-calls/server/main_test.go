@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -793,5 +794,28 @@ func TestConfigAdvertisesVersion2(t *testing.T) {
 	if config["enabled"] != true || config["version"] != float64(2) || config["camera"] != true || config["ringing"] != true ||
 		config["ring_timeout_seconds"] != float64(45) || config["screen_sharing"] != true || config["max_participants"] != float64(25) {
 		t.Fatalf("unexpected configuration %v", config)
+	}
+}
+
+func TestPublicLiveKitURLAllowsPlainSchemesOnlyOnLoopback(t *testing.T) {
+	cases := map[string]bool{
+		"wss://livekit.example.com":     true,
+		"https://livekit.example.com":   true,
+		"ws://127.0.0.1:7880":           true,
+		"ws://localhost:7880":           true,
+		"http://[::1]:7880":             true,
+		"ws://livekit.example.com:7880": false,
+		"ws://192.168.0.5:7880":         false,
+		"wss://user:pw@livekit.example": false,
+		"ftp://livekit.example.com":     false,
+	}
+	for raw, want := range cases {
+		u, err := url.Parse(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := validPublicLiveKitURL(u); got != want {
+			t.Errorf("%s: got %v, want %v", raw, got, want)
+		}
 	}
 }
