@@ -62,6 +62,8 @@ final class RelayPresentationGroupCall: PresentationGroupCall, PresentationGroup
     private let peersDisposable = DisposableSet()
     private var lastSpoke: [String: Double] = [:]
     private var knownJoinedUserIds: Set<String>?
+    /// Users seen in the room during this call: an invitee who joined and left is a former participant, not invited.
+    private var everJoinedUserIds = Set<String>()
 
     private let statePromise: ValuePromise<PresentationGroupCallState>
     private let stateVersionPromise = ValuePromise<Int>(0)
@@ -248,7 +250,8 @@ final class RelayPresentationGroupCall: PresentationGroupCall, PresentationGroup
 
         var invited: [PresentationGroupCallInvitedPeer] = []
         let joinedUserIds = Set(snapshot.participants.map(\.userId))
-        for (userId, inviteeState) in snapshot.invitees.sorted(by: { $0.key < $1.key }) where !joinedUserIds.contains(userId) {
+        self.everJoinedUserIds.formUnion(joinedUserIds)
+        for (userId, inviteeState) in snapshot.invitees.sorted(by: { $0.key < $1.key }) where !self.everJoinedUserIds.contains(userId) {
             guard let peer = self.peers[userId] else {
                 continue
             }
