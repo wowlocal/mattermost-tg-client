@@ -101,6 +101,17 @@ final class RelayDirectCallTests: XCTestCase {
         XCTAssertEqual(call.state, .terminated(.busy, duration: nil))
     }
 
+    func testOutgoingBusyRingResponseDoesNotConnect() async {
+        // The plugin answers a ring to a busy callee with `200` and the call already ended (no room to join).
+        let call = self.outgoing(ring: Fixtures.call(state: .ended, invitees: [Fixtures.peer: .busy], endReason: .busy))
+        call.start()
+        await waitUntil("busy") { call.state == .terminated(.busy, duration: nil) }
+        await settle()
+        XCTAssertNil(self.engine.connectedWith)
+        XCTAssertEqual(self.engine.disconnectCount, 0)
+        XCTAssertFalse(self.api.requests.contains(where: { if case .hangup = $0 { return true } else { return false } }))
+    }
+
     func testOutgoingMissedFromServer() async {
         let call = self.outgoing()
         call.start()

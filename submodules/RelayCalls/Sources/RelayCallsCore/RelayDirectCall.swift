@@ -418,6 +418,11 @@ public final class RelayDirectCall {
             return
         }
         self.apply(call: join.call)
+        guard !self.state.isTerminated else {
+            // The ring answered with a call that already ended (the callee is busy: `200`, `state: ended`, a token
+            // that cannot join the room). Nothing to connect.
+            return
+        }
         self.scheduleRingExpiry()
         await self.connectMedia(join)
     }
