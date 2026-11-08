@@ -83,7 +83,7 @@ type Plugin struct {
 	// pushMu guards the push hook's state; the hook never takes mu.
 	pushMu         sync.Mutex
 	recordChannels map[string]int64
-	allowedPushes  map[string]int64
+	allowedPushes  map[string]allowedPush
 
 	pending sync.WaitGroup
 }

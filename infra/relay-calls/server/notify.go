@@ -149,6 +149,15 @@ func (p *Plugin) createRecord(call *callState) bool {
 	return true
 }
 
+// createRecordAndLink posts the record and saves the call with its post id.
+func (p *Plugin) createRecordAndLink(call *callState) {
+	if p.createRecord(call) {
+		if err := p.saveCall(call); err != nil {
+			p.API.LogWarn("Could not link the call record", "call_id", call.ID)
+		}
+	}
+}
+
 func (p *Plugin) updateRecord(call *callState) {
 	if call.PostID == "" {
 		return
@@ -180,28 +189,35 @@ func (p *Plugin) noteRecordChannel(channelID string) {
 	p.recordChannels[channelID] = now + recordPushWindow.Milliseconds()
 }
 
-func (p *Plugin) allowPush(userID, postID string) {
+// allowedPush is one of this plugin's own pushes for a call record, matched by its exact message so the
+// server's alert for the same post (another message) stays suppressed.
+type allowedPush struct {
+	expires int64
+	message string
+}
+
+func (p *Plugin) allowPush(userID, postID, message string) {
 	p.pushMu.Lock()
 	defer p.pushMu.Unlock()
 	now := p.clock().UnixMilli()
 	if p.allowedPushes == nil {
-		p.allowedPushes = map[string]int64{}
+		p.allowedPushes = map[string]allowedPush{}
 	}
-	for key, expires := range p.allowedPushes {
-		if expires <= now {
+	for key, allowed := range p.allowedPushes {
+		if allowed.expires <= now {
 			delete(p.allowedPushes, key)
 		}
 	}
-	p.allowedPushes[userID+":"+postID] = now + recordPushWindow.Milliseconds()
+	p.allowedPushes[userID+":"+postID] = allowedPush{expires: now + recordPushWindow.Milliseconds(), message: message}
 }
 
 // mayBeRecordPush is true when a push could be the server's alert for a call record this plugin just
 // created (and is not one of this plugin's own missed-call pushes).
-func (p *Plugin) mayBeRecordPush(channelID, userID, postID string) bool {
+func (p *Plugin) mayBeRecordPush(channelID, userID, postID, message string) bool {
 	p.pushMu.Lock()
 	defer p.pushMu.Unlock()
 	now := p.clock().UnixMilli()
-	if expires, ok := p.allowedPushes[userID+":"+postID]; ok && expires > now {
+	if allowed, ok := p.allowedPushes[userID+":"+postID]; ok && allowed.expires > now && allowed.message == message {
 		return false
 	}
 	if channelID == "" {
@@ -218,7 +234,7 @@ func (p *Plugin) NotificationWillBePushed(notification *model.PushNotification, 
 	if notification == nil || notification.PostId == "" {
 		return nil, ""
 	}
-	if !p.mayBeRecordPush(notification.ChannelId, userID, notification.PostId) {
+	if !p.mayBeRecordPush(notification.ChannelId, userID, notification.PostId, notification.Message) {
 		return nil, ""
 	}
 	post, appErr := p.API.GetPost(notification.PostId)
@@ -258,7 +274,7 @@ func (p *Plugin) sendMissedPushes(call *callState, users []string) {
 	channelID, postID, callerID := call.ChannelID, call.PostID, call.StartedBy
 	recipients := append([]string(nil), users...)
 	for _, userID := range recipients {
-		p.allowPush(userID, postID)
+		p.allowPush(userID, postID, message)
 	}
 	p.goAsync(func() {
 		for _, userID := range recipients {

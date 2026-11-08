@@ -513,10 +513,10 @@ func (p *Plugin) startCall(ctx context.Context, channel *model.Channel, caller *
 		}
 		return nil, http.StatusInternalServerError, "Could not save the call."
 	}
-	if p.createRecord(call) {
-		if err := p.saveCall(call); err != nil {
-			p.API.LogWarn("Could not link the call record", "call_id", call.ID)
-		}
+	// A direct call's record is posted when it ends, as Telegram adds a call's service message then; group and
+	// channel calls post theirs at the start ("started a voice chat") and update it at the end.
+	if call.Kind != kindDirect || allBusy {
+		p.createRecordAndLink(call)
 	}
 	for _, userID := range busy {
 		p.publishState(call, stateEvent{userID: userID, action: "busy"})
@@ -672,7 +672,11 @@ func (p *Plugin) finishCall(call *callState, reason string, deleteRoom bool, sta
 	if err := p.saveCall(call); err != nil {
 		p.API.LogError("Could not save the ended call", "call_id", call.ID)
 	}
-	p.updateRecord(call)
+	if call.PostID == "" && call.Kind == kindDirect {
+		p.createRecordAndLink(call)
+	} else {
+		p.updateRecord(call)
+	}
 	if reason == reasonMissed {
 		for _, userID := range missed {
 			states = append(states, stateEvent{userID: userID, action: "missed"})

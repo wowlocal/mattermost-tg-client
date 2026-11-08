@@ -77,12 +77,8 @@ func TestDirectRingAcceptHangup(t *testing.T) {
 		t.Fatalf("unexpected channel broadcast %+v", broadcast)
 	}
 
-	post := h.api.post(call.PostID)
-	if post == nil || post.Type != callRecordPostType || post.UserId != alice || post.ChannelId != channel || post.Message != "Video call" {
-		t.Fatalf("unexpected call record %+v", post)
-	}
-	if recordProp(t, post, "call_id") != call.ID || recordProp(t, post, "state") != stateRinging || recordProp(t, post, "v") != 2 || recordProp(t, post, "kind") != kindDirect {
-		t.Fatalf("unexpected record props %v", post.Props)
+	if call.PostID != "" || h.stored(t, call.ID).PostID != "" {
+		t.Fatal("a ringing direct call already has a record; Telegram adds it when the call ends")
 	}
 
 	h.api.resetEvents()
@@ -138,7 +134,10 @@ func TestDirectRingAcceptHangup(t *testing.T) {
 	if retention != endedRetentionSeconds {
 		t.Fatalf("ended call retention %d", retention)
 	}
-	post = h.api.post(call.PostID)
+	post := h.api.post(h.stored(t, call.ID).PostID)
+	if post == nil || post.Type != callRecordPostType || post.UserId != alice || post.ChannelId != channel || recordProp(t, post, "call_id") != call.ID || recordProp(t, post, "v") != 2 || recordProp(t, post, "kind") != kindDirect {
+		t.Fatalf("unexpected call record %+v", post)
+	}
 	if post.Message != "Video call · 2 min" || recordProp(t, post, "end_reason") != reasonHangup || recordProp(t, post, "duration_ms") != int64(125_000) || recordProp(t, post, "state") != stateEnded {
 		t.Fatalf("call record not updated: %q %v", post.Message, post.Props)
 	}
@@ -196,7 +195,7 @@ func TestDirectDecline(t *testing.T) {
 	if states := h.api.eventsNamed("call_state"); len(states) != 2 || states[0].data["action"] != "declined" {
 		t.Fatalf("declined events %+v", states)
 	}
-	if !containsString(h.lk.deletedRooms(), call.Room) || h.api.post(call.PostID).Message != "Declined call" {
+	if !containsString(h.lk.deletedRooms(), call.Room) || h.api.post(stored.PostID).Message != "Declined call" {
 		t.Fatal("decline did not close the room and the record")
 	}
 	expectStatus(t, invoke(h.p, bob, "POST", callPath(call.ID, "decline"), `{"reason":"declined"}`), http.StatusNoContent)
@@ -269,11 +268,11 @@ func TestDirectMissedAfterTimeout(t *testing.T) {
 	if len(h.api.eventsNamed("call_ended")) != 3 || !containsString(h.lk.deletedRooms(), call.Room) {
 		t.Fatal("the missed call was not ended")
 	}
-	if post := h.api.post(call.PostID); post.Message != "Missed call" || recordProp(t, post, "end_reason") != reasonMissed {
+	if post := h.api.post(stored.PostID); post.Message != "Missed call" || recordProp(t, post, "end_reason") != reasonMissed {
 		t.Fatalf("unexpected record %q", post.Message)
 	}
 	pushes := h.api.pushList()
-	if len(pushes) != 1 || pushes[0].userID != bob || pushes[0].notification.Message != "Missed call from Alice" || pushes[0].notification.PostId != call.PostID || pushes[0].notification.ChannelId != channel {
+	if len(pushes) != 1 || pushes[0].userID != bob || pushes[0].notification.Message != "Missed call from Alice" || pushes[0].notification.PostId != stored.PostID || pushes[0].notification.ChannelId != channel {
 		t.Fatalf("unexpected missed call pushes %+v", pushes)
 	}
 	if _, reason := h.p.NotificationWillBePushed(pushes[0].notification, bob); reason != "" {
@@ -320,7 +319,7 @@ func TestCallerCancels(t *testing.T) {
 	if states := h.api.eventsNamed("call_state"); len(states) != 2 || states[0].data["action"] != "cancelled" || states[0].data["user_id"] != alice {
 		t.Fatalf("cancelled events %+v", states)
 	}
-	if h.api.post(call.PostID).Message != "Cancelled call" || !containsString(h.lk.deletedRooms(), call.Room) {
+	if h.api.post(stored.PostID).Message != "Cancelled call" || !containsString(h.lk.deletedRooms(), call.Room) {
 		t.Fatal("cancel did not close the room and the record")
 	}
 	if pushes := h.api.pushList(); len(pushes) != 1 || pushes[0].userID != bob {
@@ -540,8 +539,13 @@ func TestCallRecordPushIsSuppressed(t *testing.T) {
 	alice, bob := h.user("alice"), h.user("bob")
 	channel := h.channel("D", alice, bob)
 	call := decodeJoin(t, invoke(h.p, alice, "POST", ringPath(channel), `{"device_id":"alice-phone"}`)).Call
-	if _, reason := h.p.NotificationWillBePushed(&model.PushNotification{PostId: call.PostID, ChannelId: channel, Message: "Call"}, bob); reason == "" {
+	expectStatus(t, invoke(h.p, alice, "POST", callPath(call.ID, "hangup"), `{"device_id":"alice-phone"}`), http.StatusNoContent)
+	record := h.stored(t, call.ID).PostID
+	if _, reason := h.p.NotificationWillBePushed(&model.PushNotification{PostId: record, ChannelId: channel, Message: "Cancelled call"}, bob); reason == "" {
 		t.Fatal("the call record's alert push was not suppressed")
+	}
+	if replacement, reason := h.p.NotificationWillBePushed(&model.PushNotification{PostId: record, ChannelId: channel, Message: "Missed call from Alice"}, bob); reason != "" || replacement != nil {
+		t.Fatal("the plugin's own missed-call push was suppressed")
 	}
 	message, _ := h.api.CreatePost(&model.Post{UserId: alice, ChannelId: channel, Message: "hello"})
 	if replacement, reason := h.p.NotificationWillBePushed(&model.PushNotification{PostId: message.Id, ChannelId: channel}, bob); reason != "" || replacement != nil {
