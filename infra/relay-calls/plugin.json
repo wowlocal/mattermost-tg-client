@@ -1,8 +1,8 @@
 {
   "id": "org.relaychat.calls",
   "name": "Relay Calls",
-  "description": "Native group audio and screen sharing for Relay, powered by self-hosted LiveKit.",
-  "version": "0.1.0",
+  "description": "Native calls for Relay: ringing direct and group calls, group audio, camera and screen sharing, powered by self-hosted LiveKit.",
+  "version": "0.2.0",
   "min_server_version": "11.7.0",
   "server": {"executables": {"linux-amd64": "server/dist/plugin-linux-amd64", "linux-arm64": "server/dist/plugin-linux-arm64"}},
   "settings_schema": {
@@ -12,7 +12,8 @@
       {"key": "LiveKitAPIKey", "display_name": "LiveKit API key", "type": "text", "default": ""},
       {"key": "LiveKitAPISecret", "display_name": "LiveKit API secret", "type": "text", "secret": true, "default": ""},
       {"key": "MaxParticipants", "display_name": "Maximum participants per call", "type": "number", "default": 25},
-      {"key": "AnnounceCalls", "display_name": "Post call invitations in channels", "type": "bool", "default": true}
+      {"key": "RingTimeoutSeconds", "display_name": "Ring timeout (seconds)", "type": "number", "default": 45, "help_text": "How long direct and group calls ring before unanswered invitees miss them (10 to 300)."},
+      {"key": "AnnounceCalls", "display_name": "Post call records in conversations", "type": "bool", "default": true, "help_text": "Post one call record per call (missed, cancelled or its duration) in the conversation."}
     ]
   }
 }

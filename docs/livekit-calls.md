@@ -66,27 +66,93 @@ go test -race ./server
 ./build.sh
 ```
 
-The build produces an installable Mattermost tarball with Linux amd64/arm64
+The build produces `build/org.relaychat.calls-<version>.tar.gz` (the version
+comes from `plugin.json`; 0.2.0 for contract version 2) with Linux amd64/arm64
 executables. Deployment, media ports, generated secret locations, TLS renewal
 and rollback are documented in the infrastructure repository at
 `services/relay-calls/README.md`.
 
-Plugin routes below are relative to `/plugins/org.relaychat.calls`:
+The plugin implements contract version 2; the exact JSON is the
+[wire contract](livekit-calls-native-ui.md#wire-contract-plugin-orgrelaychatcalls-version-2).
+Routes are relative to `/plugins/org.relaychat.calls`:
 
 | Method and route | Behavior |
 | --- | --- |
-| `GET /config` | Authenticated feature availability and room limit |
-| `GET /channels/<id>` | Current call or `null` |
-| `POST /channels/<id>/join` | Create/reuse room and issue a device token |
+| `GET /config` | Version 2, room limit, `camera`, `ringing`, `ring_timeout_seconds` |
+| `GET /channels/<id>` | `{call}`: the current call or `null` |
+| `POST /channels/<id>/join` | Join the current call, or start one without ringing |
+| `POST /channels/<id>/ring` | Ring every other member of a DM or group message |
 | `POST /channels/<id>/end` | End the specified call for authorized users |
+| `GET /calls/active` | `{calls}`: ringing and active calls in the user's channels |
+| `GET /calls/<id>` | One call; ended calls stay readable for 10 minutes |
+| `POST /calls/<id>/received`, `accept`, `decline`, `hangup` | Answer a ring, leave or hang up |
+| `POST /devices/voip`, `DELETE /devices/voip/<device_id>` | iOS VoIP push registration |
 | `POST /webhook` | Verify LiveKit signature and update room state |
 
-Join/end accept optional `call_id`; a stale value returns `409`. Join tokens
-use unique device identities so a second device does not evict the first.
-The pilot server limits a room to 25 devices. Empty rooms expire; channel
-departure disconnects that member's devices. Room state lives in Mattermost
-plugin KV. The plugin serializes room operations for the current single-server
-deployment; a multi-node Mattermost deployment requires distributed locking.
+Join/end accept optional `call_id`; a stale value returns `409`. Tokens use the
+identity `<user id>:<device id>` (random when the client sends no `device_id`),
+the user's display name, and allow microphone, camera and screen sharing. The
+pilot server limits a room to 25 devices. Empty rooms expire; channel departure
+disconnects that member's devices.
+
+Channel type decides the call: `D` rings the other user, `G` every other member,
+`O`/`P` calls ring nobody. A ring times out after `RingTimeoutSeconds` (plugin
+setting, default 45, 10 to 300): a direct call ends `missed`, unanswered group
+invitees become `missed`. The first device to `accept` wins (KV
+compare-and-set); a user in another ringing or active call is `busy`. Direct
+calls end for both on `hangup`; group calls end when the room finishes or the
+creator ends them.
+
+Events reach Mattermost clients as `custom_org.relaychat.calls_<name>`:
+`incoming` (each invitee), `call_state` (caller and invitees), `call_updated`
+and `call_ended` (channel members and invitees, once each).
+
+Call state lives in Mattermost plugin KV: `call:<id>`, the channel and room
+pointers, an index of live calls with their ring expiry (swept every second by a
+ticker started in `OnActivate`, so expiry survives restarts) and `voip:<user>`
+registrations. The plugin serializes call operations for the current
+single-server deployment; a multi-node Mattermost deployment requires
+distributed locking.
+
+When `AnnounceCalls` is on, every call gets one `custom_relay_call` record post
+from the caller, updated when the call ends. The plugin suppresses
+Mattermost's own push for that post (`NotificationWillBePushed`) and sends a
+"Missed call from X" push to invitees who missed the ring.
+
+### VoIP push
+
+The plugin sends PushKit rings straight to APNs over HTTP/2 (topic
+`<bundle_id>.voip`, priority 10, expiring with the ring). It signs an ES256
+provider token with the Relay `.p8` key and reuses it for 50 minutes. Put
+these keys in the secret configuration file that holds the LiveKit secret
+(`RELAY_CALLS_CONFIG_FILE`, default `/opt/relay-calls/plugin-config.json`):
+
+| Key | Value |
+| --- | --- |
+| `APNsKeyPath` | Absolute path of the `AuthKey_<key id>.p8` file on the Mattermost host |
+| `APNsKeyID` | The key's 10-character ID |
+| `APNsTeamID` | The Apple developer team ID |
+| `APNsBaseURL` | Optional HTTPS URL that replaces both APNs hosts (tests only) |
+
+```json
+{"APNsKeyPath": "/opt/relay-calls/AuthKey_ABCDE12345.p8", "APNsKeyID": "ABCDE12345", "APNsTeamID": "TEAM123456"}
+```
+
+The `.p8` file must be readable only by the Mattermost server user (mode
+`0600`); it never goes into plugin settings, logs or the repository. When the
+plugin settings hold the LiveKit secret, only the APNs keys are read from the
+file. Without these keys the plugin sends no VoIP pushes and logs that once;
+rings still arrive over WebSocket. An unreadable or incomplete key logs an
+error and leaves calls working. Each registration's `environment` picks the
+sandbox or production host. A registration is dropped when its Mattermost
+session ends or APNs reports the token gone (`410`, `BadDeviceToken`).
+
+`go test -race ./server` covers the version 1 checks plus direct ring, accept,
+decline, busy, missed (injected clock), cancel and hangup; group rings with
+partial answers; first-device-wins; accept after expiry; event recipients;
+token grants; call records and push suppression; ring expiry across a restart;
+and the APNs sender against an HTTP/2 test server (headers, JWT, payload, token
+cleanup).
 
 ## Validation
 

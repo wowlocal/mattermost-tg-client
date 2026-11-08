@@ -77,7 +77,7 @@ still ringing become `missed` (also on `cancelled`).
 | `GET /config` | | `{enabled, version: 2, max_participants, screen_sharing, camera: true, ringing: true, ring_timeout_seconds}` |
 | `GET /channels/<id>` | | `{call}`: current call or `null` (unchanged) |
 | `POST /channels/<id>/join` | `{call_id?, device_id?}` | `{url, token, call}`; joins an active call (any kind) or starts a call without ringing (a channel call; in `D`/`G`, a `direct`/`group` call with no invitees, for version 1 clients); an invitee whose devices ring answers as with `accept` |
-| `POST /channels/<id>/ring` | `{video, device_id}` | `{url, token, call}`; `D`/`G` only (`400` otherwise, also when there is nobody to ring); `409` with the call if one is already ringing or active there; when the `direct` invitee is busy, `200` with the call already `ended` (`busy`) and an empty `token` |
+| `POST /channels/<id>/ring` | `{video, device_id}` | `{url, token, call}`; `D`/`G` only (`400` otherwise, also when there is nobody to ring); `409` with the call if one is already ringing or active there; when the `direct` invitee is busy, `200` with the call already `ended` (`busy`), no room, and a `token` that cannot join (`roomJoin: false`): do not connect |
 | `POST /channels/<id>/end` | `{call_id}` | end for everyone (unchanged permissions); `end_reason` `cancelled` if nobody answered, `hangup` for `direct`, else `ended` |
 | `GET /calls/<id>` | | the call object itself (not wrapped); `404` once forgotten (about 10 minutes after the end) |
 | `GET /calls/active` | | `{calls: [call, …]}`, newest first: every ringing or active call in channels the user belongs to (the client finds its own rings via `invitees[me]` = `ringing`/`received`; the rest feed the join panel) |
