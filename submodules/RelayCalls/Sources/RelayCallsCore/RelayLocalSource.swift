@@ -53,6 +53,11 @@ final class RelayLocalSource {
     private var timeoutTimer: RelayCancellable?
     /// The request in flight; an older one finishing late (after its timeout) only logs.
     private var requestId = 0
+    /// Requests the engine has not answered yet, including ones that timed out. A request that never answers (an audio
+    /// server that stalls) gets one retry beside it; further ones wait for an answer, so a slow audio server is not
+    /// asked to build engines over and over.
+    private var unanswered = 0
+    static let maxUnansweredRequests = 2
     /// Invalidates requests still running when the media went away.
     private var generation = 0
 
@@ -108,12 +113,18 @@ final class RelayLocalSource {
         self.generation += 1
         self.isApplying = false
         self.applied = nil
+        self.unanswered = 0
     }
 
     private func sync() {
         guard self.isReady, !self.isApplying, self.applied != self.wanted else {
             return
         }
+        guard self.unanswered < Self.maxUnansweredRequests else {
+            RelayCallsLog.log("\(self.describe()): \(self.name) \(Self.word(self.wanted)) waits: \(self.unanswered) earlier requests have not answered")
+            return
+        }
+        self.unanswered += 1
         self.isApplying = true
         self.requestId += 1
         let request = self.requestId
@@ -137,6 +148,7 @@ final class RelayLocalSource {
         guard generation == self.generation else {
             return
         }
+        self.unanswered = max(0, self.unanswered - 1)
         guard request == self.requestId, self.isApplying else {
             // It timed out before: a newer request (or a retry) took over.
             if let error {
@@ -149,6 +161,9 @@ final class RelayLocalSource {
                     self.failedAttempts = 0
                     self.cancelRetry()
                 }
+            }
+            if self.retryTimer == nil {
+                self.sync()
             }
             return
         }

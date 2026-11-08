@@ -219,6 +219,31 @@ final class RelayLocalSourceTests: XCTestCase {
         XCTAssertEqual(self.engine.microphoneRequests, [true, true])
     }
 
+    func testRequestsThatNeverAnswerDoNotPileUp() async {
+        // An audio server that stalls: every publish hangs. One retry may run beside the unanswered request, no more.
+        self.engine.microphoneHangs = true
+        let call = await self.answeredOutgoing()
+        self.scheduler.advance(by: 15)
+        await waitUntil("first timeout") { self.logged("microphone on failed (attempt 1): no answer after 15.0 s") }
+        self.scheduler.advance(by: 0.5)
+        await waitUntil("retry sent") { self.engine.microphoneRequests.count == 2 }
+        self.scheduler.advance(by: 15)
+        await waitUntil("second timeout") { self.logged("microphone on failed (attempt 2): no answer after 15.0 s") }
+        self.scheduler.advance(by: 60)
+        await settle()
+        XCTAssertEqual(self.engine.microphoneRequests, [true, true])
+        XCTAssertTrue(self.logged("microphone on waits: 2 earlier requests have not answered"))
+        XCTAssertFalse(call.snapshot.isMuted)
+
+        // The engine answers: the microphone is on and nothing more is sent.
+        self.engine.microphoneHangs = false
+        self.engine.releaseMicrophone()
+        await waitUntil("published") { self.engine.microphone == true }
+        self.scheduler.advance(by: 60)
+        await settle()
+        XCTAssertEqual(self.engine.microphoneRequests, [true, true])
+    }
+
     func testCameraRetriesThenTurnsOff() async {
         self.engine.cameraError = FakeMediaError("No first camera frame")
         let call = await self.answeredOutgoing(video: true)
