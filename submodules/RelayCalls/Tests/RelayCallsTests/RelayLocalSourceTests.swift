@@ -36,8 +36,10 @@ final class RelayLocalSourceTests: XCTestCase {
     private func answeredOutgoing(video: Bool = false) async -> RelayDirectCall {
         let call = self.outgoing(video: video)
         call.start()
-        await waitUntil("microphone requested") { !self.engine.microphoneRequests.isEmpty }
+        await waitUntil("media connected") { self.engine.connectedWith != nil }
+        await settle()
         call.handle(.callState(call: Fixtures.call(state: .active, invitees: [Fixtures.peer: .accepted]), userId: Fixtures.peer, deviceId: Fixtures.peerDevice, action: .accepted))
+        await waitUntil("microphone requested") { !self.engine.microphoneRequests.isEmpty }
         self.engine.addRemote(Fixtures.device(Fixtures.peer, Fixtures.peerDevice))
         XCTAssertEqual(call.state, .active(since: self.scheduler.current))
         return call
@@ -75,8 +77,10 @@ final class RelayLocalSourceTests: XCTestCase {
             }
         }
         call.start()
-        await waitUntil("microphone requested") { !self.engine.microphoneRequests.isEmpty }
+        await waitUntil("media connected") { self.engine.connectedWith != nil }
+        await settle()
         call.handle(.callState(call: Fixtures.call(state: .active, invitees: [Fixtures.peer: .accepted]), userId: Fixtures.peer, deviceId: Fixtures.peerDevice, action: .accepted))
+        await waitUntil("microphone requested") { !self.engine.microphoneRequests.isEmpty }
         self.engine.addRemote(Fixtures.device(Fixtures.peer, Fixtures.peerDevice))
         // Every automatic retry fails.
         for delay in [0.5, 1, 2, 4, 8, 8, 8, 8] {
@@ -142,8 +146,10 @@ final class RelayLocalSourceTests: XCTestCase {
         let call = self.outgoing()
         call.setMuted(true)
         call.start()
-        await waitUntil("applied muted") { self.engine.microphone == false }
+        await waitUntil("media connected") { self.engine.connectedWith != nil }
+        await settle()
         call.handle(.callState(call: Fixtures.call(state: .active, invitees: [Fixtures.peer: .accepted]), userId: Fixtures.peer, deviceId: Fixtures.peerDevice, action: .accepted))
+        await waitUntil("applied muted") { self.engine.microphone == false }
         self.engine.addRemote(Fixtures.device(Fixtures.peer, Fixtures.peerDevice))
 
         self.engine.microphoneError = FakeMediaError()
@@ -209,6 +215,31 @@ final class RelayLocalSourceTests: XCTestCase {
         await waitUntil("late answer logged") { self.logged("microphone on answered after its timeout: succeeded") }
         XCTAssertEqual(self.engine.microphoneRequests, [true, true])
         self.scheduler.advance(by: 30)
+        await settle()
+        XCTAssertEqual(self.engine.microphoneRequests, [true, true])
+    }
+
+    func testRequestsThatNeverAnswerDoNotPileUp() async {
+        // An audio server that stalls: every publish hangs. One retry may run beside the unanswered request, no more.
+        self.engine.microphoneHangs = true
+        let call = await self.answeredOutgoing()
+        self.scheduler.advance(by: 15)
+        await waitUntil("first timeout") { self.logged("microphone on failed (attempt 1): no answer after 15.0 s") }
+        self.scheduler.advance(by: 0.5)
+        await waitUntil("retry sent") { self.engine.microphoneRequests.count == 2 }
+        self.scheduler.advance(by: 15)
+        await waitUntil("second timeout") { self.logged("microphone on failed (attempt 2): no answer after 15.0 s") }
+        self.scheduler.advance(by: 60)
+        await settle()
+        XCTAssertEqual(self.engine.microphoneRequests, [true, true])
+        XCTAssertTrue(self.logged("microphone on waits: 2 earlier requests have not answered"))
+        XCTAssertFalse(call.snapshot.isMuted)
+
+        // The engine answers: the microphone is on and nothing more is sent.
+        self.engine.microphoneHangs = false
+        self.engine.releaseMicrophone()
+        await waitUntil("published") { self.engine.microphone == true }
+        self.scheduler.advance(by: 60)
         await settle()
         XCTAssertEqual(self.engine.microphoneRequests, [true, true])
     }

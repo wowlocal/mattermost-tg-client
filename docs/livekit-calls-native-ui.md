@@ -202,8 +202,10 @@ joinedAt, userId, isMicrophoneEnabled, isCameraEnabled, isScreenSharing}`. Timer
   `.incoming(api:engine:ownUserId:deviceId:push:)` (VoIP push; `start()` first checks `GET /calls/<id>` and ends the
   call if it no longer rings for this user). `static declineBusy(api:callId:deviceId:)` declines a ring this device
   cannot take without a controller.
-- Act: `start()` (outgoing: rings and connects the media right away; incoming: reports `received`, starts the local
-  ring expiry), `accept()`, `decline(reason:)`, `hangup()` (declines an unanswered incoming ring, cancels an
+- Act: `start()` (outgoing: rings and connects the media right away, but publishes the microphone only once the callee
+  answered, as Telegram sends nothing before the answer: a microphone published while ringing starts the platform's
+  voice processing, which on macOS ducked the ringback tone and every other app for the whole ring; a video call's
+  camera publishes right away for the local preview; incoming: reports `received`, starts the local ring expiry), `accept()`, `decline(reason:)`, `hangup()` (declines an unanswered incoming ring, cancels an
   unanswered outgoing one, ends an answered call for both), `setMuted(_:)`, `setCameraEnabled(_:)` (either side, any
   time; a `video` call starts with the camera on), `audioBecameAvailable()`, `setScreenShare(enabled:)`, `handle(_ event: RelayCallsEvent)`
   (feed every event of the account; other calls' events are ignored).
@@ -393,7 +395,11 @@ account registers the PushKit token (`MattermostSync.setVoIPPushToken`). The fir
 
 **macOS** (new `packages/RelayTelegramCalls`): the core's microphone/camera publishing applies there unchanged (no
 CallKit; LiveKit's engine availability stays `.default`, so `audioBecameAvailable()` is optional, e.g. after the
-microphone permission is granted). Installing `RelayCallsLog.handler` puts the core's diagnostics into the Mac log; a
+microphone permission is granted). Audio runs on WebRTC's platform device module (Core Audio, WebRTC echo
+cancellation, as Telegram's own calls), not LiveKit's AVAudioEngine module with Apple voice processing (see
+`macos-client.md`). A media request that does not answer gets one retry beside it; further retries wait for an answer,
+so a stalled audio server is not asked to build engines over and over. Installing `RelayCallsLog.handler` puts the
+core's diagnostics into the Mac log; a
 camera that fails to publish now turns off after its retries (about 7 s plus the attempts) instead of at once.
 `LiveKitVideoSource: VideoSource`, `RelayPresentationGroupCall:
 PresentationGroupCall` (macOS protocol) for `GroupCallContext`, `RelayPeerCallSession` behind a new

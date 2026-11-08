@@ -35,11 +35,18 @@ final class RelayDirectCallTests: XCTestCase {
     private func activeOutgoing() async -> RelayDirectCall {
         let call = self.outgoing()
         call.start()
-        await waitUntil("media connected") { self.engine.connectedWith != nil && self.engine.microphone != nil }
+        await self.ringingConnected()
         call.handle(.callState(call: Fixtures.call(state: .active, invitees: [Fixtures.peer: .accepted]), userId: Fixtures.peer, deviceId: Fixtures.peerDevice, action: .accepted))
+        await waitUntil("microphone on") { self.engine.microphone == true }
         self.engine.addRemote(self.peerDevice)
         XCTAssertEqual(call.state, .active(since: self.scheduler.current))
         return call
+    }
+
+    /// The outgoing call's room is up while it rings.
+    private func ringingConnected() async {
+        await waitUntil("media connected") { self.engine.connectedWith != nil }
+        await settle()
     }
 
     // MARK: Outgoing
@@ -50,7 +57,7 @@ final class RelayDirectCallTests: XCTestCase {
         let observation = call.observe { states.append($0.state) }
         XCTAssertEqual(call.state, .requesting(ringing: false))
         call.start()
-        await waitUntil("media connected") { self.engine.microphone == true }
+        await self.ringingConnected()
         XCTAssertEqual(self.api.requests.first, .ring(channelId: Fixtures.channel, video: false, deviceId: Fixtures.myDevice))
         XCTAssertEqual(self.engine.connectedWith?.token, "room-token")
         XCTAssertEqual(call.callId, "call1")
@@ -58,9 +65,13 @@ final class RelayDirectCallTests: XCTestCase {
 
         call.handle(.callState(call: Fixtures.call(invitees: [Fixtures.peer: .received]), userId: Fixtures.peer, deviceId: Fixtures.peerDevice, action: .received))
         XCTAssertEqual(call.state, .requesting(ringing: true))
+        await settle()
+        XCTAssertEqual(self.engine.microphoneRequests, [], "nothing is sent while it rings")
+        XCTAssertFalse(call.snapshot.isMuted)
 
         call.handle(.callState(call: Fixtures.call(state: .active, invitees: [Fixtures.peer: .accepted]), userId: Fixtures.peer, deviceId: Fixtures.peerDevice, action: .accepted))
         XCTAssertEqual(call.state, .connecting)
+        await waitUntil("microphone on after the answer") { self.engine.microphone == true }
 
         self.engine.addRemote(self.peerDevice)
         XCTAssertEqual(call.state, .active(since: self.scheduler.current))
@@ -79,15 +90,17 @@ final class RelayDirectCallTests: XCTestCase {
     func testOutgoingCalleeJoiningBeforeAcceptedEventIsActive() async {
         let call = self.outgoing()
         call.start()
-        await waitUntil("media connected") { self.engine.microphone != nil }
+        await self.ringingConnected()
+        XCTAssertNil(self.engine.microphone)
         self.engine.addRemote(self.peerDevice)
         XCTAssertEqual(call.state, .active(since: self.scheduler.current))
+        await waitUntil("microphone on") { self.engine.microphone == true }
     }
 
     func testOutgoingDeclinedByCallee() async {
         let call = self.outgoing()
         call.start()
-        await waitUntil("media connected") { self.engine.microphone != nil }
+        await self.ringingConnected()
         call.handle(.callState(call: Fixtures.call(invitees: [Fixtures.peer: .declined]), userId: Fixtures.peer, deviceId: Fixtures.peerDevice, action: .declined))
         XCTAssertEqual(call.state, .terminated(.declined, duration: nil))
         await waitUntil("disconnected") { self.engine.disconnectCount > 0 }
@@ -123,7 +136,7 @@ final class RelayDirectCallTests: XCTestCase {
     func testOutgoingRingExpiresLocallyAfterGrace() async {
         let call = self.outgoing()
         call.start()
-        await waitUntil("media connected") { self.engine.microphone != nil }
+        await self.ringingConnected()
         // `ring_expires_at` is 45 s after the scheduler's start.
         self.scheduler.advance(by: 45)
         XCTAssertEqual(call.state, .requesting(ringing: false))
@@ -141,7 +154,7 @@ final class RelayDirectCallTests: XCTestCase {
     func testOutgoingHangupBeforeAnswerCancels() async {
         let call = self.outgoing()
         call.start()
-        await waitUntil("media connected") { self.engine.microphone != nil }
+        await self.ringingConnected()
         call.hangup()
         XCTAssertEqual(call.state, .terminated(.hangup, duration: nil))
         await waitUntil("hangup sent") { self.api.requests.contains(.hangup(callId: "call1", deviceId: Fixtures.myDevice)) }
@@ -211,7 +224,7 @@ final class RelayDirectCallTests: XCTestCase {
     func testAnsweredCallThatNeverConnectsFails() async {
         let call = self.outgoing()
         call.start()
-        await waitUntil("media connected") { self.engine.microphone != nil }
+        await self.ringingConnected()
         call.handle(.callState(call: Fixtures.call(state: .active, invitees: [Fixtures.peer: .accepted]), userId: Fixtures.peer, deviceId: Fixtures.peerDevice, action: .accepted))
         XCTAssertEqual(call.state, .connecting)
         self.scheduler.advance(by: RelayDirectCall.connectTimeout - 1)
@@ -273,6 +286,8 @@ final class RelayDirectCallTests: XCTestCase {
         let call = self.outgoing()
         call.setMuted(true)
         call.start()
+        await self.ringingConnected()
+        call.handle(.callState(call: Fixtures.call(state: .active, invitees: [Fixtures.peer: .accepted]), userId: Fixtures.peer, deviceId: Fixtures.peerDevice, action: .accepted))
         await waitUntil("media connected") { self.engine.microphone != nil }
         XCTAssertEqual(self.engine.microphone, false)
         call.setMuted(false)

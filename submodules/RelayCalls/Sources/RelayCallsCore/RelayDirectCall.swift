@@ -5,8 +5,9 @@ import Foundation
 /// `RelayCallsEvent`s.
 ///
 /// Outgoing: `outgoing(…)` + `start()` rings (`POST /channels/<id>/ring`) and connects the media right away, so the
-/// call starts the moment the callee's device joins; `.requesting(ringing: true)` once a callee device reported
-/// `received` (ringback). Incoming: from the `incoming` event or a VoIP push; `start()` reports `received` (and, for
+/// call starts the moment the callee's device joins; the microphone publishes once the callee answered (a video call's
+/// camera right away, for the local preview); `.requesting(ringing: true)` once a callee device reported `received`
+/// (ringback). Incoming: from the `incoming` event or a VoIP push; `start()` reports `received` (and, for
 /// a push, first checks the call still rings for this user); `accept()` / `decline()`. Both sides expire the ring
 /// locally at `ring_expires_at`.
 @MainActor
@@ -572,16 +573,18 @@ public final class RelayDirectCall {
         }
         RelayCallsLog.log("\(self.logName): media connected (microphone \(self.microphone.wanted ? "on" : "off"), camera \(self.camera.wanted ? "on" : "off"))")
         self.mediaConnected = true
-        // Publishes the microphone (and camera) now, retrying failures.
+        // Publishes the camera now and the microphone once answered, retrying failures.
         self.updatePublishing()
         self.evaluate()
     }
 
-    /// The local sources publish while the room is up.
+    /// The local sources publish while the room is up. The microphone of an outgoing call waits for the answer, as
+    /// Telegram sends nothing before it: a microphone published while ringing starts the platform's voice processing,
+    /// which on macOS ducks every other sound (the ringback tone, other apps) for the whole ring.
     private func updatePublishing() {
         let isUp = self.media.connectionState == .connected || self.media.connectionState == .reconnecting
         let ready = self.mediaConnected && !self.state.isTerminated && isUp
-        self.microphone.setReady(ready)
+        self.microphone.setReady(ready && (self.answered || !self.isOutgoing))
         self.camera.setReady(ready)
     }
 
@@ -719,6 +722,7 @@ public final class RelayDirectCall {
             self.state = .connecting
         }
         self.updateMediaTimer()
+        self.updatePublishing()
         if self.state != previous {
             self.notify()
         }
