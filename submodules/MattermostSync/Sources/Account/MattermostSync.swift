@@ -162,6 +162,8 @@ public enum MattermostSync {
         sync.start()
         // Phase 3A: attach the APNs token to this session (a new login has no device yet).
         self.registerPushDevice(sync: sync)
+        // Relay calls: the VoIP token for rings while the app is not running.
+        self.registerVoIPDevice(sync: sync)
     }
 
     static func sync(accountId: AccountRecordId) -> MattermostAccountSync? {
