@@ -75,7 +75,7 @@ the request.
 | `POST /channels/<id>/ring` | `{video, device_id}` | `{url, token, call}`; `D`/`G` only (`400` otherwise); `409` with the call if one is already active there |
 | `POST /channels/<id>/end` | `{call_id}` | end for everyone (unchanged permissions) |
 | `GET /calls/<id>` | | call object (`404` once forgotten) |
-| `GET /calls/active` | | calls where the user is ringing (`invitees[me]` is `ringing`/`received`) or connected |
+| `GET /calls/active` | | every ringing or active call in channels the user belongs to (the client finds its own rings via `invitees[me]` = `ringing`/`received`; the rest feed the join panel) |
 | `POST /calls/<id>/received` | `{device_id}` | `204`; invitee device shows the call ("Ringing…" for the caller) |
 | `POST /calls/<id>/accept` | `{device_id}` | `{url, token, call}`; first device wins (compare-and-set); `409` if no longer ringing for this user |
 | `POST /calls/<id>/decline` | `{device_id, reason: "declined"\|"busy"}` | `204` |
