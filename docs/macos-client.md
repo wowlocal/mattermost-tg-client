@@ -84,6 +84,14 @@ screen share (Telegram's source picker, matched by display or window id), drawn 
 channels and group messages a member can call in). `PrivateCallScreen` processes its asset catalog (it was copied
 uncompiled, and `NSImage(resource:)` trapped: the old crash on Call).
 
+The app links two WebRTCs with one `webrtc::` C++ namespace: tg_owt (`libmac_framework_objc_static.a`, what tgcalls is
+compiled against) and LiveKit's `LiveKitWebRTC.framework`. The app target names the tg_owt archive in `OTHER_LDFLAGS`
+so that it comes before the package frameworks on the link line; otherwise the linker binds tgcalls' references to
+LiveKit's copy (other sources, other layouts) and Telegram's screen source picker crashed on open. Check a build with
+`nm -m Relay.debug.dylib | grep '(from LiveKitWebRTC)' | grep 6webrtc` (no output). Tones and LiveKit device selection
+run off the main thread: a slow audio server froze the call screen otherwise. Scripted peers for the dev server:
+`tools/relay-calls-peer.py` (ring, answer, decline, channel calls, tone and test-pattern media, received frame stats).
+
 Not done: localization of the Relay screens (Relay is English-only, as on iOS), Mattermost-specific chat and profile
 screens, notifications while Relay isn't running (no push on macOS), sharing, voice transcoding. The emoji panel shows emoji only (no sticker or GIF tabs).
 
@@ -120,7 +128,14 @@ screens, notifications while Relay isn't running (no push on macOS), sharing, vo
 - Debug remote (debug builds): `tools/relay-mac-remote.swift` posts a command on the distributed notification
   `org.relaychat.RelayMac.debug.command` and prints the answer from `relay-debug/result.json`: `state`, `login
   server= login= [password=|RELAY_REMOTE_PASSWORD]`, `login-state`, `open-chat query=`, `send text=`, `thread`, `notifications`, `screen
-  name=new-message|new-channel|browse|settings|chats|threads`, `snapshot`. Screen captures need a permission the agent's
+  name=new-message|new-channel|browse|settings|chats|threads`, `snapshot`; for calls `call user= [video=1]`,
+  `call-state` (Telegram's call/group state, windows, the Relay controllers' media and per video source frame counts,
+  permissions), `call-accept`, `call-decline`, `call-hangup [end=1]`, `call-mute on|off`, `call-video on|off`,
+  `call-screen on|off` (Telegram's source picker), `join-call channel=` (the join panel), `messages`, `windows`,
+  `click text= [window= event= row=1]`, `screen-list`, `screen-picker`, `accounts`, `add-account`, `switch-account id=`
+  (a bare first word is the action, a second one its value). `RELAY_DEBUG_NO_PERMISSION_PROMPTS=1` lets calls start
+  while a microphone or camera prompt is unanswered; `RELAY_DEBUG_NO_AUDIO_ENGINE=1` keeps LiveKit's audio engine off
+  (a Mac whose audio server stalls); a crash's stack is scanned into `relay-debug/crash-scan.txt`. Screen captures need a permission the agent's
   terminal lacks, and neither `layer.render` nor `cacheDisplay` draws TGUIKit's content, so `snapshot` writes each
   window's view tree with TGUIKit `TextView` text (`relay-debug/window-N.txt`); that is how the screens were checked.
 - Checked on the dev server: login through the screen (bob) and the debug login (alice), bootstrap of 2 teams and
