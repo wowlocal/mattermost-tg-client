@@ -197,6 +197,31 @@ final class RelayDirectCallTests: XCTestCase {
         XCTAssertEqual(call.state, .active(since: since))
     }
 
+    func testAnsweredCallThatNeverConnectsFails() async {
+        let call = self.outgoing()
+        call.start()
+        await waitUntil("media connected") { self.engine.microphone != nil }
+        call.handle(.callState(call: Fixtures.call(state: .active, invitees: [Fixtures.peer: .accepted]), userId: Fixtures.peer, deviceId: Fixtures.peerDevice, action: .accepted))
+        XCTAssertEqual(call.state, .connecting)
+        self.scheduler.advance(by: RelayDirectCall.connectTimeout - 1)
+        XCTAssertEqual(call.state, .connecting)
+        self.scheduler.advance(by: 1)
+        XCTAssertEqual(call.state, .terminated(.failed("The call could not connect."), duration: nil))
+        await waitUntil("hangup sent") { self.api.requests.contains(.hangup(callId: "call1", deviceId: Fixtures.myDevice)) }
+    }
+
+    func testReconnectingTooLongFailsButARecoveryKeepsTheCall() async {
+        let call = await self.activeOutgoing()
+        self.engine.setConnectionState(.reconnecting)
+        self.scheduler.advance(by: RelayDirectCall.reconnectTimeout - 1)
+        self.engine.setConnectionState(.connected)
+        self.scheduler.advance(by: 10)
+        XCTAssertEqual(call.state, .active(since: Date(timeIntervalSince1970: 1_000_000)))
+        self.engine.removeRemote(identity: self.peerDevice.identity)
+        self.scheduler.advance(by: RelayDirectCall.reconnectTimeout)
+        XCTAssertEqual(call.state, .terminated(.failed("The connection was lost."), duration: RelayDirectCall.reconnectTimeout * 2 + 9))
+    }
+
     func testGlareAnswersTheCalleesRing() async {
         let theirs = Fixtures.call(id: "call2", startedBy: Fixtures.peer, invitees: [Fixtures.me: .ringing])
         let call = self.outgoing()

@@ -91,6 +91,10 @@ public final class RelayDirectCall {
     /// Seconds to wait for the plugin's `call_ended` after the ring expired before ending locally.
     public static let ringExpiryGrace: TimeInterval = 3
     static let defaultRingTimeout: TimeInterval = 45
+    /// An answered call whose media does not come up (or the other device does not join) within this ends as failed.
+    public static let connectTimeout: TimeInterval = 30
+    /// A call that stays reconnecting this long ends as failed.
+    public static let reconnectTimeout: TimeInterval = 60
 
     public private(set) var state: State
     public private(set) var call: RelayCall?
@@ -107,6 +111,11 @@ public final class RelayDirectCall {
     private var isCameraEnabled: Bool
     private var isScreenSharing = false
     private var ringTimer: RelayCancellable?
+    private enum MediaWait {
+        case connecting
+        case reconnecting
+    }
+    private var mediaTimer: (wait: MediaWait, timer: RelayCancellable)?
 
     private init(api: RelayCallsAPI, engine: RelayMediaEngine, scheduler: RelayCallScheduler, ownUserId: String, deviceId: String, channelId: String, peerUserId: String, isOutgoing: Bool, isVideo: Bool, call: RelayCall?, callId: String?, fromPush: Bool) {
         self.api = api
@@ -204,6 +213,7 @@ public final class RelayDirectCall {
         self.answered = true
         self.ringTimer?.cancel()
         self.state = .connecting
+        self.updateMediaTimer()
         self.notify()
         Task {
             do {
@@ -654,9 +664,46 @@ public final class RelayDirectCall {
         } else {
             self.state = .connecting
         }
+        self.updateMediaTimer()
         if self.state != previous {
             self.notify()
         }
+    }
+
+    /// Ends an answered call whose media stays down: `connectTimeout` while connecting, `reconnectTimeout` while
+    /// reconnecting.
+    private func updateMediaTimer() {
+        let wait: MediaWait
+        switch self.state {
+        case .connecting:
+            wait = .connecting
+        case .reconnecting:
+            wait = .reconnecting
+        default:
+            self.mediaTimer?.timer.cancel()
+            self.mediaTimer = nil
+            return
+        }
+        if self.mediaTimer?.wait == wait {
+            return
+        }
+        self.mediaTimer?.timer.cancel()
+        let timeout = wait == .connecting ? Self.connectTimeout : Self.reconnectTimeout
+        let timer = self.scheduler.schedule(at: self.scheduler.now().addingTimeInterval(timeout)) { [weak self] in
+            guard let self, self.mediaTimer?.wait == wait, !self.state.isTerminated else {
+                return
+            }
+            self.mediaTimer = nil
+            self.terminate(.failed(wait == .connecting ? "The call could not connect." : "The connection was lost."))
+            if let callId = self.callId {
+                let api = self.api
+                let deviceId = self.deviceId
+                Task {
+                    try? await api.hangup(callId: callId, deviceId: deviceId)
+                }
+            }
+        }
+        self.mediaTimer = (wait, timer)
     }
 
     private var remoteParticipant: RelayMediaParticipant? {
@@ -742,6 +789,8 @@ public final class RelayDirectCall {
         }
         self.ringTimer?.cancel()
         self.ringTimer = nil
+        self.mediaTimer?.timer.cancel()
+        self.mediaTimer = nil
         let elapsed = self.activeSince.map { self.scheduler.now().timeIntervalSince($0) }
         self.state = .terminated(reason, duration: duration ?? elapsed)
         if self.mediaRequested {

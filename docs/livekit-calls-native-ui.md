@@ -75,23 +75,28 @@ still ringing become `missed` (also on `cancelled`).
 | Method and route | Body | Result |
 | --- | --- | --- |
 | `GET /config` | | `{enabled, version: 2, max_participants, screen_sharing, camera: true, ringing: true, ring_timeout_seconds}` |
-| `GET /channels/<id>` | | current call or `null` (unchanged) |
-| `POST /channels/<id>/join` | `{call_id?, device_id?}` | `{url, token, call}`; joins an active call (any kind) or starts a channel call |
-| `POST /channels/<id>/ring` | `{video, device_id}` | `{url, token, call}`; `D`/`G` only (`400` otherwise); `409` with the call if one is already active there |
-| `POST /channels/<id>/end` | `{call_id}` | end for everyone (unchanged permissions) |
-| `GET /calls/<id>` | | call object (`404` once forgotten) |
-| `GET /calls/active` | | every ringing or active call in channels the user belongs to (the client finds its own rings via `invitees[me]` = `ringing`/`received`; the rest feed the join panel) |
+| `GET /channels/<id>` | | `{call}`: current call or `null` (unchanged) |
+| `POST /channels/<id>/join` | `{call_id?, device_id?}` | `{url, token, call}`; joins an active call (any kind) or starts a call without ringing (a channel call; in `D`/`G`, a `direct`/`group` call with no invitees, for version 1 clients); an invitee whose devices ring answers as with `accept` |
+| `POST /channels/<id>/ring` | `{video, device_id}` | `{url, token, call}`; `D`/`G` only (`400` otherwise, also when there is nobody to ring); `409` with the call if one is already ringing or active there; when the `direct` invitee is busy, `200` with the call already `ended` (`busy`) and an empty `token` |
+| `POST /channels/<id>/end` | `{call_id}` | end for everyone (unchanged permissions); `end_reason` `cancelled` if nobody answered, `hangup` for `direct`, else `ended` |
+| `GET /calls/<id>` | | the call object itself (not wrapped); `404` once forgotten (about 10 minutes after the end) |
+| `GET /calls/active` | | `{calls: [call, …]}`, newest first: every ringing or active call in channels the user belongs to (the client finds its own rings via `invitees[me]` = `ringing`/`received`; the rest feed the join panel) |
 | `POST /calls/<id>/received` | `{device_id}` | `204`; invitee device shows the call ("Ringing…" for the caller) |
-| `POST /calls/<id>/accept` | `{device_id}` | `{url, token, call}`; first device wins (compare-and-set); `409` if no longer ringing for this user |
-| `POST /calls/<id>/decline` | `{device_id, reason: "declined"\|"busy"}` | `204` |
-| `POST /calls/<id>/hangup` | `{device_id}` | `204`; caller while ringing → `cancelled`; `direct` while active → ends (`hangup`) for both; `group` → leave |
+| `POST /calls/<id>/accept` | `{device_id}` | `{url, token, call}`; first device wins (compare-and-set); `409` if no longer ringing for this user (also after the ring timeout) |
+| `POST /calls/<id>/decline` | `{device_id, reason: "declined"\|"busy"}` | `204` (repeating the same decline is `204` too) |
+| `POST /calls/<id>/hangup` | `{device_id}` | `204`; caller before anyone answered → `cancelled` (`direct` and `group`); `direct` after the answer → ends (`hangup`) for both; an invitee still ringing → declines; otherwise leave (that device, or every device of the user without `device_id`, is removed from the room) |
 | `POST /devices/voip` | `{device_id, token, environment: "sandbox"\|"production", bundle_id}` | `204` |
 | `DELETE /devices/voip/<device_id>` | | `204` |
+
+`received`, `accept` and `decline` on a call that no longer rings for the user answer `409`. Every `409` body is
+`{message, call}` except the version 1 stale `call_id` conflict (`{message}`). Other errors are `{message}`.
 
 Rules: a `direct` call ends with `declined` when the callee declines, `busy` when every invitee is busy (another
 ringing or active call, or a device answered `busy`), `missed` when the ring timeout (default 45 s) passes,
 `cancelled` when the caller hangs up first. A `group` call stays alive while anyone is connected; invitees who do
-not answer become `missed`. Ring expiry survives plugin restarts (state in KV, swept by a ticker).
+not answer become `missed`. Ring expiry survives plugin restarts (state in KV, swept by a ticker). A room that
+finishes ends the call with `hangup` (answered `direct`), `failed` (still ringing) or `ended`. A device leaving the
+room never ends a call by itself: the remaining `direct` client hangs up when its peer is gone.
 
 LiveKit tokens: identity `<user id>:<device id>`, name = display name, sources `microphone`, `camera`,
 `screen_share`, `screen_share_audio`.
@@ -104,10 +109,12 @@ Mattermost delivers them as `custom_org.relaychat.calls_<name>`; `data` is the J
 | --- | --- | --- |
 | `incoming` | each invitee (all sessions) | `{call, caller: {id, username, display_name}}` |
 | `call_state` | caller and invitees | `{call, user_id, device_id, action}`; action `received\|accepted\|declined\|busy\|missed\|cancelled\|hangup\|joined\|left` |
-| `call_updated` | channel members | `{call}` |
+| `call_updated` | channel members and invitees | `{call}` |
 | `call_ended` | channel members and invitees | `{call}` (state `ended`, `end_reason`) |
 
-A client must fetch `GET /calls/active` after (re)connecting: events are not replayed.
+`call_updated` and `call_ended` reach each recipient once: per user to the caller and invitees, and to the channel
+without them. Their data also carries `channel_id` and `call_id` (version 1 clients read them). `call_state` is not
+sent for `channel` calls. A client must fetch `GET /calls/active` after (re)connecting: events are not replayed.
 
 ### VoIP push (iOS)
 
@@ -121,18 +128,25 @@ The plugin sends directly to APNs (`apns-push-type: voip`, topic `<bundle_id>.vo
 
 Never a VoIP push for "cancel": iOS requires every VoIP push to be reported to CallKit. A device woken by a
 ring checks `GET /calls/<id>` and ends the CallKit call if it is no longer ringing for it. Tokens answering
-`410`/`BadDeviceToken` are removed.
+`410`/`BadDeviceToken`/`Unregistered` are removed. A registration belongs to the Mattermost session that made it
+and is dropped once that session is gone (logout); registering a token under a new `device_id` replaces the old
+entry. `environment` picks `api.sandbox.push.apple.com` or `api.push.apple.com`. Without a configured key the
+plugin sends no VoIP pushes (rings still arrive over WebSocket).
 
 ### Call records
 
 The plugin posts one `custom_relay_call` post per call and updates it (`UpdatePost`) when the call ends:
 `props.relay_call = {v: 2, call_id, kind, video, state, started_by, end_reason, duration_ms, started_at, end_at}`,
-with a short plain message for other Mattermost clients. Relay maps it to `TelegramMediaAction.phoneCall`
+with a short plain message for other Mattermost clients ("Call", "Video call", "Group call" while live; "Missed
+call", "Cancelled call", "Declined call", "Call · busy", "Video call · 3 min" when ended). The post is created at
+ring/start by the caller (only while the `AnnounceCalls` setting is on) and Mattermost's own push for it is
+suppressed, so a DM ring is not doubled by an alert; invitees who missed the ring get a "Missed call from X"
+push instead (not when the server sends id-only push contents). Relay maps it to `TelegramMediaAction.phoneCall`
 (`direct`) or `.groupPhoneCall` (`group`/`channel`), so the chat shows Telegram's call service messages.
 
 ## Shared client core (`submodules/RelayCalls`)
 
-Implemented (phase 1). `swift test` in `submodules/RelayCalls` runs the core suite (84 tests: client, events,
+Implemented (phase 1). `swift test` in `submodules/RelayCalls` runs the core suite (86 tests: client, events,
 every direct-call transition, group merging and flows, over fakes); Bazel has the same suite as the host test
 `//submodules/RelayCalls:RelayCallsCoreTests`. Everything below is `public`.
 
@@ -198,7 +212,9 @@ joinedAt, userId, isMicrophoneEnabled, isCameraEnabled, isScreenSharing}`. Timer
   callee device reported `received`: ringback), `.ringing` (incoming), `.connecting` (answered, the other device not
   in the room yet), `.active(since: Date)`, `.reconnecting(since: Date)` (media reconnecting, or the other device
   dropped out after the call was up), `.terminated(EndReason, duration: TimeInterval?)` (duration from the answer;
-  the plugin's `duration_ms` when it sent one).
+  the plugin's `duration_ms` when it sent one). An answered call that stays `.connecting` for
+  `RelayDirectCall.connectTimeout` (30 s) or `.reconnecting` for `reconnectTimeout` (60 s) ends as `.failed` and
+  hangs up.
 - `EndReason` and the suggested Telegram mapping (`CallSessionTerminationReason`): `.hangup` (this device; an
   unanswered outgoing call was cancelled) and `.remoteHangup` → `.ended(.hungUp)`; `.declined` (callee declined) and
   `.busy` → `.ended(.busy)`; `.missed` → `.ended(.missed)`; `.cancelled` (incoming: the caller hung up first) →
