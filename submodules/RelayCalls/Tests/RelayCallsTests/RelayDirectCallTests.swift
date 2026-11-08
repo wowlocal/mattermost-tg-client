@@ -401,6 +401,33 @@ final class RelayDirectCallTests: XCTestCase {
         XCTAssertEqual(call.state, .terminated(.cancelled, duration: nil))
     }
 
+    func testIncomingKeepsRingingWhileTheCallersDeviceJoinsAndLeavesTheRoom() async {
+        let call = self.incoming()
+        call.start()
+        await waitUntil("received") { !self.api.requests.isEmpty }
+        let ringing = Fixtures.call(startedBy: Fixtures.peer, invitees: [Fixtures.me: .received])
+        // The caller's media connects while it rings here: not an answer.
+        call.handle(.callState(call: ringing, userId: Fixtures.peer, deviceId: Fixtures.peerDevice, action: .joined))
+        XCTAssertEqual(call.state, .ringing)
+        self.scheduler.advance(by: RelayDirectCall.connectTimeout + 1)
+        XCTAssertEqual(call.state, .ringing)
+        call.handle(.callState(call: ringing, userId: Fixtures.peer, deviceId: Fixtures.peerDevice, action: .left))
+        XCTAssertEqual(call.state, .ringing)
+        await settle()
+        XCTAssertFalse(self.api.requests.contains(where: {
+            switch $0 {
+            case .hangup, .decline:
+                return true
+            default:
+                return false
+            }
+        }))
+        // The answer still works.
+        self.api.acceptResult = .success(Fixtures.join(Fixtures.call(state: .active, startedBy: Fixtures.peer, invitees: [Fixtures.me: .accepted])))
+        call.accept()
+        XCTAssertEqual(call.state, .connecting)
+    }
+
     func testIncomingRingExpiresLocally() async {
         let call = self.incoming()
         call.start()

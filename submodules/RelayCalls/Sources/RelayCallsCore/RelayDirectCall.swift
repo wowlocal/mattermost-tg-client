@@ -371,7 +371,9 @@ public final class RelayDirectCall {
                 self.evaluate()
             }
         case .accepted, .joined:
-            if !self.answered {
+            // Only the callee answers. The caller's device joins the room while it still rings: on an incoming call
+            // that is not an answer (it used to show the call screen "Connecting" and fail after `connectTimeout`).
+            if self.isOutgoing && !self.answered {
                 self.answered = true
                 self.ringTimer?.cancel()
                 self.evaluate()
@@ -387,9 +389,13 @@ public final class RelayDirectCall {
         case .hangup, .left:
             if self.answered {
                 self.terminate(.remoteHangup)
-            } else {
-                self.terminate(self.isOutgoing ? .declined : .cancelled)
+            } else if self.isOutgoing {
+                self.terminate(.declined)
+            } else if action == .hangup {
+                self.terminate(.cancelled)
             }
+            // A ringing caller's device leaving the room (a media reconnect) does not end the ring: the caller's hang
+            // up arrives as `cancelled` or `call_ended`.
         }
     }
 
