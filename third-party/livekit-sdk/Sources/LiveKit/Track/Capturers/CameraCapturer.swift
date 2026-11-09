@@ -138,7 +138,8 @@ public class CameraCapturer: VideoCapturer, @unchecked Sendable {
         return try await set(options: newOptions)
     }
 
-    /// Sets new options at runtime and resstarts capturing.
+    /// Sets new options at runtime and restarts capturing. A stopped capturer only keeps the options for its next start
+    /// (returns false).
     @objc
     @discardableResult
     public func set(options newOptions: CameraCaptureOptions) async throws -> Bool {
@@ -146,6 +147,10 @@ public class CameraCapturer: VideoCapturer, @unchecked Sendable {
 
         // Update to new options
         _cameraCapturerState.mutate { $0.options = newOptions }
+
+        // A start here would be outside the track's start/stop (a muted camera track) and never balanced: the camera
+        // would keep capturing after the track stops, and WebRTC asserts when a capturing capturer is deallocated.
+        guard captureState == .started else { return false }
 
         // Restart capturer
         return try await restartCapture()

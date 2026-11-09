@@ -272,6 +272,13 @@ decline, received). Nothing is logged until an adapter installs it.
   the main display, `screenShareSources()`, `shareScreen(source:)`, `RelayRoomEngine.displayName(of:)`. Video:
   `videoTrack(sid:) -> VideoTrack?`, `attach(_ sink:toTrackSid:) -> Bool` (false until subscribed: retry on the next
   `onChange`), `detach(_:fromTrackSid:)`.
+- Camera teardown: WebRTC's camera capturer raises an Objective-C assertion (uncaught, the app terminates) when it is
+  deallocated while capturing, and LiveKit's `VideoCapturer` counts starts and stops. `disconnect()` stops every local
+  video track and then stops its capturer until the count is zero; LiveKit stops a track on unpublish only when the
+  unpublish succeeds (macOS 1.1.1 crash on End). The vendored SDK's `CameraCapturer.set(options:)` restarts only a
+  capturer that is capturing (local change): upstream it also started a stopped one, so `setCameraDevice(_:)` /
+  `setCameraPosition(_:)` on a muted camera started capture outside the track, the camera stayed on after Video was
+  turned off, and End crashed (macOS 1.1.3, the camera turned on a second time in a call).
 - `RelayExternalCamera` (thread-safe): `push(_ pixelBuffer: CVPixelBuffer, rotation: RelayVideoRotation,
   timestampNs: Int64?)` or `push(_ sampleBuffer:)` from the app's capturer (NV12, BGRA or ARGB);
   `onActiveChange: ((Bool) -> Void)?` asks the app to start/stop capturing; `isActive`. `setCamera(enabled: true)`

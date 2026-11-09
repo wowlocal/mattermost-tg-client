@@ -121,6 +121,11 @@ public final class RelayRoomEngine: RelayMediaEngine {
         for track in tracks {
             do {
                 try await track.stop()
+                // The capturer counts starts and stops. A start the track does not know of (LiveKit restarting a
+                // stopped camera for new options) keeps it capturing after the track stopped: stop it all the way.
+                while track.capturer.captureState == .started {
+                    _ = try await track.capturer.stopCapture()
+                }
             } catch {
                 RelayCallsLog.log("engine: stopping a local video track failed: \(error)")
             }
