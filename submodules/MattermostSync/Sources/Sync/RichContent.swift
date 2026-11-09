@@ -12,9 +12,10 @@ import MattermostSyncCore
 extension MattermostAccountSync {
     /// Version of the rendering `rerenderRichContent` brings stored messages to (3E: link previews, headings, list
     /// indents, tables, emoticons; 2 (4F): a post with images and other files as one group, attachment colours
-    /// and icons; 3 (5A): Relay's voice messages as voice bubbles, `upgradeStoredVoiceMessages`).
+    /// and icons; 3 (5A): Relay's voice messages as voice bubbles; 4 (5B): Relay's video messages as round videos;
+    /// both through `upgradeStoredRecordings`).
     static let richContentCursor = "rich_content"
-    static let richContentVersion = "3"
+    static let richContentVersion = "4"
     /// The settings the stored messages were rendered with (`RichContentSettings.encoded`).
     static let richContentSettingsCursor = "rich_content_settings"
     /// Newest messages per chat re-rendered on a settings change or the upgrade (about a screen and a half).
@@ -91,8 +92,12 @@ extension MattermostAccountSync {
         if !isFirstSync {
             if version != MattermostAccountSync.richContentVersion {
                 await self.rerenderRichContent(reason: "upgrade \(version ?? "none") → \(MattermostAccountSync.richContentVersion)")
-                if (version.flatMap { Int($0) } ?? 0) < 3 {
-                    await self.upgradeStoredVoiceMessages()
+                let previous = version.flatMap { Int($0) } ?? 0
+                if previous < 3 {
+                    await self.upgradeStoredRecordings(.voice)
+                }
+                if previous < 4 {
+                    await self.upgradeStoredRecordings(.videoMessage)
                 }
             } else if stored != settings.encoded {
                 await self.rerenderRichContent(reason: "settings changed while not running")
@@ -161,14 +166,38 @@ extension MattermostAccountSync {
         MMLog.log("rich content (\(reason)): \(stripped) card(s) removed, re-rendered \(written.current) message(s) in \(channels.count) chat(s) (\(failed.current) failed) in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
     }
 
-    /// Voice messages stored as files by builds before 5A (another Relay user's voice message, a file to an older
-    /// build): every stored post with an audio file is loaded again (`POST /teams/{id}/files/search` for audio
-    /// extensions, then `POST /posts/ids`), and the marked ones are rewritten as voice messages. Posts not stored
-    /// yet need nothing: they are converted when they load.
-    func upgradeStoredVoiceMessages() async {
+    /// Recordings that make a post a voice or video message.
+    enum StoredRecordingKind {
+        case voice
+        case videoMessage
+
+        var searchExtensions: [String] {
+            switch self {
+            case .voice:
+                return VoiceMessageFile.searchExtensions
+            case .videoMessage:
+                return VideoMessageFile.searchExtensions
+            }
+        }
+
+        var propsKey: String {
+            switch self {
+            case .voice:
+                return VoiceMessageMarker.propsKey
+            case .videoMessage:
+                return VideoMessageMarker.propsKey
+            }
+        }
+    }
+
+    /// Voice messages stored as files by builds before 5A, video messages by builds before 5B (another Relay user's
+    /// recording, a file to an older build): every stored post with an audio (or video) file is loaded again
+    /// (`POST /teams/{id}/files/search` for the extensions, then `POST /posts/ids`), and the marked ones are
+    /// rewritten as voice (or video) messages. Posts not stored yet need nothing: they are converted when they load.
+    func upgradeStoredRecordings(_ kind: StoredRecordingKind) async {
         let started = CFAbsoluteTimeGetCurrent()
         let teams = self.state.with { $0.teams.map(\.id) }
-        let terms = VoiceMessageFile.searchExtensions.map { "ext:" + $0 }.joined(separator: " ")
+        let terms = kind.searchExtensions.map { "ext:" + $0 }.joined(separator: " ")
         var postIdsByChannel: [String: Set<String>] = [:]
         for teamId in teams {
             var page = 0
@@ -200,7 +229,7 @@ extension MattermostAccountSync {
             guard let posts = try? await self.client.posts(ids: Array(stored[start ..< min(stored.count, start + 100)])) else {
                 continue
             }
-            let marked = posts.filter { $0.deleteAt == 0 && $0.props[VoiceMessageMarker.propsKey] != nil }
+            let marked = posts.filter { $0.deleteAt == 0 && $0.props[kind.propsKey] != nil }
             if marked.isEmpty {
                 continue
             }
@@ -214,6 +243,6 @@ extension MattermostAccountSync {
             }
             rewritten += count
         }
-        MMLog.log("voice: upgrade found \(stored.count) stored post(s) with audio files, rewrote \(rewritten) voice message(s) in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
+        MMLog.log("\(kind == .voice ? "voice" : "video message"): upgrade found \(stored.count) stored post(s) with \(kind == .voice ? "audio" : "video") files, rewrote \(rewritten) message(s) in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
     }
 }

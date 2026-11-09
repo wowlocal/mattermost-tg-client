@@ -79,7 +79,9 @@ public enum MattermostFeatures {
     /// Phase 5A: on in Relay too. Mattermost has no voice posts, so MattermostSync sends a recording as an audio
     /// file with a `props` marker and shows marked posts as voice messages (docs/plan/05 "5A").
     public static let voiceMessages = true
-    public static let videoMessages = telegram
+    /// Phase 5B: on in Relay too. Telegram's round videos go out as a video file with a `props` marker, and marked
+    /// posts show as round videos (docs/plan/05 "5B").
+    public static let videoMessages = true
     public static let scheduledMessages = telegram
 
     // 06 "Build"

@@ -22,7 +22,30 @@ enum MediaConverter {
 
     /// `voice` (5A): the post is a Relay voice message (`VoiceMessageFile.isVoicePost`), shown as Telegram's voice
     /// bubble; `waveform` replaces a missing one of the marker (computed on the device, `MattermostAccountSync.computedVoiceWaveform`).
-    static func media(for file: FileInfo, mediaId: Int64, voice: VoiceMessageMarker? = nil, waveform: Data? = nil) -> Converted {
+    ///
+    /// `roundVideo` (5B): the post is a Relay video message (`VideoMessageFile.isVideoMessagePost`), shown as Telegram's
+    /// round video bubble.
+    static func media(for file: FileInfo, mediaId: Int64, voice: VoiceMessageMarker? = nil, waveform: Data? = nil, roundVideo: VideoMessageMarker? = nil) -> Converted {
+        if let roundVideo = roundVideo {
+            let telegramFile = TelegramMediaFile(
+                fileId: MediaId(namespace: Namespaces.Media.CloudFile, id: mediaId),
+                partialReference: nil,
+                resource: MattermostFileResource(fileId: file.id, variant: .file, size: file.size),
+                previewRepresentations: [],
+                videoThumbnails: [],
+                // The sender's blurred first frame, until the video is downloaded.
+                immediateThumbnailData: roundVideo.thumbnail,
+                mimeType: file.mimeType.isEmpty ? VideoMessageFile.mimeType : file.mimeType,
+                size: file.size,
+                attributes: [
+                    .Video(duration: roundVideo.duration, size: PixelDimensions(width: Int32(roundVideo.width), height: Int32(roundVideo.height)), flags: [.instantRoundVideo], preloadSize: nil, coverTime: nil, videoCodec: nil),
+                    .FileName(fileName: file.name),
+                ],
+                alternativeRepresentations: []
+            )
+            // Telegram files round videos with voice messages: the Voice tab, the playlist that plays the next one.
+            return Converted(media: telegramFile, tags: [.voiceOrInstantVideo])
+        }
         if let voice = voice {
             let telegramFile = TelegramMediaFile(
                 fileId: MediaId(namespace: Namespaces.Media.CloudFile, id: mediaId),

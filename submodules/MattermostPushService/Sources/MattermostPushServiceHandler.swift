@@ -26,8 +26,9 @@ import MattermostPush
 //    cached here, else `GET /users/{id}/image`;
 // 4. names the account in the title when several are signed in (`MattermostPushNames`), as Telegram's
 //    notifications do;
-// 5. says "Voice message" for a Relay voice message (5A): the server wrote "attached a file." and pushes carry no
-//    `props`, so the post is fetched (`GET /posts/{id}`, in parallel with the rest) for its `relay_voice` marker.
+// 5. says "Voice message" for a Relay voice message (5A) and "Video message" for a video message (5B): the server
+//    wrote "attached a file." and pushes carry no `props`, so the post is fetched (`GET /posts/{id}`, in parallel
+//    with the rest) for its `relay_voice` or `relay_round_video` marker.
 //
 // `session` says to log in again. `clear` and `update_badge` arrive without `mutable-content` and never run
 // the extension (the app removes cleared notifications; iOS applies the badge); if one does run it, it is
@@ -210,42 +211,60 @@ public final class MattermostPushServiceHandler: @unchecked Sendable {
         async let ackResponse: Data? = self.acknowledge(payload: pushed, client: client)
         async let avatarData: Data? = wantsAvatar ? self.avatar(payload: pushed, device: device, client: client, cacheDirectory: pushDirectory + "/avatars") : nil
         async let senderUser: MattermostPushSenderCache? = (wantsAvatar && cachedSenderName == nil) ? self.senderUser(payload: pushed, device: device, client: client, cacheDirectory: namesDirectory) : nil
-        async let isVoiceMessage: Bool = wantsAvatar ? self.isVoiceMessage(payload: pushed, client: client) : false
+        async let recording: RelayRecording? = wantsAvatar ? self.recording(payload: pushed, client: client) : nil
         if let data = await ackResponse, payload.isIdLoaded, let response = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
             payload.merge(idLoadedResponse: response)
         }
         let avatar = await avatarData
         let fetchedUser = await senderUser
         let senderName = cachedSenderName ?? (lockedMessage == nil ? self.senderDisplayName(payload: payload, device: device, cacheDirectory: namesDirectory, user: fetchedUser) : nil)
-        let voiceMessage = await isVoiceMessage ? self.voiceMessageText() : nil
+        let voiceMessage = await recording.map { self.recordingText($0) }
         return self.content(payload: payload, kind: kind, device: device, recipientAccountName: names, lockedMessage: lockedMessage, avatar: avatar, senderDisplayName: senderName, voiceMessage: voiceMessage)
     }
 
-    // MARK: Voice messages (5A)
+    // MARK: Voice and video messages (5A, 5B)
 
-    /// Whether the pushed post is a Relay voice message: the `relay_voice` marker, one audio file and no text.
-    private func isVoiceMessage(payload: MattermostPushPayload, client: MattermostClient?) async -> Bool {
+    private enum RelayRecording {
+        case voice
+        case videoMessage
+    }
+
+    /// Whether the pushed post is a Relay voice message (the `relay_voice` marker, one audio file and no text) or a
+    /// video message (the `relay_round_video` marker, one video file and no text).
+    private func recording(payload: MattermostPushPayload, client: MattermostClient?) async -> RelayRecording? {
         guard let client = client, let postId = payload.postId else {
-            return false
+            return nil
         }
         do {
             let post = try await client.post(id: postId)
-            let marker = VoiceMessageMarker(propsValue: post.props[VoiceMessageMarker.propsKey]?.foundationObject)
-            let files = (post.metadata?.files ?? []).filter { $0.deleteAt == 0 }.map { (name: $0.name, mimeType: $0.mimeType) }
-            let isVoice = post.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && VoiceMessageFile.isVoicePost(marker: marker, files: files)
-            if isVoice {
-                mmLog("post \(postId) is a voice message")
+            guard post.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return nil
             }
-            return isVoice
+            let files = (post.metadata?.files ?? []).filter { $0.deleteAt == 0 }.map { (name: $0.name, mimeType: $0.mimeType) }
+            if VoiceMessageFile.isVoicePost(marker: VoiceMessageMarker(propsValue: post.props[VoiceMessageMarker.propsKey]?.foundationObject), files: files) {
+                mmLog("post \(postId) is a voice message")
+                return .voice
+            }
+            if VideoMessageFile.isVideoMessagePost(marker: VideoMessageMarker(propsValue: post.props[VideoMessageMarker.propsKey]?.foundationObject), files: files) {
+                mmLog("post \(postId) is a video message")
+                return .videoMessage
+            }
+            return nil
         } catch {
             mmLog("post \(postId) not loaded: \(error)")
-            return false
+            return nil
         }
     }
 
-    /// "Voice message" in the app's language: the extension has no strings, the app's bundle has Relay's.
-    private func voiceMessageText() -> String {
-        return getAppBundle().localizedString(forKey: "Relay.Push.VoiceMessage", value: "Voice message", table: nil)
+    /// "Voice message" or "Video message" in the app's language: the extension has no strings, the app's bundle has
+    /// Relay's.
+    private func recordingText(_ recording: RelayRecording) -> String {
+        switch recording {
+        case .voice:
+            return getAppBundle().localizedString(forKey: "Relay.Push.VoiceMessage", value: "Voice message", table: nil)
+        case .videoMessage:
+            return getAppBundle().localizedString(forKey: "Relay.Push.VideoMessage", value: "Video message", table: nil)
+        }
     }
 
     // MARK: Sender name (4F)

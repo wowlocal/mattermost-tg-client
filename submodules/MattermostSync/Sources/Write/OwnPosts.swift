@@ -149,7 +149,7 @@ extension MattermostAccountSync {
     /// The `POST /posts` body of an outgoing message (or of a group of messages sent as one post: an album),
     /// and its `pending` row (registered here, before the request, so the WebSocket echo is always
     /// recognized). The first message of a group stands for it. Nil when the messages are gone.
-    func outgoingDraft(messageId: MessageId, fileIds: [String], groupMessageIds: [MessageId] = []) async -> OutgoingDraft? {
+    func outgoingDraft(messageId: MessageId, fileIds: [String], groupMessageIds: [MessageId] = [], videoThumbnail: Data? = nil) async -> OutgoingDraft? {
         return await self.postbox.mmTransaction { transaction -> OutgoingDraft? in
             guard let message = transaction.getMessage(messageId), let channelId = self.channelId(forPeerId: messageId.peerId), let channelState = self.channelState(channelId) else {
                 return nil
@@ -164,7 +164,7 @@ extension MattermostAccountSync {
             }
             var markdown = texts.joined(separator: "\n\n")
             var fileIds = fileIds
-            var props = groupMessageIds.count > 1 ? [:] : self.voiceProps(of: message)
+            var props = groupMessageIds.count > 1 ? [:] : self.recordingProps(of: message, videoThumbnail: videoThumbnail)
             // 4H: Telegram's forward (with the sender's name) goes as Mattermost's forward: the permalink alone.
             if let permalink = self.forwardPermalink(of: message, channelId: channelId, transaction: transaction) {
                 markdown = PermalinkForward.message(permalink: permalink)
@@ -180,7 +180,7 @@ extension MattermostAccountSync {
             let globallyUniqueId = message.globallyUniqueId ?? Int64(messageId.id)
             let pendingPostId = String(globallyUniqueId)
             self.store.registerPendingPost(MattermostPendingPost(pendingPostId: pendingPostId, channelId: channelId, globallyUniqueId: globallyUniqueId, localMessageId: messageId.id))
-            // A voice recording (5A) carries the marker that makes it a voice message in Relay (`props`, above).
+            // A voice recording (5A) or a round video (5B) carries the marker that makes it one in Relay (`props`, above).
             return OutgoingDraft(post: PostDraft(channelId: channelId, message: markdown, rootId: rootId, fileIds: fileIds, pendingPostId: pendingPostId, props: props), globallyUniqueId: globallyUniqueId)
         }
     }

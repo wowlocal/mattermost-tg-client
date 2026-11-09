@@ -173,6 +173,10 @@ extension ChatControllerImpl {
                 if let user = self.presentationInterfaceState.renderedPeer?.peer as? TelegramUser, user.botInfo != nil {
                     isBot = true
                 }
+                // MATTERMOST: no view-once video messages (a Mattermost post can't expire after one play; 5B).
+                if MattermostBackend.isEnabled {
+                    viewOnceAvailable = false
+                }
                 
                 let controller = VideoMessageCameraScreen(
                     context: self.context,

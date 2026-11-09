@@ -30,6 +30,8 @@ final class PostSender: MattermostMessageSender {
         /// A voice recording's AAC file (5A), moved to the sent message's resource after the post (in memory only:
         /// after a restart the sent message downloads it).
         var transcodedPath: String? = nil
+        /// A round video's stripped thumbnail (5B), for its marker (in memory only, like `transcodedPath`).
+        var videoThumbnail: Data? = nil
     }
 
     private weak var sync: MattermostAccountSync?
@@ -195,16 +197,24 @@ final class PostSender: MattermostMessageSender {
         }
         var items: [(mediaIndex: Int, upload: FileUpload)] = []
         var transcodedPaths: [Int: String] = [:]
+        var videoThumbnails: [Int: Data] = [:]
         let voiceRecording = PostSender.voiceRecording(of: message)
+        let videoMessageRecording = voiceRecording == nil ? PostSender.videoMessageRecording(of: message) : nil
+        let date = Date(timeIntervalSince1970: Double(message.timestamp))
         for (index, media) in message.media.enumerated() {
             guard var source = UploadSource(media: media, messageId: messageId, index: index) else {
                 continue
             }
             var path = try await sync.completeResourcePath(source.resource)
+            if let recording = videoMessageRecording, recording.isLocalRecording, recording.file.fileId == (media as? TelegramMediaFile)?.fileId {
+                // A round video (5B): Telegram's recording (H.264 and AAC in an `.mp4`) goes as it is, with a readable name.
+                source.fileName = VideoMessageFile.fileName(prefix: MattermostVideoMessages.fileNamePrefix(), date: date)
+                source.mimeType = VideoMessageFile.mimeType
+                videoThumbnails[index] = await PostSender.videoMessageThumbnail(recording: recording, videoPath: path, mediaBox: sync.postbox.mediaBox)
+            }
             if let recording = voiceRecording, recording.file.fileId == (media as? TelegramMediaFile)?.fileId {
                 // A voice message (5A, V1): Telegram's Ogg/Opus recording goes as AAC (`.m4a`) with a readable
                 // name; when transcoding fails it goes as recorded (an `.ogg`, still marked as a voice message).
-                let date = Date(timeIntervalSince1970: Double(message.timestamp))
                 if recording.needsTranscoding {
                     if let transcoded = await PostSender.transcodeVoiceRecording(sourcePath: path, name: "\(self.accountId.int64)-\(message.globallyUniqueId ?? Int64(messageId.id))-\(index)") {
                         path = transcoded
@@ -241,6 +251,7 @@ final class PostSender: MattermostMessageSender {
         }
         for index in files.indices {
             files[index].transcodedPath = transcodedPaths[files[index].mediaIndex]
+            files[index].videoThumbnail = videoThumbnails[files[index].mediaIndex]
         }
         self.uploads.with { $0[messageId] = files }
         // Kept with the message's pending row, in case the app ends before the post is created (4F).
@@ -283,7 +294,7 @@ final class PostSender: MattermostMessageSender {
         }
         // Files in message order, each message's files in media order (Mattermost keeps `file_ids` order).
         let fileIds = messageIds.flatMap { id in (files[id] ?? []).sorted(by: { $0.mediaIndex < $1.mediaIndex }).map { $0.fileId } }
-        guard await sync.ensureChannel(forPeerId: messageId.peerId) != nil, let draft = await sync.outgoingDraft(messageId: messageId, fileIds: fileIds, groupMessageIds: messageIds) else {
+        guard await sync.ensureChannel(forPeerId: messageId.peerId) != nil, let draft = await sync.outgoingDraft(messageId: messageId, fileIds: fileIds, groupMessageIds: messageIds, videoThumbnail: files[messageId]?.compactMap { $0.videoThumbnail }.first) else {
             sync.notice(.sendChatMissing)
             throw SendFailure.unknownChat
         }

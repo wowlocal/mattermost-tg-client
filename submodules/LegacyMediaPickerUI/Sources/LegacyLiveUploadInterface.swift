@@ -65,7 +65,11 @@ public final class LegacyLiveUploadInterface: VideoConversionWatcher, TGLiveUplo
             if let strongSelf = self {
                 if strongSelf.path == nil {
                     strongSelf.path = path
-                    strongSelf.preUploadDisposable = strongSelf.context.engine.resources.preUpload(id: strongSelf.id, encrypt: false, tag: nil, source: strongSelf.data.get())
+                    // MATTERMOST: no MTProto upload while recording; the finished file is sent as the message's own
+                    // upload (MattermostSync's PostSender, 5B). The recording is still used as is when it needs no edits.
+                    if !MattermostBackend.isEnabled {
+                        strongSelf.preUploadDisposable = strongSelf.context.engine.resources.preUpload(id: strongSelf.id, encrypt: false, tag: nil, source: strongSelf.data.get())
+                    }
                 }
                 strongSelf.size = size
                 

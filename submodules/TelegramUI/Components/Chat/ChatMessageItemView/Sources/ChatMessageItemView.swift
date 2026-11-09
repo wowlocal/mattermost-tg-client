@@ -241,6 +241,12 @@ public final class ChatMessageAccessibilityData {
                                         }
                                     }
                                     text = item.presentationData.strings.VoiceOver_Chat_Duration(durationString).string
+                                    // MATTERMOST: whether a received video message was played on this device (5B; local
+                                    // only, like a voice message's).
+                                    if MattermostBackend.isEnabled && isIncoming && flags.contains(.instantRoundVideo), let consumable = message.attributes.first(where: { $0 is ConsumableContentMessageAttribute }) as? ConsumableContentMessageAttribute {
+                                        text.append(", ")
+                                        text.append(consumable.consumed ? item.presentationData.strings.Relay_VoiceOver_Chat_Played : item.presentationData.strings.Relay_VoiceOver_Chat_NotPlayed)
+                                    }
                                 default:
                                     break
                             }

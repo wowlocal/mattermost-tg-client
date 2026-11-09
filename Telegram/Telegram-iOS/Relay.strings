@@ -531,16 +531,24 @@
 "PasscodeSettings.HelpBottom" = "Note: if you forget the passcode, you'll need to delete and reinstall the app and log in to your servers again.";
 
 /* Voice messages (Phase 5A): sent as an audio file with a marker (Mattermost has no voice posts). The recording hint
-   without Telegram's switch to video messages, the microphone text (also in InfoPlist.strings), the uploaded file's
+   (with Telegram's switch to video messages since 5B), the microphone text (also in InfoPlist.strings), the uploaded file's
    name before its date ("Voice message 2026-10-27 14.05.m4a"), the notification text (read by the notification
    service extension from the app's bundle) and VoiceOver's played state of a received voice message. */
-"VoiceOver.Chat.RecordModeVoiceMessageInfo" = "Double tap and hold to record a voice message. Slide up to lock the recording, slide left to cancel.";
+"VoiceOver.Chat.RecordModeVoiceMessageInfo" = "Double tap and hold to record a voice message. Slide up to lock the recording, slide left to cancel. Double tap to switch to video.";
 "InfoPlist.NSMicrophoneUsageDescription" = "Relay uses the microphone to record voice messages and videos with sound. A recording is sent to your Mattermost server only when you send it.";
 "Relay.VoiceMessage.FileName" = "Voice message";
 "Relay.Push.VoiceMessage" = "Voice message";
 "Relay.VoiceOver.Chat.NotPlayed" = "Not played";
 "Relay.VoiceOver.Chat.Played" = "Played";
 "Relay.VoiceOver.Chat.RecordMore" = "Record more";
+
+/* Video messages (Phase 5B): Telegram's round videos, sent as a video file with a marker (Mattermost has no video
+   message posts). The record button's VoiceOver hints (a double tap switches between voice and video, as in Telegram),
+   the uploaded file's name before its date ("Video message 2026-11-09 14.05.mp4") and the notification text (read by
+   the notification service extension from the app's bundle). */
+"VoiceOver.Chat.RecordModeVideoMessageInfo" = "Double tap and hold to record a video message. Slide up to lock the recording, slide left to cancel. Double tap to switch to audio.";
+"Relay.VideoMessage.FileName" = "Video message";
+"Relay.Push.VideoMessage" = "Video message";
 
 /* Daily-use gaps (Phase 4H). The full name on a profile whose title is another name (the user's display setting);
    the confirmation before @all/@channel/@here reaches a large channel, worded as Mattermost's web app words it (the

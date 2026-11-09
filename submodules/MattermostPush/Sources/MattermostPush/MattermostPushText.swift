@@ -53,9 +53,10 @@ public struct MattermostPushText: Equatable, Sendable {
 /// (`MattermostPushSenderName`): it replaces the server's `sender_name` in the title and as the person shown, unless
 /// a webhook overrides the name.
 ///
-/// `voiceMessage` (5A) is the text for a Relay voice message ("Voice message", localized by the caller): the post
-/// carries the `relay_voice` marker and no text, so the server wrote "attached a file." The extension learns it by
-/// fetching the post (pushes carry no `props`); it replaces the server's text as the body.
+/// `voiceMessage` (5A, 5B) is the text for a Relay voice or video message ("Voice message", "Video message",
+/// localized by the caller): the post carries the `relay_voice` or `relay_round_video` marker and no text, so the
+/// server wrote "attached a file." The extension learns it by fetching the post (pushes carry no `props`); it
+/// replaces the server's text as the body.
 public enum MattermostPushTextBuilder {
     public static func text(for payload: MattermostPushPayload, kind: MattermostPushChannelKind, siteName: String?, senderDisplayName: String? = nil, voiceMessage: String? = nil) -> MattermostPushText {
         let threadIdentifier = payload.channelId ?? payload.threadIdentifier ?? "mattermost"

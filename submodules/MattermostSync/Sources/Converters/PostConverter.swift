@@ -42,8 +42,8 @@ struct PostConversionContext {
     var existingReplyThread: (Int32) -> ReplyThreadMessageAttribute? = { _ in nil }
     /// Link previews, emoticons and inline LaTeX as the server and the user have them (3E).
     var richContent = RichContentSettings()
-    /// Voice messages (5A): whether the stored message (by local id) was played on this device. Mattermost keeps no
-    /// listened state, so a rewrite of the post keeps the local one.
+    /// Voice and video messages (5A, 5B): whether the stored message (by local id) was played on this device.
+    /// Mattermost keeps no listened state, so a rewrite of the post keeps the local one.
     var existingConsumed: (Int32) -> Bool? = { _ in nil }
     /// Voice messages (5A): the waveform computed here for a file whose marker has none (`computedVoiceWaveform`, `Write/VoiceMessages.swift`).
     var computedWaveform: (String) -> Data? = { _ in nil }
@@ -188,17 +188,19 @@ enum PostConverter {
                 textTags.insert(.unseenPersonalMessage)
             }
 
-            // A Relay voice message (5A): the marker in `props` and one audio file.
+            // A Relay voice message (5A): the marker in `props` and one audio file; a video message (5B): its marker
+            // and one video file.
             let voice = PostConverter.voiceMarker(post: content, layout: layout)
+            let roundVideo = voice == nil ? PostConverter.videoMessageMarker(post: content, layout: layout) : nil
             for (index, part) in layout.parts.enumerated() {
                 guard let file = part.file else {
                     continue
                 }
                 let waveform = voice != nil && voice?.waveform == nil ? context.computedWaveform(file.id) : nil
-                let converted = MediaConverter.media(for: file, mediaId: context.mediaId(file.id), voice: voice, waveform: waveform)
+                let converted = MediaConverter.media(for: file, mediaId: context.mediaId(file.id), voice: voice, waveform: waveform, roundVideo: roundVideo)
                 media[index].append(converted.media)
                 partTags[index].formUnion(converted.tags)
-                if voice != nil && isIncoming, let localId = localIds[index] {
+                if (voice != nil || roundVideo != nil) && isIncoming, let localId = localIds[index] {
                     // The "not played" dot: local to the device, never synced (Mattermost has no listened state).
                     primaryAttributes.append(ConsumableContentMessageAttribute(consumed: context.existingConsumed(localId) ?? false))
                 }
@@ -290,6 +292,15 @@ enum PostConverter {
         }
         let files = layout.parts.compactMap { $0.file }.map { (name: $0.name, mimeType: $0.mimeType) }
         return VoiceMessageFile.isVoicePost(marker: marker, files: files) ? marker : nil
+    }
+
+    /// The marker of a post that shows as a video message (5B): the marker and exactly one video file.
+    static func videoMessageMarker(post: Post, layout: PostLayout) -> VideoMessageMarker? {
+        guard let value = post.props[VideoMessageMarker.propsKey], let marker = VideoMessageMarker(propsValue: value.foundationObject) else {
+            return nil
+        }
+        let files = layout.parts.compactMap { $0.file }.map { (name: $0.name, mimeType: $0.mimeType) }
+        return VideoMessageFile.isVideoMessagePost(marker: marker, files: files) ? marker : nil
     }
 
     /// The reply count and latest repliers of a root post ("N replies"). With collapsed reply threads on,

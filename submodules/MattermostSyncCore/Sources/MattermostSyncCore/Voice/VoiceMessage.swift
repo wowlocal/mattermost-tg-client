@@ -43,7 +43,7 @@ public struct VoiceMessageMarker: Equatable, Sendable {
         guard let object = propsValue as? [String: Any] else {
             return nil
         }
-        guard let duration = VoiceMessageMarker.number(object["duration"]), duration.isFinite, duration >= 0 else {
+        guard let duration = MarkerNumber.value(object["duration"]), duration.isFinite, duration >= 0 else {
             return nil
         }
         var waveform: Data?
@@ -63,25 +63,6 @@ public struct VoiceMessageMarker: Equatable, Sendable {
             value["waveform"] = waveform.base64EncodedString()
         }
         return value
-    }
-
-    private static func number(_ value: Any?) -> Double? {
-        switch value {
-        case let number as NSNumber:
-            // JSONSerialization gives booleans as NSNumber too; a boolean is not a duration.
-            if CFGetTypeID(number) == CFBooleanGetTypeID() {
-                return nil
-            }
-            return number.doubleValue
-        case let int as Int:
-            return Double(int)
-        case let double as Double:
-            return double
-        case let string as String:
-            return Double(string.trimmingCharacters(in: .whitespaces))
-        default:
-            return nil
-        }
     }
 }
 
@@ -116,16 +97,7 @@ public enum VoiceMessageFile {
     /// A readable file name for a recording: `"<prefix> 2026-10-27 14.05.m4a"` in the sender's time zone. The
     /// prefix ("Voice message", localized by the app) loses characters that file systems or URLs dislike.
     public static func fileName(prefix: String, date: Date, timeZone: TimeZone = .current) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = timeZone
-        formatter.dateFormat = "yyyy-MM-dd HH.mm"
-        let forbidden = CharacterSet(charactersIn: "/\\:?%*|\"<>\n\r\t")
-        var cleaned = prefix.components(separatedBy: forbidden).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-        if cleaned.isEmpty {
-            cleaned = "Voice message"
-        }
-        return "\(cleaned) \(formatter.string(from: date)).\(fileExtension)"
+        return MediaMessageFileName.make(prefix: prefix, fallback: "Voice message", date: date, timeZone: timeZone, fileExtension: fileExtension)
     }
 }
 
