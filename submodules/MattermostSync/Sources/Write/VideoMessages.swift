@@ -48,18 +48,15 @@ extension PostSender {
     }
 
     /// Telegram's stripped thumbnail of a recording's first frame, for its marker (`VideoMessageMarker.thumbnail`): from
-    /// the recorder's preview image when there is one (iOS and macOS both store one), else from the video's first
-    /// frame. Nil when neither can be read.
+    /// the video itself (what playback replaces it with), else from the recorder's preview image (on iOS a snapshot
+    /// already masked to a circle). Nil when neither can be read.
     static func videoMessageThumbnail(recording: VideoMessageRecording, videoPath: String, mediaBox: MediaBox) async -> Data? {
         let started = CFAbsoluteTimeGetCurrent()
-        var image: CGImage?
-        var origin = "preview"
-        if let representation = recording.file.previewRepresentations.first, let path = mediaBox.completedResourcePath(representation.resource), let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil) {
+        var origin = "first frame"
+        var image = await PostSender.firstVideoFrame(path: videoPath)
+        if image == nil, let representation = recording.file.previewRepresentations.first, let path = mediaBox.completedResourcePath(representation.resource), let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil) {
+            origin = "preview"
             image = CGImageSourceCreateImageAtIndex(source, 0, nil)
-        }
-        if image == nil {
-            origin = "first frame"
-            image = await PostSender.firstVideoFrame(path: videoPath)
         }
         guard let image = image, let thumbnail = PostSender.strippedThumbnail(of: image) else {
             MMLog.log("video message: no thumbnail for \(recording.file.fileId)")

@@ -201,6 +201,21 @@ Mattermost has no voice‑message post type: the 11.7 web app and server config 
 
 **Done 2026‑10‑27** ([PROGRESS](../PROGRESS.md), design: [mattermost-sync.md "Voice messages (5A)"](../design/mattermost-sync.md#voice-messages-5a), V1 outcome in [09](09-risks-and-decisions.md#v1-outcome-phase-5a-2026-10-27)). Not checked: the Mattermost desktop and official mobile apps (the web app's player markup was checked in Chrome, WebKit and iOS Safari), raise‑to‑listen (needs a device), a real microphone recording (a fake microphone fed Telegram's recorder on the simulator).
 
+### 5B · Video messages
+
+Telegram's round videos ("video circles"), the counterpart of 5A: Mattermost has no video‑message post type either, so a Relay video message is an ordinary post with **one video file**, which every other Mattermost client plays with its own video player, marked so Relay shows Telegram's round video.
+
+- [x] **Recording and sending** with Telegram's recorder on iOS and macOS: a tap on the mic button switches to video, hold to record, slide to cancel, lock, pause and resume, preview and trim, flip the camera. View‑once is hidden (a Mattermost post can't expire after one play).
+- [x] **Format:** the recording as it is (H.264 and AAC in an `.mp4`), named `Video message 2026-11-09 12.55.mp4`; no transcoding. Telegram's recorder no longer pre‑uploads to Telegram while recording.
+- [x] **Marker** `relay_round_video: {duration, width, height, thumb}`; `thumb` is the first frame as Telegram's stripped thumbnail (made on the device: Telegram's server makes these), so a circle that isn't downloaded yet shows a blurred frame.
+- [x] **Receiving:** a marked post with one video file becomes Telegram's round video (`.Video(flags: [.instantRoundVideo])`, tag `.voiceOrInstantVideo`): muted inline loop when auto‑downloaded, a tap plays it with sound; the player plays the next voice or video message.
+- [x] **Watched state** local to the device (the unwatched dot), as for voice messages.
+- [x] **Gates:** `MattermostFeatures.videoMessages` on.
+- [x] **Notifications:** "Video message" for marked posts. **Search:** the Voice tab lists video messages. **Existing data:** rich‑content version 4 rewrites stored marked posts.
+- [x] **Tests:** SwiftPM tests for the marker and the thumbnail encoder (decoded by ImageIO through Telegram's own header). On the iPhone 8 against production: a marked post from REST plays as a circle, a recorded circle arrives as a marked `.mp4`.
+
+Design: [mattermost-sync.md "Video messages (5B)"](../design/mattermost-sync.md#video-messages-5b).
+
 ## Milestones
 
 | Milestone | When (from start) | Demo |

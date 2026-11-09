@@ -93,6 +93,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 | # | Workstream | Status |
 |---|---|---|
 | 5A | Voice messages ([plan 05](plan/05-phases.md#5a--voice-messages-12-weeks)): Telegram's recorder and voice bubbles; sent as an ordinary audio attachment (Mattermost has no voice post type) with a `props` marker, so other clients play it as a file | Done (main checkout, 2026‑10‑27): V1 taken (AAC `.m4a`, marked posts only, [plan 09](plan/09-risks-and-decisions.md#v1-outcome-phase-5a-2026-10-27)); design: mattermost-sync.md "Voice messages (5A)"; BUILD.md "Phase 5A" (fake microphone); evidence `docs/research/phase5a/`, screenshots `docs/research/phase5a-*.png` |
+| 5B | Video messages ([plan 05](plan/05-phases.md#5b--video-messages)): Telegram's round videos ("video circles") with Telegram's recorder on iOS and macOS; sent as an ordinary `.mp4` attachment with a `props` marker and a stripped thumbnail, so other clients play it as a video file | Done on `codex/video-messages` (2026‑11‑09); design: mattermost-sync.md "Video messages (5B)"; BUILD.md "Phase 5B" |
 
 ## Log
 

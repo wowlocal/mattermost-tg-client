@@ -58,6 +58,10 @@ Mostly as in this repository's iOS app, at the matching places of the macOS app:
   flags; Relay has no call history), Telegram's settings rows (premium, stars, stories, wallet, proxy, privacy, sessions,
   language packs, stickers, Passport, support), the attach menu's polls, checklists, location, gifts and rich text.
 - A Threads tab after Chats (`RelayThreadsController` on `MattermostSync.threadList`, as the iOS tab).
+- Voice and video messages (5A, 5B) through the shared sync: a click on the mic button switches between voice and
+  video, as in Telegram; the recorder's `.mp4` goes with the `relay_round_video` marker, its thumbnail from the
+  first frame (AVFoundation) or the recorder's preview. The recorder's view-once control is hidden
+  (`ChatInputRecordingView`, `MattermostBackend.isEnabled`): a Mattermost post can't expire after one play.
 - The chat list's compose menu is New Message (people search, opens a DM), New Channel and Browse Channels
   (`RelayUI` on `MattermostDirectory`).
 - Own identity: Relay.app (`org.relaychat.RelayMac`, the Swift module keeps the name Telegram), version 1.0.0,

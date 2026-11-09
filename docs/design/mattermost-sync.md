@@ -388,7 +388,7 @@ audio file with its own player (decision V1 in [plan 09](../plan/09-risks-and-de
 
 | Step | How | Where |
 |---|---|---|
-| Recording | Telegram's recorder and composer unchanged: hold the mic button, slide left to cancel, slide up to lock, pause/resume, preview with trimming, send. `MattermostFeatures.voiceMessages` is on (the mic button); round video messages stay off (a tap on the mic shows "Hold to record audio." instead of switching to video), view-once is hidden. | `ChatTextInputPanelNode`, `ChatController`, `ChatControllerLoadDisplayNode` (`// MATTERMOST:`) |
+| Recording | Telegram's recorder and composer unchanged: hold the mic button, slide left to cancel, slide up to lock, pause/resume, preview with trimming, send. `MattermostFeatures.voiceMessages` is on (the mic button); a tap on it switches to round video messages since 5B (before 5B it showed "Hold to record audio."), view-once is hidden. | `ChatTextInputPanelNode`, `ChatController`, `ChatControllerLoadDisplayNode` (`// MATTERMOST:`) |
 | Upload | `PostSender.upload` transcodes the recording (Telegram's Ogg/Opus `audio/ogg`) with Telegram's own `convertOpusToAAC` (FFmpeg decode, AVAssetWriter AAC-LC, mono, 48 kHz, 32 kbps) into a temporary `.m4a`, uploaded as `audio/mp4` named `Voice message 2026-10-27 14.05.m4a` (the recording's time in the device's time zone; the prefix is `Relay.VoiceMessage.FileName`, set by MattermostUI). A failed transcoding sends the Ogg/Opus file as `.ogg`, still marked. A forwarded voice message (already the server's file) goes as it is. | `Write/VoiceMessages.swift`, `PostSender` |
 | Post | `outgoingDraft` adds the marker from the local file's `.Audio(isVoice: true, duration, waveform)` (the recorder's 100 × 5-bit waveform, 63 bytes). Offline sends queue like any other (transient errors retried, the uploaded file id kept with the pending row, 4F). After the post, the AAC file (not the Ogg recording) is moved to the sent message's `MattermostFileResource`; after a restart between upload and post the sent message downloads it instead. | `OwnPosts` |
 | Receiving | `PostConverter.voiceMarker`: the marker **and exactly one audio file** (`audio/*` or an audio extension) → `TelegramMediaFile` with `.Audio(isVoice: true, duration, waveform)` + the file name, tag `.voiceOrInstantVideo` (the Voice tab, the playlist that plays the next voice message). A marker on anything else is ignored; audio files without a marker stay files (V1). Same converter for live events, pages, hole fills, catch-up and search results. | `Converters/PostConverter.swift`, `MediaConverter.swift` |
@@ -411,6 +411,32 @@ official mobile and desktop apps were not checked ([evidence](../research/phase5
 **Debug hooks** (BUILD.md "Phase 5A"): `RelayDebugFakeMicrophone` replaces the microphone inside
 `ManagedAudioRecorderContext` (debug builds only) with a file or a tone, so the recorder's own encoding, waveform,
 preview and send paths run on a simulator without opening the Mac's microphone.
+
+## Video messages (5B)
+
+Telegram's round videos ("video circles"), as Relay's voice messages: Mattermost has no video-message post type, so a
+Relay video message is an ordinary post with **one video file and no text**, marked in `props` so Relay shows it as
+Telegram's round video; every other client shows an `.mp4` with its own video player.
+
+```json
+"props": {"relay_round_video": {"v": 1, "duration": 23.7, "width": 480, "height": 480, "thumb": "<base64>"}}
+```
+
+| Step | How | Where |
+|---|---|---|
+| Recording | Telegram's recorder unchanged (`VideoMessageCameraScreen` on iOS, `VideoRecorderModalController` on macOS): a tap on the mic button switches to video ("Hold to record video. Tap to switch to audio."), hold to record, slide to cancel, lock, pause/resume, preview with trimming, flip camera, send. `MattermostFeatures.videoMessages` is on. View-once is hidden on both platforms (iOS: `viewOnceAvailable`; macOS: the recorder's single-time control, which voice messages showed too before 5B). | `ChatControllerMediaRecording`, mac `ChatInputRecordingView` (`// MATTERMOST:`) |
+| Upload | The recording goes as it is: H.264 and AAC in an `.mp4` (iOS: the camera's own file, 400 or 480 pixels square at about 1.2 Mbit/s, or the editor's export at 400 pixels and 1 Mbit/s after trimming or pausing; both H.264 because a quality preset turns HEVC off), uploaded as `video/mp4` named `Video message 2026-11-09 12.55.mp4` (`Relay.VideoMessage.FileName`, set by MattermostUI). Telegram's recorder uploads to Telegram while recording (`LegacyLiveUploadInterface.preUpload`); with the Mattermost backend it doesn't (the request would only park), and the finished file is the message's upload. A forwarded video message (already the server's file) keeps its name. | `Write/VideoMessages.swift`, `PostSender`, `LegacyLiveUploadInterface` |
+| Thumbnail | The marker carries the first frame as Telegram's **stripped thumbnail** (`immediateThumbnailData`: a tiny baseline JPEG without its fixed header, which TinyThumbnail's decoder puts back). Telegram's server makes these; `TinyThumbnailEncoder` (MattermostSyncCore) encodes one from the video's first frame (AVFoundation; else the recorder's preview image, which iOS masks to a circle) scaled to 40 pixels, with the tables read from the decoder's own header: about 120–300 bytes. Telegram shows it blurred until the video is downloaded, so a circle that isn't auto-downloaded (cellular size limits) is never blank. A marker without one (another client, a restart between upload and post) is fine: the first frame shows once the file is there. | `TinyThumbnailEncoder.swift`, `VideoMessages.swift` |
+| Post | `outgoingDraft` adds the marker from the local file's `.Video(duration, size, flags: [.instantRoundVideo])` and the upload's thumbnail. After the post the recording is moved (or copied) to the sent message's `MattermostFileResource`, so the sent circle doesn't download its own file again. | `OwnPosts` |
+| Receiving | `PostConverter.videoMessageMarker`: the marker **and exactly one video file** (`video/*` or a video extension) → `TelegramMediaFile` with `.Video(duration, size, flags: [.instantRoundVideo])`, the thumbnail as `immediateThumbnailData`, tag `.voiceOrInstantVideo` (Telegram's own tag for round videos: the Voice tab and the playlist that plays the next voice or video message). A marker on anything else is ignored; video files without one stay files. Playback is Telegram's: muted inline loop when auto-downloaded (`categories.video` size limits), a tap expands it with sound and the player bar. | `Converters/PostConverter.swift`, `MediaConverter.swift` |
+| Watched state | Incoming video messages carry `ConsumableContentMessageAttribute` (the unwatched dot), local only, exactly as voice messages; VoiceOver adds "Played" / "Not played". | `PostConverter`, `ChatMessageItemView` |
+| Existing data | Rich-content version 4: the upgrade re-renders the newest page of every chat and rewrites every stored post with a video file that has the marker (`upgradeStoredRecordings(.videoMessage)`, `ext:mp4 ext:mov ext:m4v`), so video messages an older build stored as files become circles. | `Sync/RichContent.swift` |
+| Search | The Voice tabs also search video files (`ext:mp4 …`) and keep the messages with the voice tag. | `Search/MessageSearch.swift` |
+| Notifications | The notification service extension says "Video message" (`Relay.Push.VideoMessage`) for a marked post without text, from the same post fetch as voice messages. | `MattermostPushServiceHandler` |
+| Previews | The chat list, reply panels and the player bar use Telegram's own texts ("Video Message"). | Telegram |
+
+**Format.** The file Telegram's recorder writes is uploaded unchanged. It plays in every browser and in AVFoundation
+(H.264 High, AAC-LC mono 48 kHz), and transcoding would cost time and quality.
 
 ## Daily-use gaps (4H)
 

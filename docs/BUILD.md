@@ -528,6 +528,22 @@ tools/relay-remote.py "$UDID" search filter=voice                    # the chat 
   runs (`nse: post … is a voice message` in the `[Relay]` log); `simulate-push` with a payload whose `post_id` is a voice
   post runs the same code in the app.
 
+#### Phase 5B: video messages
+
+Telegram's recorder needs a camera, so record on a device (the iPhone 8 test phone with phone-control, or the Mac's
+Debug app); a simulator has none. Receiving needs no camera: post a marked video from another account over REST.
+
+- **A marked post from REST:** upload an `.mp4` (`POST /files`) and create the post with
+  `"props": {"relay_round_video": {"v": 1, "duration": 6, "width": 400, "height": 400}}`, no text. A test clip:
+  `ffmpeg -f lavfi -i testsrc2=size=400x400:rate=30:duration=6 -f lavfi -i sine=frequency=660:duration=6:sample_rate=48000 -c:v libx264 -pix_fmt yuv420p -b:v 1000k -c:a aac -ac 1 -movflags +faststart -shortest test-round.mp4`.
+  Larger than the auto-download limit (10 MB on Wi-Fi), it shows the marker's blurred thumbnail and a download button.
+- **Recording with phone-control:** one tap on the mic button switches to video; `long-press` on it starts recording,
+  but its release doesn't reach Telegram's recorder (the recording keeps going), so a `tap` on the button afterwards
+  ends and sends it.
+- **Interop:** `GET /posts/{id}` shows `props.relay_round_video` (with `thumb` when the upload made one); the file is
+  `Video message <date>.mp4` (`ffprobe`: H.264 High, AAC-LC mono 48 kHz). The device log says
+  `video message: N-byte thumbnail from the first frame` per send.
+
 #### Phase 4H: daily-use gaps
 
 Nothing new to drive it: real taps (AXe) and REST as the test users. Notes:
