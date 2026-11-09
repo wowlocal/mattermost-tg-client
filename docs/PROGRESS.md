@@ -777,3 +777,13 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
     count (people before bots, bots included), one such member is enough, and a member without a picture is never a
     tile, so a new member doesn't put a letter tile into every channel. The first version's cached choices are dropped
     (`channel_pictures_2`). Checked with a test account added to every channel of the user's server.
+- **5B done** (branch `codex/video-messages`, 2026-11-09, owner's request: "video messages as in Telegram"). Telegram's
+  round videos with Telegram's recorder on iOS and macOS, sent as an ordinary `.mp4` post marked in `props`
+  (`relay_round_video`: duration, size, and the first frame as a Telegram stripped thumbnail that Relay encodes itself).
+  Design: mattermost-sync.md "Video messages (5B)"; BUILD.md "Phase 5B". Checked against production with the test
+  accounts (relaytester on the iPhone 8, alex.rivera over REST and in the Mac Debug app): a marked post plays as a
+  muted inline circle, a tap plays it with sound and the player bar, the unwatched dot clears; a recording arrives as
+  `Video message 2026-11-09 12.55.mp4` (H.264 High 480×480, AAC mono) with the marker and a 235-byte thumbnail; a
+  15 MB circle on the Mac shows the blurred thumbnail with a download button; the notification service extension
+  says "Video message". Not checked: recording on the Mac (camera permission needs the owner), the Mattermost web,
+  desktop and mobile apps (a plain H.264/AAC `.mp4`).

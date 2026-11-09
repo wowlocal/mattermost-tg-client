@@ -48,8 +48,9 @@ extension PostSender {
     }
 
     /// Telegram's stripped thumbnail of a recording's first frame, for its marker (`VideoMessageMarker.thumbnail`): from
-    /// the video itself (what playback replaces it with), else from the recorder's preview image (on iOS a snapshot
-    /// already masked to a circle). Nil when neither can be read.
+    /// the video itself (what playback replaces it with), else from the recorder's preview image. Telegram's iOS
+    /// recorder draws the circle into the video (light corners), which the round bubble clips. Nil when neither can be
+    /// read.
     static func videoMessageThumbnail(recording: VideoMessageRecording, videoPath: String, mediaBox: MediaBox) async -> Data? {
         let started = CFAbsoluteTimeGetCurrent()
         var origin = "first frame"
