@@ -430,10 +430,23 @@ Telegram's round video; every other client shows an `.mp4` with its own video pl
 | Post | `outgoingDraft` adds the marker from the local file's `.Video(duration, size, flags: [.instantRoundVideo])` and the upload's thumbnail. After the post the recording is moved (or copied) to the sent message's `MattermostFileResource`, so the sent circle doesn't download its own file again. | `OwnPosts` |
 | Receiving | `PostConverter.videoMessageMarker`: the marker **and exactly one video file** (`video/*` or a video extension) → `TelegramMediaFile` with `.Video(duration, size, flags: [.instantRoundVideo])`, the thumbnail as `immediateThumbnailData`, tag `.voiceOrInstantVideo` (Telegram's own tag for round videos: the Voice tab and the playlist that plays the next voice or video message). A marker on anything else is ignored; video files without one stay files. Playback is Telegram's: muted inline loop when auto-downloaded (`categories.video` size limits), a tap expands it with sound and the player bar. | `Converters/PostConverter.swift`, `MediaConverter.swift` |
 | Watched state | Incoming video messages carry `ConsumableContentMessageAttribute` (the unwatched dot), local only, exactly as voice messages; VoiceOver adds "Played" / "Not played". | `PostConverter`, `ChatMessageItemView` |
-| Existing data | Rich-content version 4: the upgrade re-renders the newest page of every chat and rewrites every stored post with a video file that has the marker (`upgradeStoredRecordings(.videoMessage)`, `ext:mp4 ext:mov ext:m4v`), so video messages an older build stored as files become circles. | `Sync/RichContent.swift` |
+| Existing data | Rich-content version 5: the upgrade re-renders the newest page of every chat and rewrites every stored post with a video file (`upgradeStoredRecordings(.video)`, `ext:mp4 ext:mov ext:m4v`), so videos and video messages an older build stored as files become videos and circles. | `Sync/RichContent.swift` |
 | Search | The Voice tabs also search video files (`ext:mp4 …`) and keep the messages with the voice tag. | `Search/MessageSearch.swift` |
 | Notifications | The notification service extension says "Video message" (`Relay.Push.VideoMessage`) for a marked post without text, from the same post fetch as voice messages. | `MattermostPushServiceHandler` |
 | Previews | The chat list, reply panels and the player bar use Telegram's own texts ("Video Message"). | Telegram |
+
+**Videos.** Every video file (`video/*` or `mp4 m4v mov webm`) shows as Telegram's video bubble (`.Video`, tags
+`.photoOrVideo` and `.video`, the Media tab) and opens in Telegram's gallery player; with the post's photos it is one
+album (`PostLayout`: photos and videos first, then the other files). Mattermost keeps no size, duration or preview for
+a video, so Relay sends them: `relay_videos` in `props`, by file id, each entry in the round video marker's format
+(`VideoFilesMarker`), read from the uploaded file with AVFoundation (the displayed size with the track's transform,
+the duration, the first frame as a stripped thumbnail). Another client's video has no entry: a square bubble, the
+duration once it plays and the first frame once it is downloaded. Rich-content version 5 rewrites every stored post
+with a video file (`upgradeStoredRecordings(.video)`).
+
+```json
+"props": {"relay_videos": {"<file id>": {"v": 1, "duration": 21.3, "width": 1920, "height": 1080, "thumb": "<base64>"}}}
+```
 
 **Format.** The file Telegram's recorder writes is uploaded unchanged. Telegram's iOS recorder draws the circle into
 the video (light corners outside it), so other clients show a round picture in a square video, as Telegram's own

@@ -540,6 +540,11 @@ Debug app); a simulator has none. Receiving needs no camera: post a marked video
 - **Recording with phone-control:** one tap on the mic button switches to video; `long-press` on it starts recording,
   but its release doesn't reach Telegram's recorder (the recording keeps going), so a `tap` on the button afterwards
   ends and sends it.
+- **Videos** (the simulator, no camera needed): `tools/relay-remote.py "$UDID" send-video file=relay-debug/clip.mp4
+  text=hi` sends a file from the app's `Documents` to the visible chat the way Telegram sends a gallery or Files video
+  (`LocalFileVideoMediaResource`, converted by Telegram's fetch); the post gets `props.relay_videos` and the log
+  `video: 464×848, 4.9 s, 162-byte thumbnail from the first frame`. Posts with several videos, with or without
+  `relay_videos`, come from REST (`POST /files`, then the post with `file_ids` and the props by file id).
 - **Interop:** `GET /posts/{id}` shows `props.relay_round_video` (with `thumb` when the upload made one); the file is
   `Video message <date>.mp4` (`ffprobe`: H.264 High, AAC-LC mono 48 kHz). The device log says
   `video message: N-byte thumbnail from the first frame` per send.

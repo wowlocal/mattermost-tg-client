@@ -192,12 +192,14 @@ enum PostConverter {
             // and one video file.
             let voice = PostConverter.voiceMarker(post: content, layout: layout)
             let roundVideo = voice == nil ? PostConverter.videoMessageMarker(post: content, layout: layout) : nil
+            // Relay's metadata of the post's video files (5B), by file id.
+            let videos = VideoFilesMarker.entries(propsValue: content.props[VideoFilesMarker.propsKey]?.foundationObject)
             for (index, part) in layout.parts.enumerated() {
                 guard let file = part.file else {
                     continue
                 }
                 let waveform = voice != nil && voice?.waveform == nil ? context.computedWaveform(file.id) : nil
-                let converted = MediaConverter.media(for: file, mediaId: context.mediaId(file.id), voice: voice, waveform: waveform, roundVideo: roundVideo)
+                let converted = MediaConverter.media(for: file, mediaId: context.mediaId(file.id), voice: voice, waveform: waveform, roundVideo: roundVideo, video: videos[file.id])
                 media[index].append(converted.media)
                 partTags[index].formUnion(converted.tags)
                 if (voice != nil || roundVideo != nil) && isIncoming, let localId = localIds[index] {

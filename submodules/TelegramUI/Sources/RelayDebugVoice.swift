@@ -12,6 +12,7 @@ import TelegramUIPreferences
 import MattermostSync
 import MattermostUI
 import PeerInfoScreen
+import LocalMediaResources
 
 #if DEBUG // MATTERMOST: debug builds only; release builds compile none of this file (Phase 4A)
 
@@ -33,7 +34,9 @@ import PeerInfoScreen
 // - `voice-messages`: the voice messages of the visible chat (post, duration, waveform, played state, file);
 // - `voice-play` (`index=<n>`, 0 the newest, or `post=<id>`): a tap on a voice message's play button
 //   (`openMessage`);
-// - `player` (`rate=1|1.5|2`, `do=pause|play|toggle|next|stop`): the shared media player's state and controls.
+// - `player` (`rate=1|1.5|2`, `do=pause|play|toggle|next|stop`): the shared media player's state and controls;
+// - `send-video` (`file=<path>`, relative to Documents, `text=`): sends a video file to the visible chat as Telegram
+//   sends a video from the gallery or Files (`LocalFileVideoMediaResource`, converted by Telegram's video fetch; 5B).
 final class RelayDebugFakeMicrophone {
     /// The fake microphone in use; nil: the real one.
     static var current: RelayDebugFakeMicrophone? = RelayDebugFakeMicrophone.fromEnvironment()
@@ -199,6 +202,26 @@ extension TelegramRootController {
             }
             let current = RelayDebugFakeMicrophone.current
             completion(true, nil, ["fakeMicrophone": current?.name ?? "off", "seconds": current?.seconds ?? 0])
+        case "send-video":
+            guard let chat = self.relayVoiceTopChat, let peerId = chat.chatLocation.peerId, let file = command["file"] as? String else {
+                completion(false, "no chat or file", [:])
+                return true
+            }
+            let documents = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first ?? NSTemporaryDirectory()
+            let path = file.hasPrefix("/") ? file : documents + "/" + file
+            let asset = AVURLAsset(url: URL(fileURLWithPath: path))
+            guard let track = asset.tracks(withMediaType: .video).first else {
+                completion(false, "no video track in \(path)", [:])
+                return true
+            }
+            let displayed = CGRect(origin: .zero, size: track.naturalSize).applying(track.preferredTransform)
+            let size = PixelDimensions(width: Int32(abs(displayed.width).rounded()), height: Int32(abs(displayed.height).rounded()))
+            let duration = CMTimeGetSeconds(asset.duration)
+            let resource = LocalFileVideoMediaResource(randomId: Int64.random(in: Int64.min ... Int64.max), path: path, adjustments: nil)
+            let media = TelegramMediaFile(fileId: MediaId(namespace: Namespaces.Media.LocalFile, id: Int64.random(in: Int64.min ... Int64.max)), partialReference: nil, resource: resource, previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil, mimeType: "video/mp4", size: nil, attributes: [.Video(duration: duration, size: size, flags: [.supportsStreaming], preloadSize: nil, coverTime: nil, videoCodec: nil), .FileName(fileName: (path as NSString).lastPathComponent)], alternativeRepresentations: [])
+            let message: EnqueueMessage = .message(text: command["text"] as? String ?? "", attributes: [], inlineStickers: [:], mediaReference: .standalone(media: media), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
+            let _ = enqueueMessages(account: context.account, peerId: peerId, messages: [message]).startStandalone()
+            completion(true, nil, ["width": Int(size.width), "height": Int(size.height), "duration": duration])
         case "voice":
             guard let chat = self.relayVoiceTopChat, let interaction = chat.interfaceInteraction else {
                 completion(false, "no chat", [:])

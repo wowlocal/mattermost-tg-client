@@ -67,7 +67,7 @@ Legend: **Keep** = reuse Telegram's feature, adapted to Mattermost data · **Hid
 | Permalinks and deep links | 3 |
 | Managed app configuration (AppConfig/MDM) | 4 |
 | Voice messages: record, send as an audio attachment (AAC `.m4a` with a `props` marker), voice bubble with waveform for marked posts ([5A](05-phases.md#5a--voice-messages-12-weeks); done 2026‑10‑27; voice‑to‑text stays hidden) | 5 |
-| Video messages (Telegram's round videos): record, send as a video attachment (`.mp4` with a `props` marker and a stripped thumbnail), round video for marked posts ([5B](05-phases.md#5b--video-messages); 2026‑11‑09) | 5 |
+| Video messages (Telegram's round videos): record, send as a video attachment (`.mp4` with a `props` marker and a stripped thumbnail), round video for marked posts; every video file as a video bubble, with size, duration and preview sent in `relay_videos` ([5B](05-phases.md#5b--video-messages); 2026‑11‑09) | 5 |
 
 ## Later (after v1)
 

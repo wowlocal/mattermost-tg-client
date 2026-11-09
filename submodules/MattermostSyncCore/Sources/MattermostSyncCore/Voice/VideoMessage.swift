@@ -157,3 +157,39 @@ enum MarkerNumber {
         }
     }
 }
+
+/// Relay's videos (5B): the size, duration and first frame of every video file of a post sent from Relay, so other
+/// Relay users see Telegram's video bubble (a blurred frame, the duration, the right shape) before downloading it.
+/// Mattermost keeps none of these for a video file (11.7 and 12.0: no width, height, duration or preview).
+///
+/// ```json
+/// "props": {"relay_videos": {"<file id>": {"v": 1, "duration": 21.3, "width": 1920, "height": 1080, "thumb": "<base64>"}}}
+/// ```
+///
+/// Each entry has `VideoMessageMarker`'s format. Video files without an entry (other clients) still show as videos.
+public enum VideoFilesMarker {
+    /// The key in `props`.
+    public static let propsKey = "relay_videos"
+    /// Mattermost allows 10 files per post by default; more entries are not read.
+    public static let maxEntries = 50
+
+    /// The entries of `props["relay_videos"]` by file id; empty when there is no marker. Entries without a usable
+    /// duration are dropped.
+    public static func entries(propsValue: Any?) -> [String: VideoMessageMarker] {
+        guard let object = propsValue as? [String: Any] else {
+            return [:]
+        }
+        var result: [String: VideoMessageMarker] = [:]
+        for (fileId, value) in object.prefix(VideoFilesMarker.maxEntries) where !fileId.isEmpty {
+            if let entry = VideoMessageMarker(propsValue: value) {
+                result[fileId] = entry
+            }
+        }
+        return result
+    }
+
+    /// The value to put at `props["relay_videos"]` (`JSONSerialization` types).
+    public static func propsValue(_ entries: [String: VideoMessageMarker]) -> [String: Any] {
+        return entries.mapValues { $0.propsValue }
+    }
+}

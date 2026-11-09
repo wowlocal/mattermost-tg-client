@@ -149,13 +149,14 @@ extension MattermostAccountSync {
     /// The `POST /posts` body of an outgoing message (or of a group of messages sent as one post: an album),
     /// and its `pending` row (registered here, before the request, so the WebSocket echo is always
     /// recognized). The first message of a group stands for it. Nil when the messages are gone.
-    func outgoingDraft(messageId: MessageId, fileIds: [String], groupMessageIds: [MessageId] = [], videoThumbnail: Data? = nil) async -> OutgoingDraft? {
+    func outgoingDraft(messageId: MessageId, fileIds: [String], groupMessageIds: [MessageId] = [], uploadedFiles: [MessageId: [PostSender.UploadedFile]] = [:]) async -> OutgoingDraft? {
         return await self.postbox.mmTransaction { transaction -> OutgoingDraft? in
             guard let message = transaction.getMessage(messageId), let channelId = self.channelId(forPeerId: messageId.peerId), let channelState = self.channelState(channelId) else {
                 return nil
             }
+            let groupMessages = [message] + groupMessageIds.filter { $0 != messageId }.compactMap { transaction.getMessage($0) }
             // A group's captions (usually one) become the post's text.
-            let texts = ([message] + groupMessageIds.filter { $0 != messageId }.compactMap { transaction.getMessage($0) }).compactMap { item -> String? in
+            let texts = groupMessages.compactMap { item -> String? in
                 let entities = (item.attributes.first(where: { $0 is TextEntitiesMessageAttribute }) as? TextEntitiesMessageAttribute)?.entities ?? []
                 let markdown = OutgoingText.markdown(text: item.text, entities: entities, username: { peerId in
                     return (transaction.getPeer(peerId) as? TelegramUser)?.username
@@ -164,7 +165,11 @@ extension MattermostAccountSync {
             }
             var markdown = texts.joined(separator: "\n\n")
             var fileIds = fileIds
-            var props = groupMessageIds.count > 1 ? [:] : self.recordingProps(of: message, videoThumbnail: videoThumbnail)
+            var props = groupMessageIds.count > 1 ? [:] : self.recordingProps(of: message, videoThumbnail: uploadedFiles[messageId]?.compactMap { $0.video?.thumbnail }.first)
+            // 5B: the size, duration and first frame of the post's videos, which Mattermost doesn't keep.
+            if let videos = self.videoFilesProps(messages: groupMessages, uploadedFiles: uploadedFiles) {
+                props[VideoFilesMarker.propsKey] = videos
+            }
             // 4H: Telegram's forward (with the sender's name) goes as Mattermost's forward: the permalink alone.
             if let permalink = self.forwardPermalink(of: message, channelId: channelId, transaction: transaction) {
                 markdown = PermalinkForward.message(permalink: permalink)

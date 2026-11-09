@@ -212,6 +212,7 @@ Telegram's round videos ("video circles"), the counterpart of 5A: Mattermost has
 - [x] **Watched state** local to the device (the unwatched dot), as for voice messages.
 - [x] **Gates:** `MattermostFeatures.videoMessages` on.
 - [x] **Notifications:** "Video message" for marked posts. **Search:** the Voice tab lists video messages. **Existing data:** rich‑content version 4 rewrites stored marked posts.
+- [x] **Videos as videos** (owner's request, same day): every video file shows as Telegram's video bubble and joins the post's photos in an album; Relay sends each video's size, duration and blurred first frame in `relay_videos`, which Mattermost doesn't keep.
 - [x] **Tests:** SwiftPM tests for the marker and the thumbnail encoder (decoded by ImageIO through Telegram's own header). On the iPhone 8 against production: a marked post from REST plays as a circle, a recorded circle arrives as a marked `.mp4`.
 
 Design: [mattermost-sync.md "Video messages (5B)"](../design/mattermost-sync.md#video-messages-5b).

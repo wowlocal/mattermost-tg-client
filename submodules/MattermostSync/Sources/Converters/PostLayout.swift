@@ -9,7 +9,7 @@ import MattermostSyncCore
 /// Telegram shows several photos as an album and several files as a file group: one message per item,
 /// sharing a `groupingKey`. A Mattermost post with N files therefore becomes N messages, one per file, which
 /// need N local ids: the post's own id-map entry (part 0, the primary message) and N-1 parts
-/// (`PostParts`). Images come first (one album), then the other files (one file group), each in the
+/// (`PostParts`). Images and videos (5B) come first (one album), then the other files (one file group), each in the
 /// post's order. A post with both is one group (4F): Telegram's bubble lays the images out as a mosaic and the
 /// files below it, so the post shows as one bubble, as Mattermost shows one post.
 ///
@@ -22,7 +22,8 @@ struct PostLayout: Equatable {
     struct Part: Equatable {
         /// Nil for the single message of a post without files.
         var file: FileInfo?
-        var isAlbumImage: Bool
+        /// A photo or a video (5B), shown in the post's album.
+        var isAlbumMedia: Bool
         var groupingKey: Int64?
     }
 
@@ -35,16 +36,16 @@ struct PostLayout: Equatable {
 
     init(post: Post) {
         if post.type.hasPrefix("system_") {
-            self.parts = [Part(file: nil, isAlbumImage: false, groupingKey: nil)]
+            self.parts = [Part(file: nil, isAlbumMedia: false, groupingKey: nil)]
             self.textPartIndex = 0
             return
         }
         // 4H: a plain forward shows the forwarded post's files (`ForwardedPost`); grouping keys stay the post's own.
         let files = (ForwardedPost.content(of: post).metadata?.files ?? []).filter { $0.deleteAt == 0 }
-        let images = files.filter { MediaConverter.isAlbumImage($0) }
-        let others = files.filter { !MediaConverter.isAlbumImage($0) }
+        let images = files.filter { MediaConverter.isAlbumMedia($0) }
+        let others = files.filter { !MediaConverter.isAlbumMedia($0) }
         if images.count + others.count <= 1 {
-            self.parts = [Part(file: files.first, isAlbumImage: !images.isEmpty, groupingKey: nil)]
+            self.parts = [Part(file: files.first, isAlbumMedia: !images.isEmpty, groupingKey: nil)]
             self.textPartIndex = 0
             return
         }
@@ -59,8 +60,8 @@ struct PostLayout: Equatable {
             imageKey = images.count > 1 ? PostLayout.groupingKey(postId: post.id, group: "images") : nil
             fileKey = others.count > 1 ? PostLayout.groupingKey(postId: post.id, group: "files") : nil
         }
-        var parts = images.map { Part(file: $0, isAlbumImage: true, groupingKey: imageKey) }
-        parts += others.map { Part(file: $0, isAlbumImage: false, groupingKey: fileKey) }
+        var parts = images.map { Part(file: $0, isAlbumMedia: true, groupingKey: imageKey) }
+        parts += others.map { Part(file: $0, isAlbumMedia: false, groupingKey: fileKey) }
         self.parts = Array(parts.prefix(PostParts.maximumCount))
         self.textPartIndex = others.isEmpty ? 0 : self.parts.count - 1
     }

@@ -101,3 +101,31 @@ final class VideoMessageMarkerTests: XCTestCase {
         XCTAssertEqual(VideoMessageFile.fileName(prefix: "  ", date: date, timeZone: TimeZone(identifier: "UTC")!), "Video message 2026-11-09 14.05.mp4")
     }
 }
+
+final class VideoFilesMarkerTests: XCTestCase {
+    func testRoundTripThroughJSON() throws {
+        let entries = [
+            "file1": VideoMessageMarker(duration: 21.34, width: 1920, height: 1080),
+            "file2": VideoMessageMarker(duration: 3, width: 720, height: 1280, thumbnail: Data([1, 40, 40, 7, 7])),
+        ]
+        let props: [String: Any] = [VideoFilesMarker.propsKey: VideoFilesMarker.propsValue(entries)]
+        let data = try JSONSerialization.data(withJSONObject: props)
+        let decoded = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let read = VideoFilesMarker.entries(propsValue: decoded[VideoFilesMarker.propsKey])
+        XCTAssertEqual(read.count, 2)
+        XCTAssertEqual(read["file1"]?.duration ?? 0, 21.3, accuracy: 0.0001)
+        XCTAssertEqual(read["file1"]?.width, 1920)
+        XCTAssertEqual(read["file1"]?.height, 1080)
+        XCTAssertEqual(read["file2"]?.height, 1280)
+        XCTAssertEqual(read["file2"]?.thumbnail, Data([1, 40, 40, 7, 7]))
+        XCTAssertEqual(VideoFilesMarker.propsKey, "relay_videos")
+    }
+
+    func testBadValues() {
+        XCTAssertTrue(VideoFilesMarker.entries(propsValue: nil).isEmpty)
+        XCTAssertTrue(VideoFilesMarker.entries(propsValue: "relay_videos").isEmpty)
+        XCTAssertTrue(VideoFilesMarker.entries(propsValue: ["": ["duration": 3]]).isEmpty)
+        let read = VideoFilesMarker.entries(propsValue: ["a": ["duration": 3], "b": ["width": 3], "c": "x"])
+        XCTAssertEqual(Array(read.keys), ["a"])
+    }
+}

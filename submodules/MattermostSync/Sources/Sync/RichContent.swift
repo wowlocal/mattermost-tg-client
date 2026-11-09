@@ -12,10 +12,10 @@ import MattermostSyncCore
 extension MattermostAccountSync {
     /// Version of the rendering `rerenderRichContent` brings stored messages to (3E: link previews, headings, list
     /// indents, tables, emoticons; 2 (4F): a post with images and other files as one group, attachment colours
-    /// and icons; 3 (5A): Relay's voice messages as voice bubbles; 4 (5B): Relay's video messages as round videos;
-    /// both through `upgradeStoredRecordings`).
+    /// and icons; 3 (5A): Relay's voice messages as voice bubbles; 5 (5B): video files as videos, Relay's video
+    /// messages as round videos; both through `upgradeStoredRecordings`).
     static let richContentCursor = "rich_content"
-    static let richContentVersion = "4"
+    static let richContentVersion = "5"
     /// The settings the stored messages were rendered with (`RichContentSettings.encoded`).
     static let richContentSettingsCursor = "rich_content_settings"
     /// Newest messages per chat re-rendered on a settings change or the upgrade (about a screen and a half).
@@ -96,8 +96,8 @@ extension MattermostAccountSync {
                 if previous < 3 {
                     await self.upgradeStoredRecordings(.voice)
                 }
-                if previous < 4 {
-                    await self.upgradeStoredRecordings(.videoMessage)
+                if previous < 5 {
+                    await self.upgradeStoredRecordings(.video)
                 }
             } else if stored != settings.encoded {
                 await self.rerenderRichContent(reason: "settings changed while not running")
@@ -166,34 +166,36 @@ extension MattermostAccountSync {
         MMLog.log("rich content (\(reason)): \(stripped) card(s) removed, re-rendered \(written.current) message(s) in \(channels.count) chat(s) (\(failed.current) failed) in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
     }
 
-    /// Recordings that make a post a voice or video message.
+    /// Files that older builds stored as plain files: voice messages (5A) and videos and video messages (5B).
     enum StoredRecordingKind {
         case voice
-        case videoMessage
+        case video
 
         var searchExtensions: [String] {
             switch self {
             case .voice:
                 return VoiceMessageFile.searchExtensions
-            case .videoMessage:
+            case .video:
                 return VideoMessageFile.searchExtensions
             }
         }
 
-        var propsKey: String {
+        /// Whether a loaded post shows differently now: a voice marker, or any video file (every video is a video
+        /// bubble or a round video since 5B).
+        func needsRewrite(_ post: Post) -> Bool {
             switch self {
             case .voice:
-                return VoiceMessageMarker.propsKey
-            case .videoMessage:
-                return VideoMessageMarker.propsKey
+                return post.props[VoiceMessageMarker.propsKey] != nil
+            case .video:
+                return (post.metadata?.files ?? []).contains { VideoMessageFile.isVideo(name: $0.name, mimeType: $0.mimeType) }
             }
         }
     }
 
-    /// Voice messages stored as files by builds before 5A, video messages by builds before 5B (another Relay user's
-    /// recording, a file to an older build): every stored post with an audio (or video) file is loaded again
-    /// (`POST /teams/{id}/files/search` for the extensions, then `POST /posts/ids`), and the marked ones are
-    /// rewritten as voice (or video) messages. Posts not stored yet need nothing: they are converted when they load.
+    /// Voice messages stored as files by builds before 5A, videos and video messages by builds before 5B: every
+    /// stored post with an audio (or video) file is loaded again (`POST /teams/{id}/files/search` for the extensions,
+    /// then `POST /posts/ids`), and the ones that show differently now are rewritten. Posts not stored yet need
+    /// nothing: they are converted when they load.
     func upgradeStoredRecordings(_ kind: StoredRecordingKind) async {
         let started = CFAbsoluteTimeGetCurrent()
         let teams = self.state.with { $0.teams.map(\.id) }
@@ -229,7 +231,7 @@ extension MattermostAccountSync {
             guard let posts = try? await self.client.posts(ids: Array(stored[start ..< min(stored.count, start + 100)])) else {
                 continue
             }
-            let marked = posts.filter { $0.deleteAt == 0 && $0.props[kind.propsKey] != nil }
+            let marked = posts.filter { $0.deleteAt == 0 && kind.needsRewrite($0) }
             if marked.isEmpty {
                 continue
             }
@@ -243,6 +245,6 @@ extension MattermostAccountSync {
             }
             rewritten += count
         }
-        MMLog.log("\(kind == .voice ? "voice" : "video message"): upgrade found \(stored.count) stored post(s) with \(kind == .voice ? "audio" : "video") files, rewrote \(rewritten) message(s) in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
+        MMLog.log("\(kind == .voice ? "voice" : "video"): upgrade found \(stored.count) stored post(s) with \(kind == .voice ? "audio" : "video") files, rewrote \(rewritten) message(s) in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
     }
 }
