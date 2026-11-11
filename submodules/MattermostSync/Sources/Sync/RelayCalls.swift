@@ -165,6 +165,7 @@ extension MattermostAccountSync {
         }
         // Subscribers first: a ring must not wait for Postbox.
         state.events.putNext(event)
+        MattermostSync.reconcilePushedCallSignalling(userId: self.ownUserId, event: event)
         await self.writeRelayActiveCalls(channelIds: changedChannels, fullRefresh: isFullRefresh)
     }
 

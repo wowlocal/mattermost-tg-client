@@ -4,6 +4,7 @@ import AVFAudio
 import UIKit
 import SwiftSignalKit
 import TelegramCore
+import MattermostSync
 import TelegramCallsUI
 import AccountContext
 import UniversalMediaPlayer
@@ -1133,6 +1134,9 @@ public final class SharedWakeupManager {
     }
     
     private func updateAccounts(hasTasks: Bool, endTaskAfterTransactionsComplete: UIBackgroundTaskIdentifier?) {
+        if MattermostBackend.isEnabled {
+            MattermostSync.updateApplicationActivity(inForeground: self.inForeground)
+        }
         let hasBackgroundLocationTask = self.accountsAndTasks.contains(where: { $0.2.backgroundLocation })
         
         if self.inForeground || self.hasActiveAudioSession || self.isInBackgroundExtension || self.backgroundProcessingTaskId != nil || self.backgroundStoryProcessingTaskId != nil || hasBackgroundLocationTask || (hasTasks && self.currentExternalCompletion != nil) || self.activeExplicitExtensionTimer != nil || self.silenceAudioRenderer != nil {

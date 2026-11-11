@@ -38,6 +38,7 @@ public final class RelayCallManager: PresentationCallManager {
     private var eventDisposables: [AccountRecordId: Disposable] = [:]
     private var activeAccountsDisposable: Disposable?
 
+    private var signallingAccounts = Set<AccountRecordId>()
     private var currentCall: RelayPresentationCall?
     private var currentGroupCall: RelayPresentationGroupCall?
     private let currentCallPromise = Promise<PresentationCall?>(nil)
@@ -370,6 +371,7 @@ public final class RelayCallManager: PresentationCallManager {
         if isKnownEnded {
             return true
         }
+        MattermostSync.prepareRelayCallSignalling(push: push)
         if !RelayCallKitBridge.pendingPushes.contains(where: { $0.push.callId == push.callId }) {
             RelayCallKitBridge.pendingPushes.append((push, uuid))
         }
@@ -473,6 +475,7 @@ public final class RelayCallManager: PresentationCallManager {
         }
         let wasEmpty = self.currentCall == nil && self.currentGroupCall == nil
         self.currentCall = call
+        self.updateSignallingAccounts()
         if let call {
             if wasEmpty {
                 self.resumeMedia = self.isMediaPlaying()
@@ -508,6 +511,7 @@ public final class RelayCallManager: PresentationCallManager {
         }
         let wasEmpty = self.currentCall == nil && self.currentGroupCall == nil
         self.currentGroupCall = call
+        self.updateSignallingAccounts()
         if let call {
             if wasEmpty {
                 self.resumeMedia = self.isMediaPlaying()
@@ -531,6 +535,17 @@ public final class RelayCallManager: PresentationCallManager {
             self.hasActiveGroupCallsPromise.set(false)
             self.resumeMediaIfNeeded()
         }
+    }
+
+    @MainActor
+    private func updateSignallingAccounts() {
+        var accounts = Set<AccountRecordId>()
+        if let call = self.currentCall { accounts.insert(call.context.account.id) }
+        if let call = self.currentGroupCall { accounts.insert(call.account.id) }
+        for accountId in self.signallingAccounts.union(accounts) {
+            MattermostSync.updateCallSignalling(accountId: accountId, required: accounts.contains(accountId))
+        }
+        self.signallingAccounts = accounts
     }
 
     @MainActor

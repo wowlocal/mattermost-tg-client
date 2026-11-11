@@ -458,6 +458,7 @@ public enum MattermostSync {
         self.enforceServerRestriction()
         // `UIApplication.didBecomeActiveNotification` (MattermostSync doesn't import UIKit).
         let observer = NotificationCenter.default.addObserver(forName: Notification.Name("UIApplicationDidBecomeActiveNotification"), object: nil, queue: nil, using: { _ in
+            MattermostSync.updateApplicationActivity(inForeground: true)
             MattermostSync.verifySessionsOnActivation()
             MattermostSync.checkConnectionsOnActivation()
         })
@@ -465,6 +466,7 @@ public enum MattermostSync {
         // `UIApplication.didEnterBackgroundNotification` (Phase 4B: how long the app was away).
         let backgroundObserver = NotificationCenter.default.addObserver(forName: Notification.Name("UIApplicationDidEnterBackgroundNotification"), object: nil, queue: nil, using: { _ in
             MattermostSync.enteredBackgroundAt.with { $0 = CFAbsoluteTimeGetCurrent() }
+            MattermostSync.updateApplicationActivity(inForeground: false)
         })
         self.backgroundObserver.with { $0 = backgroundObserver }
         self.startPathMonitor()

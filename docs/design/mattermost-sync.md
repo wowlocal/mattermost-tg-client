@@ -320,8 +320,13 @@ connection timestamp (by session token). Otherwise closing a second socket can r
 connection's activity time and away. Inactive desktop reports ask `SetStatusAwayIfNeeded`, never force away;
 the server decides from the latest activity across devices and preserves manual DND/away/offline. macOS uses
 system input activity (including while another app is in front), sleep and lock state; after 30 s without input
-it stops active heartbeats, then the server's away timeout applies. iOS closes its socket when the account is
-inactive/backgrounded and opens it on activation, matching Mattermost mobile's foreground-only availability.
+it stops active heartbeats, then the server's away timeout applies. Socket lifetime is separate from primary-account
+presence: all logged-in iOS accounts connect in the foreground. A current call keeps its account connected in the
+background; a VoIP push acquires a 90 s signalling lease before accounts start, released by an ended/absent call or
+expiry. Without call demand, background sockets close and availability goes offline. A revisioned, serial socket
+coordinator owns connect/disconnect, activation probes and requested reconnects. The latest intent wins even across
+suspended operations. Presence reports coalesce to the latest transition and retry it immediately after an older
+report finishes; repeated failures of the same activity back off 30/60/120 s, including after reconnect.
 Pending posts use `set_online` only while active, so an upload completing in the background cannot revive online.
 Other users' polling compares `last_activity_at` as well as status/DND end, so an unchanged offline status can
 still update "last seen". macOS renders away/DND explicitly and reserves its online dot for online.
@@ -373,7 +378,7 @@ is caught up when its chat opens or when a later catch-up fetches it anyway (wit
 deletions and reactions don't move `last_post_at`. Channels the user was added to meanwhile are written in one
 transaction. Launch catch-up of 600 chats: 1.8–2.3 s → 50–120 ms.
 
-**Connection:** iOS closes inactive/background sockets and reconnects on foreground activity (3F). The activation
+**Connection:** iOS keeps all foreground account sockets and background call signalling (3F). The activation
 check after more than 10 s in the background also catches up and checks retained sockets (3 s ping timeout).
 A socket waiting out its backoff (up to 60 s) reconnects as soon as a REST request gets an answer (`MattermostClient.Configuration.onServerReached`) or `NWPathMonitor` reports the network
 back. Sends queued while offline go out with the sender's own retry (≤ 5 s).
@@ -383,7 +388,8 @@ after 30 s without an increase in bytes sent (also while waiting for the respons
 resets the inactivity deadline; it is not a 30 s total-transfer limit. The transient retry can then use a fresh
 connection. A local fault proxy accepting an upload without responding held the former client for 301 s.
 WebSocket action deadlines now include the send itself: waiting for `send()` before observing the reply deadline
-could strand a ping despite its timeout firing. The timeout closes that connection and unblocks send/receive.
+could strand a ping despite its timeout firing. A blocked send or missed ping closes the connection. A missing
+reply after a completed non-ping send fails only that action and leaves the socket alive.
 Diagnostics record WebSocket state/attempt/backoff/handshake failures, network path changes, REST method/path and
 duration/status, upload bytes/inactivity, send attempts and retry delays, and per-channel queue waits. They use
 the existing Relay logger and rotation; REST records omit query strings, and no request headers, message bodies

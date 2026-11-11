@@ -124,7 +124,10 @@ public final class MattermostAccountSync: @unchecked Sendable {
     let connectionGeneration = MMLocked<Int>(0)
     let isConnected = MMLocked<Bool>(false)
     let presenceActive = MMLocked<Bool>(false)
-    let presenceReporting = MMLocked<Bool>(false)
+    var presenceReporter: PresenceActivityReporter?
+    let presenceIntent = MMLocked(PresenceActivityIntent())
+    var socketLifecycle: AccountSocketLifecycle?
+    let socketIntent = MMLocked(AccountSocketIntent())
     /// Set by `stop()` (logout, session expiry); a stopped sync is never restarted.
     private let stoppedFlag = MMLocked<Bool>(false)
     var isStopped: Bool {
@@ -336,12 +339,20 @@ public final class MattermostAccountSync: @unchecked Sendable {
                 await self.handleEvent(event)
             }
         })
-        Task {
-            #if os(iOS)
-            guard self.presenceActive.current else { return }
-            #endif
-            await socket.connect()
-        }
+        self.socketLifecycle = AccountSocketLifecycle(connect: { await socket.connect() }, disconnect: { await socket.disconnect() }, reconnect: { await socket.reconnectNow() }, verify: { [weak self] in
+            let state = await socket.state
+            if case .connecting = state { return }
+            if await socket.isConnected {
+                do { try await socket.ping(timeout: 3) }
+                catch {
+                    guard self?.socketIntent.current.required == true else { return }
+                    await socket.reconnectNow()
+                }
+            } else if self?.socketIntent.current.required == true {
+                await socket.reconnectNow()
+            }
+        })
+        self.updateSocketIntent()
     }
 
     private func handleConnectionState(_ state: WebSocketConnectionState) {
@@ -389,51 +400,25 @@ public final class MattermostAccountSync: @unchecked Sendable {
     /// without knowing it). A connection that doesn't answer a ping within 3 s, or one waiting for its next attempt,
     /// reconnects now; the reconnect resumes (missed events replayed) or catches up.
     func appBecameActive(afterBackground seconds: Double) {
-        guard let socket = self.socket, !self.isStopped else {
-            return
-        }
-        let wasConnected = self.isConnected.current
-        self.addTask(Task { [weak self] in
-            let started = CFAbsoluteTimeGetCurrent()
-            var action = "alive"
-            if wasConnected {
-                do {
-                    try await socket.ping(timeout: 3.0)
-                } catch {
-                    action = "no answer (\(error)), reconnecting"
-                    await socket.reconnectNow()
-                }
-            } else {
-                action = "not connected, reconnecting now"
-                await socket.reconnectNow()
-            }
-            if self != nil {
-                MMLog.log("foreground: active after \(Int(seconds)) s in the background; websocket \(action) (\(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms)")
-            }
-        })
+        guard !self.isStopped else { return }
+        MMLog.log("foreground: active after \(Int(seconds)) s; scheduling socket verification")
+        self.updateSocketIntent(verify: true)
     }
 
     /// Phase 4G: reconnect now, whatever the socket's state (the certificate pins changed: the open connection was
     /// accepted under the old ones).
     func reconnectNow(reason: String) {
-        guard let socket = self.socket, !self.isStopped else {
-            return
-        }
-        MMLog.log("websocket: reconnecting now (\(reason))")
-        Task {
-            await socket.reconnectNow()
-        }
+        guard !self.isStopped else { return }
+        MMLog.log("websocket: reconnect requested (\(reason))")
+        self.updateSocketIntent(reconnect: true)
     }
 
     /// Phase 4B: the server answered a REST request, or the network path came back, while the WebSocket waits out
     /// its backoff (up to a minute after a long outage): reconnect now, at most every 5 s.
     func reconnectSoon(reason: String) {
-        guard let socket = self.socket, !self.isStopped, self.isWaitingToReconnect.current else {
+        guard !self.isStopped, self.isWaitingToReconnect.current else {
             return
         }
-        #if os(iOS)
-        guard self.presenceActive.current else { return }
-        #endif
         let now = CFAbsoluteTimeGetCurrent()
         let due = self.lastEarlyReconnect.with { last -> Bool in
             if now - last < 5.0 {
@@ -446,9 +431,7 @@ public final class MattermostAccountSync: @unchecked Sendable {
             return
         }
         MMLog.log("websocket: reconnecting now (\(reason))")
-        Task {
-            await socket.reconnectNow()
-        }
+        self.updateSocketIntent(reconnect: true)
     }
 
     /// Stops everything `start()` started (logout, session expiry). The object is not reused; a new session
@@ -470,11 +453,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
         // for the next running sync of the account (a re-login) and go out with it (`PostSender.activeSync`).
         self.operationRunners = []
         self.isConnected.with { $0 = false }
-        if let socket = self.socket {
-            Task {
-                await socket.disconnect()
-            }
-        }
+        self.updateSocketIntent()
+        Task { [weak self] in await self?.reportPresenceActivity() }
         self.account.network.mattermostSetConnectionState(isConnected: false, isNetworkAvailable: true)
         if self.updatingCount.with({ $0 }) > 0 {
             self.account.externalIsUpdating.set(.single(false))
