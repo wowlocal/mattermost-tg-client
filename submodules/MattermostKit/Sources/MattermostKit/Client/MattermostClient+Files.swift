@@ -177,8 +177,8 @@ struct UploadActivity {
 
     var bodySent: Bool { bytesSent >= totalBytes }
 
-    mutating func record(bytesSent: Int64, now: TimeInterval) {
-        if bytesSent != self.bytesSent {
+    mutating func record(bytesSent: Int64, now: TimeInterval, sentBodyBytes: Int64 = 0) {
+        if bytesSent != self.bytesSent || sentBodyBytes > 0 {
             self.bytesSent = bytesSent
             self.lastProgressAt = now
         }
@@ -220,7 +220,7 @@ final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, Sendable {
         totalBytesExpectedToSend: Int64
     ) {
         let previous = activity.current
-        activity.withLock { $0.record(bytesSent: totalBytesSent, now: ProcessInfo.processInfo.systemUptime) }
+        activity.withLock { $0.record(bytesSent: totalBytesSent, now: ProcessInfo.processInfo.systemUptime, sentBodyBytes: bytesSent) }
         if totalBytesSent < previous.bytesSent { diagnostic?("upload body restarted bytes=\(totalBytesSent)") }
         if !previous.bodySent && activity.current.bodySent { diagnostic?("upload body sent bytes=\(totalBytesSent); waiting for response") }
         handler?(UploadProgress(bytesSent: totalBytesSent, totalBytes: totalBytesExpectedToSend))

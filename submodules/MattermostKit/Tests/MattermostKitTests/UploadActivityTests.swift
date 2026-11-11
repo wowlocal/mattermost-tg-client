@@ -24,6 +24,14 @@ final class UploadActivityTests: XCTestCase {
         XCTAssertTrue(activity.isStalled(now: 100, timeout: 30))
     }
 
+    func testRestartWithTheSameFirstChunkStillRecordsBodyProgress() {
+        var activity = UploadActivity(now: 0, totalBytes: 1000)
+        activity.record(bytesSent: 100, now: 10)
+        activity.record(bytesSent: 100, now: 35, sentBodyBytes: 100)
+        XCTAssertFalse(activity.isStalled(now: 64, timeout: 30))
+        XCTAssertTrue(activity.isStalled(now: 65, timeout: 30))
+    }
+
     func testSlowTransferCanExceedFiveMinutesWhileAdvancing() {
         var activity = UploadActivity(now: 0)
         for second in stride(from: 20, through: 600, by: 20) {
