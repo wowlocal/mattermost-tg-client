@@ -23,6 +23,9 @@ extension MattermostSync {
     }
 
     public static func updateCallSignalling(accountId: AccountRecordId, required: Bool) {
+        if required, let sync = self.sync(accountId: accountId) {
+            self.pushedCallDeadlines.with { $0[sync.ownUserId] = nil }
+        }
         let changed = self.callSignallingAccounts.with { accounts -> Bool in
             if required { return accounts.insert(accountId).inserted }
             return accounts.remove(accountId) != nil
@@ -47,7 +50,8 @@ extension MattermostSync {
             case let .activeCalls(calls):
                 let liveIds = Set(calls.map(\.id))
                 pending[userId] = pending[userId]?.filter { liveIds.contains($0.key) }
-            default: break
+            default:
+                if let call = event.call, !call.isLive { pending[userId]?[call.id] = nil }
             }
         }
         self.updatePushedCallSockets(userId: userId)

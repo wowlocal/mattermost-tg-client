@@ -329,7 +329,8 @@ system input activity (including while another app is in front), sleep and lock 
 it stops active heartbeats, then the server's away timeout applies. Socket lifetime is separate from primary-account
 presence: all logged-in iOS accounts connect in the foreground. A current call keeps its account connected in the
 background; a VoIP push acquires a 90 s signalling lease before accounts start, released by an ended/absent call or
-expiry. Without call demand, background sockets close and availability goes offline. A revisioned, serial socket
+expiry. Once the call UI owns signalling, it consumes the push lease; terminal `call_state` events also release
+it, not only the legacy `call_ended` event. Without call demand, background sockets close and availability goes offline. A revisioned, serial socket
 coordinator owns connect/disconnect, activation probes and requested reconnects. The latest intent wins even across
 suspended operations. Presence reports coalesce to the latest transition and retry it immediately after an older
 report finishes; repeated failures of the same activity back off 30/60/120 s, including after reconnect.
