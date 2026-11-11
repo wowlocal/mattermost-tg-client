@@ -373,9 +373,9 @@ is caught up when its chat opens or when a later catch-up fetches it anyway (wit
 deletions and reactions don't move `last_post_at`. Channels the user was added to meanwhile are written in one
 transaction. Launch catch-up of 600 chats: 1.8–2.3 s → 50–120 ms.
 
-**Connection:** after more than 10 s in the background each account pings its WebSocket (3 s timeout) and reconnects
-if it is dead or waiting for a retry; a socket waiting out its backoff (up to 60 s) reconnects as soon as a REST
-request gets an answer (`MattermostClient.Configuration.onServerReached`) or `NWPathMonitor` reports the network
+**Connection:** iOS closes inactive/background sockets and reconnects on foreground activity (3F). The activation
+check after more than 10 s in the background also catches up and checks retained sockets (3 s ping timeout).
+A socket waiting out its backoff (up to 60 s) reconnects as soon as a REST request gets an answer (`MattermostClient.Configuration.onServerReached`) or `NWPathMonitor` reports the network
 back. Sends queued while offline go out with the sender's own retry (≤ 5 s).
 
 **Stalled sends and diagnostics (2026-11-11).** Uploads keep their large-request allowance but additionally cancel

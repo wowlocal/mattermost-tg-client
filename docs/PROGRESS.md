@@ -806,17 +806,23 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
     30 s without byte progress; WebSocket action deadlines include a blocked send. Added request/preparation,
     queue, attempt/retry and connection timelines to the existing opt-in log. A Mac post stalled for 30 s held the
     next post for 30.8 s, visibly diagnosed in the log. No five-minute Connecting recovery reproduced: native Mac
-    recovered 10.5 s after a 70 s WebSocket blackhole, and ~32 ms after resuming over replacement transport.
+    recovered 10.5 s after a WebSocket blackhole, and ~32 ms after resuming over replacement transport. Native
+    iOS recovered in 10.836 s after a WebSocket blackhole and reconnected immediately after controlled background
+    suspension plus replacement transport.
   - **Checks:** MattermostKit 223 tests (5 skipped), SyncCore 231, zero failures; both Debug apps build, Mac signed
     and relaunched. Native Mac A: one → two in chat/list 3.45 s after Bob opened, retained on relaunch; B after Bob
-    left stayed one. Native Mac plus idle scripted client: online through 330 s of use and second-socket close,
-    away after five minutes idle, manual DND preserved through input. Away/DND and unchanged-offline last seen
-    checked in the Mac UI. After the extra bot-row fix, the native row reports `read=false` after an answer.
-  - **Gaps:** the named Relay simulators were absent; the sole existing iPhone 17 was used for upload checks until
-    another Snippets run began taking its foreground. No new simulator was created. iOS receipt UI/relaunch and
-    foreground network-change checks await an available Relay simulator; further Mac screenshots were blocked by
-    the desktop becoming locked. No real VPN/IP change, physical devices, production, release or push. Dev 11.7.14
-    has CRT default-on (on in these accounts), production 11.10.1 forces always-on; 11.10.1 also excludes silent
-    posts from insertion counters. Older cached pages beyond the newest-page migration may keep one until fetched.
+    left stayed one. Native iOS C retained two on relaunch; D changed one → two in chat/list 7.506 s after
+    Bob viewed; E after Bob left stayed one, and a bot answer retained one. Native Mac plus idle scripted client:
+    online through 330 s of use and second-socket close, away after five minutes idle, manual DND preserved through
+    input. Away/DND and unchanged-offline last seen checked in the Mac UI. Native iOS became offline within 3 s in background, online on return, and preserved
+    manual DND through two automatic reports. After the extra bot-row fix, the native row reports `read=false`
+    after an answer.
+  - **Gaps:** the named Relay simulators were absent; the existing iPhone 17 was reused when available, including
+    final iOS receipt checks after the external terminal interruption. No new simulator was created. Further Mac
+    screenshots were blocked by the desktop becoming locked. No real VPN/IP change, physical devices, production,
+    release or push. Dev 11.7.14 has CRT default-on (on in these accounts), production 11.10.1 forces always-on;
+    11.10.1 also excludes silent posts from insertion counters. Older cached pages beyond the newest-page migration may keep one until fetched.
+  - **Cleanup:** task accounts logged out, Debug app/proxy/log streams stopped, task simulator app uninstalled,
+    2.5 GiB X5 scratch removed. Shared build caches, simulator data, production app and other tasks preserved.
   - **Evidence:** `/Users/michael/Developer/relay-calls-integration/results/presence-read-marks/REPORT.md`, with raw
     status timelines, source comparisons, build/test logs, native row states, screenshots and local fault probes.
