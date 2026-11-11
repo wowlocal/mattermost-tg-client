@@ -203,6 +203,7 @@ extension MattermostAccountSync {
     /// transaction with the Cloud ids, in the order of the Local messages. When the Local messages are gone,
     /// the post is written like any live post.
     func applyOwnPost(_ post: Post, pendingPostId: String, uploadedFiles: [MessageId: [PostSender.UploadedFile]], onRewritten: (([MessageId]) -> Void)?) async {
+        self.receiptInterests.with { $0.written[post.channelId] = ProcessInfo.processInfo.systemUptime }
         var extra: [Post] = []
         if !post.rootId.isEmpty, self.store.entries(channelId: post.channelId, postIds: [post.rootId])[post.rootId] == nil, let root = try? await self.client.post(id: post.rootId) {
             extra.append(root)

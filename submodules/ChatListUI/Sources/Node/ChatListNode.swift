@@ -2709,6 +2709,7 @@ public final class ChatListNode: ListViewImpl {
                 }
                 
                 var refreshStoryPeerIds: [EnginePeer.Id] = []
+                var receiptPeerIds: [EnginePeer.Id] = []
                 var isHiddenItemVisible = false
                 if let range = range.visibleRange {
                     let entryCount = chatListView.filteredEntries.count
@@ -2719,6 +2720,7 @@ public final class ChatListNode: ListViewImpl {
                         }
                         switch chatListView.filteredEntries[entryCount - i - 1] {
                             case let .PeerEntry(peerEntry):
+                                receiptPeerIds.append(peerEntry.peer.peerId)
                                 let threadInfo = peerEntry.threadInfo
                                 
                                 if let threadInfo, threadInfo.isHidden {
@@ -2737,6 +2739,7 @@ public final class ChatListNode: ListViewImpl {
                         }
                     }
                 }
+                mattermostChatListVisible(accountPeerId: strongSelf.context.account.peerId, peerIds: receiptPeerIds)
                 if !isHiddenItemVisible && strongSelf.currentState.hiddenItemShouldBeTemporaryRevealed {
                     strongSelf.updateState { state in
                         var state = state

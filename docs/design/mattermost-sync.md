@@ -169,8 +169,13 @@ Each consumer observes the same Postbox source the Telegram one does (`KeyedOper
 
 ### Outgoing read marks (2026-11-11)
 
-`OutgoingReadReceipts` samples direct messages every 30 s while connected, including when their chat is closed
-(the chat list needs receipts too). A persisted post-key checkpoint resolves to Postbox's `maxOutgoingReadId`
+`OutgoingReadReceipts` runs only for an active account and considers open histories, displayed chat-list rows and
+DMs written to within 15 minutes. It skips incoming newest posts and deactivated partners. A rolling per-account
+budget allows at most 12 reserved REST requests per minute, regardless of DM count; each sample costs two, an
+old-page migration costs one more. One candidate is scheduled per 5 s tick. Open histories take priority. Failed
+confirmations back off 30 s exponentially, up to 2 minutes for an open chat or 30 minutes otherwise; non-viewing
+bots back off for an hour. A new own post resets that DM's backoff. One Postbox transaction collects candidates
+per tick, rather than one per DM. A persisted post-key checkpoint resolves to Postbox's `maxOutgoingReadId`
 on every server read-state reset and survives relaunch/ID renumbering. Before querying the channel and then
 its members, the sampler freezes the newest known post key. It advances only when the other member's
 `msg_count == total_msg_count` **and** `msg_count_root == total_msg_count_root`. New messages arriving during
@@ -184,7 +189,8 @@ Only counted DM roots (ordinary or `/me`, not silent unless force-notified) get
 membership counters even with collapsed threads, without proving the replies were read. Therefore replies
 keep one check even in DMs; group messages/channels also keep one (no all-read receipt). The eligibility mark
 prevents a root's cumulative outgoing watermark from accidentally marking a reply or silent post read. The
-newest DM page is rewritten once to add eligibility to older data. macOS's Telegram heuristic "an incoming
+newest DM page is rewritten once, within that same request budget and only when the DM is of current interest,
+to add eligibility to older data. There is no all-DM migration after bootstrap. macOS's Telegram heuristic "an incoming
 message follows this one, therefore it was read" is disabled for Mattermost, particularly for bot replies.
 
 Server contract checked on 11.7.14 and in public 11.10.1 source: membership timestamps for other users are -1;

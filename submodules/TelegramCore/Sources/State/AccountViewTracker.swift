@@ -2063,7 +2063,14 @@ public final class AccountViewTracker {
         // chat-list index): MattermostSync's channels are always up to date. It is told that the chat opened
         // instead (`MattermostChatObserver`: a channel the last catch-up skipped is caught up now).
         if MattermostBackend.isEnabled, let peerId = peerId, let accountPeerId = self.account?.peerId {
-            mattermostChatHistoryOpened(accountPeerId: accountPeerId, peerId: peerId)
+            return Signal { subscriber in
+                mattermostChatHistoryOpened(accountPeerId: accountPeerId, peerId: peerId)
+                let disposable = history.start(next: { subscriber.putNext($0) }, completed: { subscriber.putCompletion() })
+                return ActionDisposable {
+                    disposable.dispose()
+                    mattermostChatHistoryClosed(accountPeerId: accountPeerId, peerId: peerId)
+                }
+            }
         }
         if !MattermostBackend.isEnabled, let peerId = peerId, peerId.namespace == Namespaces.Peer.CloudChannel {
             return Signal<(MessageHistoryView, ViewUpdateType, InitialMessageHistoryData?), NoError> { subscriber in

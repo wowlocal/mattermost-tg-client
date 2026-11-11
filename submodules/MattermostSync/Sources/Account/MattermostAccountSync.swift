@@ -123,6 +123,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
     /// Counts WebSocket connections; retries of offline requests wake up when it changes.
     let connectionGeneration = MMLocked<Int>(0)
     let isConnected = MMLocked<Bool>(false)
+    let receiptInterests = MMLocked(ReceiptPollInterests())
+    let receiptScheduler = MMLocked(DirectMessageReceiptPollScheduler())
     let presenceActive = MMLocked<Bool>(false)
     var presenceReporter: PresenceActivityReporter?
     let presenceIntent = MMLocked(PresenceActivityIntent())

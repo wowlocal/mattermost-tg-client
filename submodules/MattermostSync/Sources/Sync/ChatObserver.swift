@@ -22,7 +22,19 @@ final class ChatObserver: MattermostChatObserver {
     }
 
     func chatHistoryOpened(peerId: PeerId) {
+        self.sync?.receiptInterests.with { $0.histories[peerId, default: 0] += 1 }
         self.sync?.chatOpened(peerId: peerId)
+    }
+
+    func chatHistoryClosed(peerId: PeerId) {
+        self.sync?.receiptInterests.with { interests in
+            let count = (interests.histories[peerId] ?? 1) - 1
+            interests.histories[peerId] = count > 0 ? count : nil
+        }
+    }
+
+    func chatListVisible(peerIds: [PeerId]) {
+        self.sync?.receiptInterests.with { $0.list = Set(peerIds) }
     }
 
     func threadReadState(peerId: PeerId, threadId: Int64, transaction: Transaction) -> MattermostThreadReadState? {
