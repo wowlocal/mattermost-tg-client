@@ -67,6 +67,15 @@ final class UploadActivityTests: XCTestCase {
         XCTAssertNotNil(health.evidence(after: 0))
     }
 
+    func testAnEarlyTransportTimeoutIsNotAWholeResponseWaitTimeout() {
+        var activity = UploadActivity(now: 0, totalBytes: 1000)
+        XCTAssertFalse(activity.exhaustedResponseAllowance(elapsedRequest: 300, allowance: 300))
+        activity.record(bytesSent: 1000, now: 1)
+        XCTAssertFalse(activity.exhaustedResponseAllowance(elapsedRequest: 30, allowance: 300))
+        XCTAssertFalse(activity.exhaustedResponseAllowance(elapsedRequest: 299, allowance: 300))
+        XCTAssertTrue(activity.exhaustedResponseAllowance(elapsedRequest: 300, allowance: 300))
+    }
+
     func testEvidenceCanRestartAGivenUploadOnlyOnce() {
         let state = UploadRetryState()
         XCTAssertTrue(state.claimEvidenceRestart())

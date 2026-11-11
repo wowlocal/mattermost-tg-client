@@ -132,7 +132,7 @@ extension MattermostClient {
             }
         } catch {
             configuration.onDiagnostic?("upload failed channel=\(channelId) after \(Int((ProcessInfo.processInfo.systemUptime - started) * 1000))ms bytes=\(delegate.bytesSent) code=\((error as NSError).code)")
-            if let urlError = error as? URLError, urlError.code == .timedOut, delegate.bodySent {
+            if let urlError = error as? URLError, urlError.code == .timedOut, delegate.exhaustedResponseAllowance(elapsedRequest: ProcessInfo.processInfo.systemUptime - started, allowance: request.timeoutInterval) {
                 throw MattermostError.uploadStalled(.responseWait)
             }
             throw MattermostError.wrap(error, url: request.url)
@@ -181,6 +181,10 @@ struct UploadActivity {
 
     var bodySent: Bool { bytesSent >= totalBytes }
 
+    func exhaustedResponseAllowance(elapsedRequest: TimeInterval, allowance: TimeInterval) -> Bool {
+        return self.bodySent && elapsedRequest >= allowance
+    }
+
     mutating func record(bytesSent: Int64, now: TimeInterval, sentBodyBytes: Int64 = 0) {
         if bytesSent != self.bytesSent || sentBodyBytes > 0 {
             self.bytesSent = bytesSent
@@ -204,7 +208,9 @@ final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, Sendable {
     }
 
     var bytesSent: Int64 { activity.current.bytesSent }
-    var bodySent: Bool { activity.current.bodySent }
+    func exhaustedResponseAllowance(elapsedRequest: TimeInterval, allowance: TimeInterval) -> Bool {
+        return activity.current.exhaustedResponseAllowance(elapsedRequest: elapsedRequest, allowance: allowance)
+    }
     func resetActivity(totalBytes: Int64) { activity.set(UploadActivity(now: ProcessInfo.processInfo.systemUptime, totalBytes: totalBytes)) }
     func stall(timeout: TimeInterval, responseTimeout: TimeInterval, health: UploadConnectionHealth, retryState: UploadRetryState) -> (reason: String, kind: UploadStall)? {
         let activity = self.activity.current
