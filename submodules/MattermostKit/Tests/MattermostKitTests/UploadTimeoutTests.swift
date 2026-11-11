@@ -19,6 +19,28 @@ final class UploadTimeoutTests: StubbedClientTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(started), 1)
     }
 
+    func testFourConnectionsWithNoBodyBytesDoNotConsumeTheUploadRetryCap() async throws {
+        var response = StubResponse.json("{}")
+        response.delay = 10
+        StubURLProtocol.respond(with: response)
+        var configuration = MattermostClient.Configuration(serverURL: URL(string: "http://localhost")!)
+        configuration.uploadInactivityTimeout = 0.01
+        let client = MattermostClient(configuration: configuration, session: StubURLProtocol.makeSession())
+        let retry = UploadRetryState()
+        for _ in 0..<4 {
+            do {
+                _ = try await client.uploadFiles([FileUpload(fileName: "queued.txt", content: .data(Data([1])))], channelId: "channel", retryState: retry)
+                XCTFail("Expected connection failure")
+            } catch let error as MattermostError {
+                XCTAssertEqual(error, .uploadStalled(.connectionUnavailable))
+                XCTAssertTrue(retry.shouldRetry(error))
+            }
+        }
+        XCTAssertTrue(retry.shouldRetry(.uploadStalled(.bodyProgress)))
+        XCTAssertTrue(retry.shouldRetry(.uploadStalled(.bodyProgress)))
+        XCTAssertFalse(retry.shouldRetry(.uploadStalled(.bodyProgress)))
+    }
+
     func testActivityRequestCannotBeSatisfiedFromTheCache() async throws {
         StubURLProtocol.respond(with: .json("{}"))
         try await makeClient().recordUserActivity()
