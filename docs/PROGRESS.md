@@ -929,14 +929,15 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   Restored main's Russian .strings and project refs, removed generic Language injection; Relay presence uses
   English fallback via strings(). Russian UI support is deferred.
 - **Evidence:** scheduler baseline/current source traces show starvation resolved at ten-second ticks and
-  post-open list retry30s instead of1800s. Final native iOS:65s open, list-only confirmation22.862s after Bob view;
+  post-open list retry30s instead of1800s. Native iOS:65s open, list-only confirmation22.862s after Bob view;
   screenshots show one→two, then a later one and persisted two after relaunch. Native403/404 each sampled only once
   over35s. Local TLS handshake black hole: three zero-body attempts remained retryable through93.797s, working
   endpoint restored for attempt4 which succeeded96.830s. Healthy buffered response45.011s/one attempt. Exact-source
   selector probe:10,000 incoming entries,56 transactions,max180 reads/transaction,zero migration cursor reads;
   own root behind9,990 entries remains discoverable. This is instrumented logic, not native energy profiling.
-- **Checks:** Kit240 tests (5 skipped), Core251, zero failures; both build scripts twice, sequential and successful.
-  Final shared feature9c279f3253: iOS518 actions/94.760s plus bundle checks; Mac BUILD SUCCEEDED and signed.
+- **Checks:** Kit240 tests (5 skipped), Core252, zero failures; both build scripts three times, sequential and successful.
+  Final featureaca47530eb also ignores expired-send timestamp decreases (clock-tested): iOS17 actions/23.481s
+  plus bundle checks; Mac BUILD SUCCEEDED and signed. Native65s check used9c279f3253 before that comparison fix.
   AppKit reproduced two visible status-item windows in old predicate versus zero chat windows. Desktop remained
   locked, so positive Mac visible/no-input/chat-list/relaunch check remains unverified; report ends with a short
   owner checklist and timed Bob-view helper. No lock workaround. Evidence and per-finding commits/limits:
