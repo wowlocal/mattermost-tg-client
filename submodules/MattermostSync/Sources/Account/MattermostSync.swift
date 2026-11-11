@@ -291,7 +291,7 @@ public enum MattermostSync {
                 return old
             }
             if let priorPath {
-                let oldUsed = Set(priorPath.availableInterfaces.filter { priorPath.usesInterfaceType($0.type) }.map { "\($0.name):\($0.index)" })
+                let oldUsed = Set(priorPath.availableInterfaces.first(where: { priorPath.usesInterfaceType($0.type) }).map { ["\($0.name):\($0.index)"] } ?? [])
                 for sync in self.accounts.with({ Array($0.values) }) { sync.client.configuration.uploadConnectionHealth.pathChanged(from: oldUsed, to: used) }
             }
             let satisfied = path.status == .satisfied
