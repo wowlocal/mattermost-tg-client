@@ -264,6 +264,7 @@ public final class MattermostAccountSync: @unchecked Sendable {
         // The consumers need the channel map that the bootstrap wrote.
         self.startOperationConsumers()
         self.startSocket()
+        self.startOutgoingReadPolling()
         await self.refreshSyntheticConfiguration()
         // Phase 3F: own status, profile fields and notification preferences for Settings.
         await self.refreshOwnProfile()
@@ -702,7 +703,7 @@ public final class MattermostAccountSync: @unchecked Sendable {
         let readState = ReadStateMapper.readState(channelId: channelId, store: self.storeRef(), counters: channelState.counters(collapsedThreads: self.isCollapsedThreads))
         transaction.resetIncomingReadStates([channelState.peerId: [Namespaces.Message.Cloud: .idBased(
             maxIncomingReadId: readState.maxIncomingReadId,
-            maxOutgoingReadId: 0,
+            maxOutgoingReadId: channelState.kind == .direct ? self.outgoingReadMaxId(channelId: channelId) : 0,
             maxKnownId: readState.maxKnownId,
             count: readState.unreadCount,
             markedUnread: false

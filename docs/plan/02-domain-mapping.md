@@ -30,7 +30,7 @@ How Mattermost's data model maps onto Telegram‑iOS's data model (Postbox and T
 | Custom status | Emoji status next to the name | Needs a variant that holds a Unicode emoji plus text. |
 | `last_viewed_at`, `msg_count`, `mention_count` | Peer read state, unread and mention badges | See [Read state](#read-state-and-unread-counts). |
 | Typing | Typing activity | |
-| Read receipts | Double checkmarks | Mattermost has no per‑message receipts. Show a single "sent" check by default. |
+| Read receipts | Double checkmarks | Conservative channel-view receipts for counted DM roots; other posts keep one check. See the implemented [sync design](../design/mattermost-sync.md#outgoing-read-marks-2026-11-11). |
 | Calls plugin | Telegram calls | Out of scope for v1. |
 
 ## Identifiers
@@ -125,7 +125,7 @@ Telegram timestamps are Int32 seconds. Keep the full `create_at` (ms) in the ID 
 | Telegram field (assumed `PeerReadState.idBased`) | Source |
 |---|---|
 | `maxIncomingReadId` | Local ID of the newest known post with `create_at ≤ member.last_viewed_at` |
-| `maxOutgoingReadId` | `0` (single check). Optional for DMs: derive from the other member's `last_viewed_at`. That is a product and privacy decision: Mattermost itself doesn't show it. |
+| `maxOutgoingReadId` | DM checkpoint from fully caught-up membership counters (timestamps are hidden); eligibility limits display to counted roots. Otherwise `0`. See the implemented sync design. |
 | `maxKnownId` | Newest local ID |
 | `count` | `channel.total_msg_count − member.msg_count` (use the `_root` variants when collapsed threads are on) |
 | Mention badge | `member.mention_count` (or `mention_count_root`) |

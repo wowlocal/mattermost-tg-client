@@ -85,6 +85,9 @@ enum PostConverter {
             threadId = nil
         }
         var commonAttributes: [MessageAttribute] = []
+        if DirectMessageReadReceipt.isEligible(isDirect: context.kind == .direct, rootId: post.rootId, type: post.type, silent: post.props["silent_notification"]?.boolValue == true, forceNotification: post.props["force_notification"]?.boolValue == true) {
+            commonAttributes.append(MattermostReadReceiptEligibleAttribute())
+        }
         if !post.rootId.isEmpty, let rootLocalId = context.localId(post.rootId) {
             let rootMessageId = MessageId(peerId: context.chatPeerId, namespace: Namespaces.Message.Cloud, id: rootLocalId)
             if context.kind != .saved {

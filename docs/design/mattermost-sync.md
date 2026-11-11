@@ -167,6 +167,34 @@ Each consumer observes the same Postbox source the Telegram one does (`KeyedOper
 
 ## Rendering (2C)
 
+### Outgoing read marks (2026-11-11)
+
+`OutgoingReadReceipts` samples direct messages every 30 s while connected, including when their chat is closed
+(the chat list needs receipts too). A persisted post-key checkpoint resolves to Postbox's `maxOutgoingReadId`
+on every server read-state reset and survives relaunch/ID renumbering. Before querying the channel and then
+its members, the sampler freezes the newest known post key. It advances only when the other member's
+`msg_count == total_msg_count` **and** `msg_count_root == total_msg_count_root`. New messages arriving during
+the sample cannot enter that checkpoint. It deliberately waits for a fully caught-up sample rather than
+subtracting an unread count from loaded history: deletes remain in cumulative totals, missing history has no
+reliable ordinal, and a counter above the sampled total is ambiguous. Once confirmed, a receipt is retained
+even if the recipient later marks the channel unread.
+
+Only counted DM roots (ordinary or `/me`, not silent unless force-notified) get
+`MattermostReadReceiptEligibleAttribute`; every other post keeps one check. Channel views advance **both**
+membership counters even with collapsed threads, without proving the replies were read. Therefore replies
+keep one check even in DMs; group messages/channels also keep one (no all-read receipt). The eligibility mark
+prevents a root's cumulative outgoing watermark from accidentally marking a reply or silent post read. The
+newest DM page is rewritten once to add eligibility to older data. macOS's Telegram heuristic "an incoming
+message follows this one, therefore it was read" is disabled for Mattermost, particularly for bot replies.
+
+Server contract checked on 11.7.14 and in public 11.10.1 source: membership timestamps for other users are -1;
+viewing takes the greatest of membership and channel counters; totals are cumulative counted insertions,
+including soft-deleted posts, with separate root totals; join/leave posts are excluded. 11.10.1 additionally
+excludes notification-suppressed posts (`silent_notification`, unless `force_notification`), whereas 11.7.14's
+insertion path excludes only join/leave posts. Relay excludes silent posts on both versions. A bot's answer
+does not itself view its channel; bots that never call view retain one check. No inference from presence,
+typing, answers or timestamps hidden by the server is used.
+
 | Mattermost | Telegram | Where |
 |---|---|---|
 | Post with N files | N messages: images first (one `groupingKey`: an album), then other files (another key: a file group; 4F: one key for a post with both, so Telegram's bubble shows the mosaic with the files below it as one bubble); text on the last file, else the album's first image; reactions, reply count, pinned flag, buttons on the primary (part 0), which Telegram reads them from for the whole group; thread/reply references on every part | `PostLayout`, `PostConverter.storeMessages`, `writeMessages` (reconciles parts on edits) |

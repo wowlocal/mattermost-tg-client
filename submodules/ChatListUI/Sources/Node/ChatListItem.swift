@@ -1604,7 +1604,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                         if message.flags.contains(.Incoming), !initialHideAuthor, let author = message.author, case .user = author {
                             result += "\n\(item.presentationData.strings.VoiceOver_ChatList_MessageFrom(author.displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder)).string)"
                         }
-                        if !message.flags.contains(.Incoming), let combinedReadState = peerData.combinedReadState, combinedReadState.isOutgoingMessageIndexRead(message.index) {
+                        if !message.flags.contains(.Incoming), (!MattermostBackend.isEnabled || message.mattermostReadReceiptEligible), let combinedReadState = peerData.combinedReadState, combinedReadState.isOutgoingMessageIndexRead(message.index) {
                             result += "\n\(item.presentationData.strings.VoiceOver_ChatList_MessageRead)"
                         }
                         result += "\n\(messageText)"
@@ -3412,7 +3412,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                                 statusState = .delivered(item.presentationData.theme.chatList.checkmarkColor)
                             }
                         } else {
-                            if let combinedReadState = combinedReadState, combinedReadState.isOutgoingMessageIndexRead(message.index) {
+                            if (!MattermostBackend.isEnabled || message.mattermostReadReceiptEligible), let combinedReadState = combinedReadState, combinedReadState.isOutgoingMessageIndexRead(message.index) {
                                 statusState = .read(item.presentationData.theme.chatList.checkmarkColor)
                             } else {
                                 statusState = .delivered(item.presentationData.theme.chatList.checkmarkColor)
