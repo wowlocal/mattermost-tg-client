@@ -22,8 +22,15 @@ final class ChatObserver: MattermostChatObserver {
     }
 
     func chatHistoryOpened(peerId: PeerId) {
-        self.sync?.receiptInterests.with { $0.histories[peerId, default: 0] += 1 }
+        self.sync?.receiptInterests.with {
+            $0.histories[peerId, default: 0] += 1
+            $0.opened[peerId, default: 0] += 1
+        }
         self.sync?.chatOpened(peerId: peerId)
+    }
+
+    func chatHistoryFocused(peerId: PeerId) {
+        self.sync?.receiptInterests.with { $0.opened[peerId, default: 0] += 1 }
     }
 
     func chatHistoryClosed(peerId: PeerId) {

@@ -14,6 +14,7 @@ public protocol MattermostChatObserver: AnyObject {
     func peerDataRequested(peerId: PeerId)
     /// A history view of the chat opened (the chat screen, a thread, a profile's media tab).
     func chatHistoryOpened(peerId: PeerId)
+    func chatHistoryFocused(peerId: PeerId)
     func chatHistoryClosed(peerId: PeerId)
     func chatListVisible(peerIds: [PeerId])
     /// Where a thread view of a Mattermost thread starts (4F): its first unread reply, with the unread separator
@@ -77,4 +78,9 @@ func mattermostChatHistoryClosed(accountPeerId: PeerId, peerId: PeerId) {
 public func mattermostChatListVisible(accountPeerId: PeerId, peerIds: [PeerId]) {
     guard MattermostBackend.isEnabled else { return }
     mattermostChatObservers.with({ $0[accountPeerId]?.observer })?.chatListVisible(peerIds: peerIds)
+}
+
+public func mattermostChatHistoryFocused(accountPeerId: PeerId, peerId: PeerId) {
+    guard MattermostBackend.isEnabled else { return }
+    mattermostChatObservers.with({ $0[accountPeerId]?.observer })?.chatHistoryFocused(peerId: peerId)
 }

@@ -7870,6 +7870,9 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
 
     override public func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        if let peerId = self.chatLocation.peerId {
+            mattermostChatHistoryFocused(accountPeerId: self.context.account.peerId, peerId: peerId)
+        }
         
         self.didAppear = true
         

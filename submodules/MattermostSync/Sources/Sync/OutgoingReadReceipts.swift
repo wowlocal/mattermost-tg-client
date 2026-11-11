@@ -14,11 +14,37 @@ extension MattermostAccountSync {
             ?? self.store.entries(channelId: channelId, olderThan: checkpoint.key, limit: 1).first?.localId ?? 0
     }
 
+    var receiptPollingVisible: Bool {
+        #if os(iOS)
+        return MattermostSync.applicationInForeground.current
+        #else
+        return MattermostSync.receiptDisplayVisible.current
+        #endif
+    }
+
+    private func receiptRoot(state: ChannelState) async -> DirectMessageReceiptPost? {
+        return await self.postbox.mmTransaction { transaction in
+            let watermark = self.outgoingReadMaxId(channelId: state.channel.id)
+            var before: PostOrderKey?
+            while true {
+                let entries = self.store.entries(channelId: state.channel.id, olderThan: before, limit: 60)
+                let posts = entries.compactMap { entry -> DirectMessageReceiptPost? in
+                    guard entry.localId > watermark else { return nil }
+                    let message = transaction.getMessage(MessageId(peerId: state.peerId, namespace: Namespaces.Message.Cloud, id: entry.localId))
+                    return DirectMessageReceiptPost(postId: entry.postId, localId: entry.localId, isOwn: message.map { !$0.flags.contains(.Incoming) && $0.author?.id == self.ownPeerId } ?? false, isDeleted: entry.isDeleted, eligible: message?.mattermostReadReceiptEligible ?? false, needsMigration: !entry.isDeleted && message?.mattermostReadReceiptEligible == false && message?.tags.contains(.mattermostRootPost) == true && self.store.cursor("dm_receipt_checked_2:\(entry.postId)") == nil)
+                }
+                if let root = DirectMessageReceiptPost.newestUnconfirmedRoot(in: posts, after: watermark) { return root }
+                guard entries.count == 60, let last = entries.last, last.localId > watermark else { return nil }
+                before = last.key
+            }
+        }
+    }
+
     func startOutgoingReadPolling() {
         self.addTask(Task { [weak self] in
             while !Task.isCancelled {
                 guard let self, !self.isStopped else { return }
-                if self.isConnected.current && self.presenceActive.current { await self.pollOutgoingReadReceipts() }
+                if self.isConnected.current && self.receiptPollingVisible { await self.pollOutgoingReadReceipts() }
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
             }
         })
@@ -38,55 +64,46 @@ extension MattermostAccountSync {
             }
         }
         guard !snapshot.isEmpty else { return }
-        let candidates = await self.postbox.mmTransaction { transaction -> [DirectMessageReceiptPollCandidate] in
-            return snapshot.compactMap { state, user in
-                let channelId = state.channel.id
-                guard let entry = self.store.entries(channelId: channelId, olderThan: nil, limit: 1).first,
-                      !entry.isDeleted, entry.localId > self.outgoingReadMaxId(channelId: channelId),
-                      let message = transaction.getMessage(MessageId(peerId: state.peerId, namespace: Namespaces.Message.Cloud, id: entry.localId)),
-                      !message.flags.contains(.Incoming), message.author?.id == self.ownPeerId else { return nil }
-                let migration = !message.mattermostReadReceiptEligible && self.store.cursor("dm_receipt_layout_1:\(channelId)") == nil
-                guard message.mattermostReadReceiptEligible || migration else { return nil }
-                return DirectMessageReceiptPollCandidate(channelId: channelId, postId: entry.postId, isOwn: true, isBot: user.isBot, visible: visible.contains(state.peerId), recentlyWritten: interests.written[channelId] != nil, priority: interests.histories[state.peerId] != nil ? 2 : interests.list.contains(state.peerId) ? 1 : 0, needsMigration: migration)
-            }
+        let candidates = snapshot.map { channel, user in
+            DirectMessageReceiptPollCandidate(channelId: channel.channel.id, revision: channel.channel.lastPostAt, isBot: user.isBot, priority: interests.histories[channel.peerId] != nil ? 2 : interests.list.contains(channel.peerId) ? 1 : 0, opened: interests.opened[channel.peerId] ?? 0)
         }
         guard let candidate = self.receiptScheduler.with({ $0.next(candidates, now: now) }), let state = self.channelState(candidate.channelId), let partner = state.channel.directMessagePartnerId(myUserId: self.ownUserId) else { return }
         let channelId = candidate.channelId
-        var confirmed = false
-        var eligible = true
+        var outcome = DirectMessageReceiptPollResult.retryable
         defer {
-            self.receiptScheduler.with { $0.completed(candidate, confirmed: confirmed, eligible: eligible, now: ProcessInfo.processInfo.systemUptime) }
+            self.receiptScheduler.with { $0.completed(candidate, result: outcome, now: ProcessInfo.processInfo.systemUptime) }
         }
         do {
-            if candidate.needsMigration {
-                let page = try await self.client.posts(channelId: channelId, perPage: self.perPage)
-                let migrated = await self.postbox.mmTransaction { transaction -> Bool in
-                    let result = self.write(PageWrite(channelId: channelId, kind: .singles, run: page.orderedPosts), transaction: transaction)
-                    if !result.failed { self.store.setCursor("dm_receipt_layout_1:\(channelId)", "1") }
-                    return !result.failed
+            guard var root = await self.receiptRoot(state: state) else { outcome = .noPending; return }
+            let cost = root.needsMigration ? 3 : 2
+            guard self.receiptScheduler.with({ $0.reserveRequests(cost, now: ProcessInfo.processInfo.systemUptime) }) else { return }
+            if root.needsMigration {
+                let post = try await self.client.post(id: root.postId)
+                let migrated = await self.postbox.mmTransaction { transaction in
+                    let result = self.write(PageWrite(channelId: channelId, kind: .singles, run: [post]), transaction: transaction)
+                    if !result.failed { self.store.setCursor("dm_receipt_checked_2:\(post.id)", "1") }
+                    return result
                 }
-                guard migrated else { return }
-                eligible = await self.postbox.mmTransaction { transaction in
-                    guard let entry = self.store.entries(channelId: channelId, postIds: [candidate.postId])[candidate.postId],
-                          let message = transaction.getMessage(MessageId(peerId: state.peerId, namespace: Namespaces.Message.Cloud, id: entry.localId)) else { return false }
-                    return message.mattermostReadReceiptEligible
-                }
-                guard eligible else { return }
+                guard !migrated.failed else { return }
+                guard let updated = await self.receiptRoot(state: state) else { outcome = .noPending; return }
+                guard !updated.needsMigration else { return }
+                root = updated
             }
-            guard !Task.isCancelled, !self.isStopped, self.presenceActive.current else { return }
+            let postId = root.postId
+            guard !Task.isCancelled, !self.isStopped, self.receiptPollingVisible else { outcome = .aborted; return }
             let channel = try await self.client.channel(id: channelId)
             let members = try await self.client.channelMembers(channelId: channelId, page: 0, perPage: 3)
-            guard channel.type == .directMessage, members.count == 2, let member = members.first(where: { $0.userId == partner }),
-                  DirectMessageReadReceipt.isCaughtUp(total: channel.totalMsgCount, totalRoots: channel.totalMsgCountRoot, viewed: member.msgCount, viewedRoots: member.msgCountRoot) else { return }
+            guard channel.type == .directMessage, members.count == 2, let member = members.first(where: { $0.userId == partner }) else { return }
+            guard DirectMessageReadReceipt.isCaughtUp(total: channel.totalMsgCount, totalRoots: channel.totalMsgCountRoot, viewed: member.msgCount, viewedRoots: member.msgCountRoot) else { outcome = .unconfirmed; return }
             await self.postbox.mmTransaction { transaction in
-                guard let entry = self.store.entries(channelId: channelId, postIds: [candidate.postId])[candidate.postId], entry.localId > self.outgoingReadMaxId(channelId: channelId) else { return }
+                guard let entry = self.store.entries(channelId: channelId, postIds: [postId])[postId], entry.localId > self.outgoingReadMaxId(channelId: channelId) else { return }
                 let checkpoint = DirectMessageReadCheckpoint(key: entry.key)
                 guard let data = try? JSONEncoder().encode(checkpoint), let text = String(data: data, encoding: .utf8) else { return }
                 self.store.setCursor(self.outgoingReadCursor(channelId), text)
                 transaction.applyOutgoingReadMaxId(MessageId(peerId: state.peerId, namespace: Namespaces.Message.Cloud, id: entry.localId))
-                MMLog.log("read receipt: DM \(channelId) through \(candidate.postId), counters \(member.msgCount)/\(channel.totalMsgCount) roots \(member.msgCountRoot)/\(channel.totalMsgCountRoot)")
+                MMLog.log("read receipt: DM \(channelId) through \(postId), counters \(member.msgCount)/\(channel.totalMsgCount) roots \(member.msgCountRoot)/\(channel.totalMsgCountRoot)")
             }
-            confirmed = true
+            outcome = .confirmed
         } catch {
             MMLog.log("read receipt: DM \(channelId) sample failed: \(error)")
         }
@@ -94,6 +111,7 @@ extension MattermostAccountSync {
 }
 
 struct ReceiptPollInterests {
+    var opened: [PeerId: Int] = [:]
     var histories: [PeerId: Int] = [:]
     var list = Set<PeerId>()
     var written: [String: Double] = [:]
