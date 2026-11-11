@@ -7095,6 +7095,9 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     }
 
     deinit {
+        if self.receiptHistoryVisible, let peerId = self.chatLocation.peerId {
+            mattermostChatHistoryBlurred(accountPeerId: self.context.account.peerId, peerId: peerId)
+        }
         let _ = ChatControllerCount.modify { value in
             return value - 1
         }
