@@ -35,10 +35,10 @@ final class DirectMessageReceiptPollSchedulerTests: XCTestCase {
             let now = Double(second)
             if let next = scheduler.next(candidates, now: now) {
                 let cost = second % 2 == 0 ? 3 : 2
-                if scheduler.reserveRequests(cost, now: now) { requests.append((now, cost)) }
+                if scheduler.reserveRequests(cost, for: next, now: now) { requests.append((now, cost)) }
                 scheduler.completed(next, result: .unconfirmed, now: now)
             }
-            XCTAssertLessThanOrEqual(requests.filter { $0.time > now - 60 }.reduce(0) { $0 + $1.count }, 12)
+            XCTAssertLessThanOrEqual(requests.filter { $0.time > now - 60 }.reduce(0) { $0 + $1.count }, DirectMessageReceiptPollScheduler.requestsPerMinute)
         }
     }
 
@@ -110,11 +110,80 @@ final class DirectMessageReceiptPollSchedulerTests: XCTestCase {
         var samples = 0
         for second in 0..<60 {
             if let next = scheduler.next([chat], now: Double(second)) {
-                XCTAssertTrue(scheduler.reserveRequests(2, now: Double(second)))
+                XCTAssertTrue(scheduler.reserveRequests(2, for: next, now: Double(second)))
                 scheduler.completed(next, result: .unconfirmed, now: Double(second))
                 samples += 1
             }
         }
         XCTAssertEqual(samples, 6)
     }
+    func testOpenBotCannotStarveDueListRowsAndUsesAtMostHalfTheBudget() {
+        var scheduler = DirectMessageReceiptPollScheduler()
+        let open = candidate(0, bot: true, priority: 2)
+        let rows = (1...30).map { candidate($0) }
+        var requests: [(at: Double, count: Int, open: Bool)] = []
+        var sampledRows = Set<String>()
+        for second in stride(from: 0, to: 600, by: 5) {
+            let now = Double(second)
+            guard let next = scheduler.next([open] + rows, now: now) else { continue }
+            let cost = second % 3 == 0 ? 3 : 2
+            if scheduler.reserveRequests(cost, for: next, now: now) {
+                requests.append((now, cost, next.priority == 2))
+                if next.priority < 2 { sampledRows.insert(next.channelId) }
+                scheduler.completed(next, result: .unconfirmed, now: now)
+            } else { scheduler.completed(next, result: .retryable, now: now) }
+            let window = requests.filter { $0.at > now - 60 }
+            XCTAssertLessThanOrEqual(window.reduce(0) { $0 + $1.count }, 24)
+            XCTAssertLessThanOrEqual(window.filter { $0.open }.reduce(0) { $0 + $1.count }, 12)
+        }
+        XCTAssertEqual(sampledRows.count, 30)
+    }
+
+    func testOpenChatSlowsAfterOneMinuteAndAnOwnPostRestartsFastSampling() {
+        var scheduler = DirectMessageReceiptPollScheduler()
+        var chat = candidate(0, priority: 2)
+        var times: [Int] = []
+        for second in 0...210 {
+            if let next = scheduler.next([chat], now: Double(second)) {
+                times.append(second)
+                scheduler.completed(next, result: .unconfirmed, now: Double(second))
+            }
+        }
+        XCTAssertEqual(times, [0, 10, 20, 30, 40, 50, 60, 90, 150, 210])
+        chat.written = 211
+        XCTAssertNotNil(scheduler.next([chat], now: 211))
+        scheduler.completed(chat, result: .unconfirmed, now: 211)
+        XCTAssertNotNil(scheduler.next([chat], now: 221))
+    }
+
+    func testIncomingRevisionDoesNotExtendTheOpenFastWindow() {
+        var scheduler = DirectMessageReceiptPollScheduler()
+        var chat = candidate(0, priority: 2)
+        for second in stride(from: 0, through: 50, by: 10) {
+            XCTAssertNotNil(scheduler.next([chat], now: Double(second)))
+            scheduler.completed(chat, result: .unconfirmed, now: Double(second))
+        }
+        chat.revision = 2
+        XCTAssertNotNil(scheduler.next([chat], now: 60))
+        scheduler.completed(chat, result: .unconfirmed, now: 60)
+        XCTAssertNil(scheduler.next([chat], now: 70))
+        XCTAssertNotNil(scheduler.next([chat], now: 90))
+    }
+
+    func testMinuteInOpenChatDoesNotInflateTheListDelay() {
+        var scheduler = DirectMessageReceiptPollScheduler()
+        var chat = candidate(0, priority: 2)
+        for second in stride(from: 0, through: 60, by: 10) {
+            XCTAssertNotNil(scheduler.next([chat], now: Double(second)))
+            scheduler.completed(chat, result: .unconfirmed, now: Double(second))
+        }
+        chat.priority = 1
+        XCTAssertNotNil(scheduler.next([chat], now: 61))
+        scheduler.completed(chat, result: .unconfirmed, now: 61)
+        XCTAssertNil(scheduler.next([chat], now: 90))
+        XCTAssertNotNil(scheduler.next([chat], now: 91))
+        scheduler.completed(chat, result: .unconfirmed, now: 91)
+        XCTAssertNotNil(scheduler.next([chat], now: 151))
+    }
+
 }

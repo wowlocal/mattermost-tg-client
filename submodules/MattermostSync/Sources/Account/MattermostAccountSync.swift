@@ -124,6 +124,7 @@ public final class MattermostAccountSync: @unchecked Sendable {
     let connectionGeneration = MMLocked<Int>(0)
     let isConnected = MMLocked<Bool>(false)
     let receiptInterests = MMLocked(ReceiptPollInterests())
+    let receiptScans = MMLocked<[String: ReceiptRootScan]>([:])
     let receiptScheduler = MMLocked(DirectMessageReceiptPollScheduler())
     let presenceActive = MMLocked<Bool>(false)
     var presenceReporter: PresenceActivityReporter?

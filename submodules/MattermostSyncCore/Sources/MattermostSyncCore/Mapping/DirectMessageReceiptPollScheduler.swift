@@ -28,13 +28,15 @@ public struct DirectMessageReceiptPollCandidate: Sendable {
     public var isBot: Bool
     public var priority: Int
     public var opened: Int
+    public var written: TimeInterval
 
-    public init(channelId: String, revision: Int64, isBot: Bool = false, priority: Int = 0, opened: Int = 0) {
+    public init(channelId: String, revision: Int64, isBot: Bool = false, priority: Int = 0, opened: Int = 0, written: TimeInterval = 0) {
         self.channelId = channelId
         self.revision = revision
         self.isBot = isBot
         self.priority = priority
         self.opened = opened
+        self.written = written
     }
 }
 
@@ -43,18 +45,22 @@ public enum DirectMessageReceiptPollResult {
 }
 
 public struct DirectMessageReceiptPollScheduler: Sendable {
-    public static let requestsPerMinute = 12
+    public static let requestsPerMinute = 24
     private struct Attempt: Sendable {
         var revision: Int64
         var opened: Int
+        var written: TimeInterval
         var priority: Int
-        var failures = 0
+        var listFailures = 0
+        var slowOpenSamples = 0
+        var fastUntil: TimeInterval
         var nextCheck: TimeInterval = 0
         var lastCheck: TimeInterval = -.infinity
         var complete = false
     }
+    private var listDue = false
     private var attempts: [String: Attempt] = [:]
-    private var reservations: [(at: TimeInterval, count: Int)] = []
+    private var reservations: [(at: TimeInterval, count: Int, open: Bool)] = []
 
     public init() {}
 
@@ -63,9 +69,11 @@ public struct DirectMessageReceiptPollScheduler: Sendable {
         return Self.requestsPerMinute - reservations.reduce(0) { $0 + $1.count }
     }
 
-    public mutating func reserveRequests(_ count: Int, now: TimeInterval) -> Bool {
+    public mutating func reserveRequests(_ count: Int, for candidate: DirectMessageReceiptPollCandidate? = nil, now: TimeInterval) -> Bool {
         guard remaining(now: now) >= count else { return false }
-        reservations.append((now, count))
+        let isOpen = (candidate?.priority ?? 0) >= 2
+        guard !isOpen || !listDue || reservations.filter({ $0.open }).reduce(0, { $0 + $1.count }) + count <= Self.requestsPerMinute / 2 else { return false }
+        reservations.append((now, count, isOpen))
         return true
     }
 
@@ -73,19 +81,30 @@ public struct DirectMessageReceiptPollScheduler: Sendable {
         guard remaining(now: now) >= 2 else { return nil }
         var due: [DirectMessageReceiptPollCandidate] = []
         for candidate in candidates {
-            if attempts[candidate.channelId]?.revision != candidate.revision {
-                attempts[candidate.channelId] = Attempt(revision: candidate.revision, opened: candidate.opened, priority: candidate.priority)
+            var attempt = attempts[candidate.channelId] ?? Attempt(revision: candidate.revision, opened: candidate.opened, written: candidate.written, priority: candidate.priority, fastUntil: now + 60)
+            if attempt.revision != candidate.revision {
+                attempt.revision = candidate.revision
+                attempt.complete = false
+                attempt.nextCheck = now
+                attempt.listFailures = 0
             }
-            if var attempt = attempts[candidate.channelId], candidate.priority >= 2 && (attempt.priority < 2 || attempt.opened != candidate.opened) {
+            if candidate.priority >= 2 && (attempt.priority < 2 || attempt.opened != candidate.opened || attempt.written != candidate.written) {
+                attempt.fastUntil = now + 60
+                attempt.slowOpenSamples = 0
                 attempt.nextCheck = now
                 attempt.complete = false
-                attempt.failures = 0
-                attempt.opened = candidate.opened
-                attempts[candidate.channelId] = attempt
+            } else if candidate.priority < 2 && attempt.priority >= 2 {
+                attempt.nextCheck = now
             }
-            attempts[candidate.channelId]?.priority = candidate.priority
-            guard let attempt = attempts[candidate.channelId], !attempt.complete, attempt.nextCheck <= now else { continue }
-            due.append(candidate)
+            attempt.opened = candidate.opened
+            attempt.written = candidate.written
+            attempt.priority = candidate.priority
+            attempts[candidate.channelId] = attempt
+            if !attempt.complete && attempt.nextCheck <= now { due.append(candidate) }
+        }
+        listDue = due.contains(where: { $0.priority < 2 })
+        if listDue && reservations.filter({ $0.open }).reduce(0, { $0 + $1.count }) >= Self.requestsPerMinute / 2 {
+            due.removeAll { $0.priority >= 2 }
         }
         due.sort {
             if $0.priority != $1.priority { return $0.priority > $1.priority }
@@ -109,8 +128,18 @@ public struct DirectMessageReceiptPollScheduler: Sendable {
         case .retryable:
             attempt.nextCheck = now + 10
         case .unconfirmed:
-            attempt.failures = min(attempt.failures + 1, 8)
-            let delay = candidate.priority >= 2 ? 10 : candidate.isBot ? 3600 : min(1800, 30 * pow(2, Double(attempt.failures - 1)))
+            let delay: TimeInterval
+            if candidate.priority >= 2 {
+                if now < attempt.fastUntil {
+                    delay = 10
+                } else {
+                    delay = attempt.slowOpenSamples == 0 ? 30 : 60
+                    attempt.slowOpenSamples += 1
+                }
+            } else {
+                attempt.listFailures = min(attempt.listFailures + 1, 8)
+                delay = candidate.isBot ? 3600 : min(1800, 30 * pow(2, Double(attempt.listFailures - 1)))
+            }
             attempt.nextCheck = now + delay
         }
         attempts[candidate.channelId] = attempt
