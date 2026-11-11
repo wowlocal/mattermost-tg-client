@@ -167,26 +167,36 @@ Each consumer observes the same Postbox source the Telegram one does (`KeyedOper
 
 ## Rendering (2C)
 
-### Outgoing read marks (2026-11-11)
+### Outgoing read marks (2026-11-12, review round 3)
 
 `OutgoingReadReceipts` is driven by display visibility, separately from online/input activity. iOS polls the
 selected account while foregrounded; macOS requires a visible, unhidden, non-minimized, unoccluded window and
-an unlocked, awake session. Thirty seconds without input does not stop receipt polling. Focus/blur callbacks
+an unlocked, awake session. Only account/chat windows count; menu-bar item and auxiliary windows do not.
+Thirty seconds without input does not stop receipt polling. Focus/blur callbacks
 identify displayed histories; list rows are cached and published only while their list is on screen. Recently
 written DMs remain of interest for 15 minutes. Deactivated partners are excluded.
 
-The scheduler first chooses a due channel using in-memory state and the remaining rolling budget of 12 REST
+The scheduler first chooses a due channel using in-memory state and the remaining rolling budget of 24 REST
 request reservations per minute. If no channel is due or the budget is exhausted, it does no Postbox/store work.
-Only the selected channel opens a candidate transaction. SyncCore selects its newest eligible own root above the
-checkpoint, skipping newer incoming posts, thread replies and deleted posts. An old root without eligibility is
+Only the selected channel opens a candidate transaction. It inspects at most 180 entries (three pages of 60)
+per transaction; a continuation resumes on a later polling tick, invalidated by a changed channel revision or
+checkpoint. Incoming/deleted posts are rejected before migration cursor lookup. The newest eligible own root
+above the checkpoint is selected, skipping newer incoming posts, thread replies and deleted posts. An old root without eligibility is
 refetched individually, not by rewriting every DM page. A sample reserves two requests; this lazy migration
 reserves one more. There is no all-DM migration after bootstrap.
 
-Opening/focusing a chat makes it due now; a displayed chat is sampled about every 10 seconds, with priority over
-list rows. Unconfirmed list rows back off from 30 seconds up to 30 minutes; non-viewing bots reach one hour while
-not open. A new channel post resets that channel's schedule, so an incoming answer cannot hide a pending own root.
-Network errors retry after 10 seconds without growing confirmation backoff; aborted samples become due again.
-No-pending/confirmed channels sleep until a new post or a new focus. A persisted post-key checkpoint resolves to
+Opening/focusing a chat makes it due now. During the first minute after opening or a new own post, an open chat
+is sampled every 10 seconds; subsequent unconfirmed samples wait 30 seconds, then 60 seconds as the ceiling.
+While any list row is due, open chats may reserve at most half the rolling budget (12 requests), and a due list
+row gets the turn after an open chat, including when slow requests make every tick at least 10 seconds apart.
+List failure counts are independent of open-chat samples; returning to the list makes the first list sample due without
+inheriting time spent in the chat. Unconfirmed list rows back off from 30 seconds up to 30 minutes; non-viewing
+bots use one hour while not open. A new channel post resets that channel's completion/list schedule, so an
+incoming answer cannot hide a pending own root; it does not extend the open-chat fast minute.
+Network errors retry after 10 seconds without growing confirmation backoff; aborted/incomplete scans become due
+again. Permanent errors (including 403/404) and invalid DM membership complete the attempt until a new post or
+focus; no-pending/confirmed channels also sleep until then. iOS releases a history's focus on disappearance or
+deinit, including root replacement during an account switch. A persisted post-key checkpoint resolves to
 Postbox's `maxOutgoingReadId` on every server read-state reset and survives relaunch/ID renumbering. Before querying the channel and then
 its members, the sampler freezes the selected own root's post key. It advances only when the other member's
 `msg_count == total_msg_count` **and** `msg_count_root == total_msg_count_root`. New messages arriving during
@@ -354,9 +364,11 @@ are read/assigned under the same lock. The latest intent wins even across suspen
 report finishes; repeated failures of the same activity back off 30/60/120 s, including after reconnect.
 Pending posts use `set_online` only while active, so an upload completing in the background cannot revive online.
 Other users' polling compares `last_activity_at` as well as status/DND end, so an unchanged offline status can
-still update "last seen". macOS renders away/DND explicitly and reserves its online dot for online. Status text uses localized English/Russian strings;
-Russian Relay keys enter the actual in-memory `Language` dictionary, preserving downloaded overrides rather than
-relying on an unused `.lproj`. A DND end outside the current day includes its date.
+still update "last seen". macOS renders away/DND explicitly and reserves its online dot for online.
+iOS status text uses localized English/Russian strings. macOS routes its three Relay presence keys through
+`strings()` with English fallback; Russian translation is deferred, and the original Russian resources/project
+references are preserved without injecting keys into the generic `Language` initializer. A DND end outside the current day
+includes its date.
 
 | Mattermost | Telegram | Where |
 |---|---|---|
@@ -410,17 +422,21 @@ check after more than 10 s in the background also catches up and checks retained
 A socket waiting out its backoff (up to 60 s) reconnects as soon as a REST request gets an answer (`MattermostClient.Configuration.onServerReached`) or `NWPathMonitor` reports the network
 back. Sends queued while offline go out with the sender's own retry (≤ 5 s).
 
-**Stalled sends and diagnostics (2026-11-11, review round 2; replaces round 1's upload policy).** While body
+**Stalled sends and diagnostics (2026-11-12, review round 3; replaces round 1's upload policy).** While body
 bytes remain unsent, uploads cancel following 30 seconds without growth. A restarted body resets that timer even
-below its previous high-water mark. Only these body stalls consume the three-stall retry limit. Ordinary offline,
+below its previous high-water mark. A timeout before any body byte has been sent is a connectivity failure
+and keeps retrying. Only inactivity after the body has started moving consumes the three-stall retry limit.
+Ordinary offline,
 server-down, 5xx, 429 and transport failures retain the existing transient retry/backoff behavior: queued media
 recovers automatically like text.
 
 After the whole body is handed to the transport, buffered forwarding/server processing retains the 300-second
-response allowance. Exhausting that allowance is terminal for this automatic send: Telegram shows its failed
+response allowance measured from its last body progress, including when URLSession returns a timeout after
+a long transfer. Exhausting that allowance is terminal for this automatic send: Telegram shows its failed
 state/retry control, without a second 300-second attempt. Independent evidence may restart an upload once: an
 established WebSocket failed and then completed a new transport connection (resuming the same server connection ID
-still counts as a new transport), or a path update removed/replaced the previous preferred used-interface identity.
+still counts as a new transport); the failure itself must postdate the upload's last progress, not merely its
+reconnect. Alternatively, a path update removed/replaced the previous preferred used-interface identity.
 A normal-deadline missed ping qualifies only after reconnect; the three-second activation probe does not.
 Server-requested/local closes, sequence gaps, initial path observation, missing non-ping replies, cost changes and
 an interface merely being added do not qualify. The old interface must no longer be available; changing the default

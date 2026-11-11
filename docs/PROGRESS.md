@@ -913,3 +913,31 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
     task simulator app uninstalled and 1.1 GiB scratch removed; shared caches/devices preserved. Final internal/X5
     free space: 40/166 GiB. Positive Mac visible/no-input/list/relaunch verification remains a documented gap. Evidence and pending work: external REPORT.md
     section “Review round 2” and results/presence-read-marks/review2/WORKING.md.
+
+### 2026-11-12 — Presence/read marks/slow sends: review round 3
+
+- **Receipt fairness/backoff:** 24 REST requests per rolling minute, including migration requests; open histories
+  use at most half while a list row is due, and due rows alternate with open histories even when samples are slow.
+  Open chats sample every10s for the first minute after focus/own post, then30/60s. Open samples do not inflate
+  list failures. Permanent 403/404/invalid membership completes until revision/focus; transient retries preserve
+  confirmation backoff. Candidate scans yield after180 entries, resume next tick and reject incoming authors
+  before migration cursor queries. ChatController deinit releases any focus left by root replacement.
+- **Upload edges:** a30s stall before any body byte is a connectivity failure and never consumes the three
+  started-body-stall attempts. Both watcher and URLSession timeout classification measure the response allowance
+  from last body progress. Reconnected-WebSocket evidence is dated at failure, which must be later than progress.
+- **Mac:** actual account/external-chat windows determine receipt visibility; NSStatusBarWindow is excluded.
+  Restored main's Russian .strings and project refs, removed generic Language injection; Relay presence uses
+  English fallback via strings(). Russian UI support is deferred.
+- **Evidence:** scheduler baseline/current source traces show starvation resolved at ten-second ticks and
+  post-open list retry30s instead of1800s. Final native iOS:65s open, list-only confirmation22.862s after Bob view;
+  screenshots show one→two, then a later one and persisted two after relaunch. Native403/404 each sampled only once
+  over35s. Local TLS handshake black hole: three zero-body attempts remained retryable through93.797s, working
+  endpoint restored for attempt4 which succeeded96.830s. Healthy buffered response45.011s/one attempt. Exact-source
+  selector probe:10,000 incoming entries,56 transactions,max180 reads/transaction,zero migration cursor reads;
+  own root behind9,990 entries remains discoverable. This is instrumented logic, not native energy profiling.
+- **Checks:** Kit240 tests (5 skipped), Core251, zero failures; both build scripts twice, sequential and successful.
+  Final shared feature9c279f3253: iOS518 actions/94.760s plus bundle checks; Mac BUILD SUCCEEDED and signed.
+  AppKit reproduced two visible status-item windows in old predicate versus zero chat windows. Desktop remained
+  locked, so positive Mac visible/no-input/chat-list/relaunch check remains unverified; report ends with a short
+  owner checklist and timed Bob-view helper. No lock workaround. Evidence and per-finding commits/limits:
+  results/presence-read-marks/REPORT.md “Review round3”. No production access/push/merge/release/device install.
