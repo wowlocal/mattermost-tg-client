@@ -885,7 +885,7 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
     } else {
         readCounters = context.engine.data.get(TelegramEngine.EngineData.Item.Messages.PeerReadCounters(id: messages[0].id.peerId))
         |> map { readCounters -> Bool in
-            return readCounters.isOutgoingMessageRead(message)
+            return readCounters.isOutgoingMessageRead(EngineMessage(message))
         }
     }
     
