@@ -50,18 +50,20 @@ public final class URLSessionWebSocketTransport: WebSocketTransport {
 
 final class URLSessionWebSocketConnection: WebSocketConnection, @unchecked Sendable {
     private let task: URLSessionWebSocketTask
+    private let operations = WebSocketOperations()
 
     init(task: URLSessionWebSocketTask) {
         self.task = task
     }
 
     func send(_ text: String) async throws {
-        try await task.send(.string(text))
+        try await operations.perform { [task] in try await task.send(.string(text)) }
     }
 
     func receive() async throws -> WebSocketFrame {
         do {
-            switch try await task.receive() {
+            let message = try await operations.perform { [task] in try await task.receive() }
+            switch message {
             case .string(let text):
                 return .text(text)
             case .data(let data):
@@ -81,7 +83,42 @@ final class URLSessionWebSocketConnection: WebSocketConnection, @unchecked Senda
     }
 
     func close() {
+        operations.close()
         task.cancel(with: .goingAway, reason: nil)
+        task.cancel()
+    }
+}
+
+final class WebSocketOperations: Sendable {
+    private let pending = Locked<[UUID: @Sendable () -> Void]?>([:])
+
+    func perform<Value: Sendable>(_ operation: @escaping @Sendable () async throws -> Value) async throws -> Value {
+        let id = UUID()
+        let reply = OneShot<Value>()
+        let accepted = pending.withLock { pending -> Bool in
+            guard pending != nil else { return false }
+            pending?[id] = { reply.resolve(.failure(MattermostWebSocketError.connectionClosed)) }
+            return true
+        }
+        guard accepted else { throw MattermostWebSocketError.connectionClosed }
+        let work = Task {
+            do { reply.resolve(.success(try await operation())) }
+            catch { reply.resolve(.failure(error)) }
+        }
+        defer {
+            work.cancel()
+            pending.withLock { $0?[id] = nil }
+        }
+        return try await reply.value()
+    }
+
+    func close() {
+        let callbacks = pending.withLock { pending -> [@Sendable () -> Void] in
+            let callbacks = pending.map { Array($0.values) } ?? []
+            pending = nil
+            return callbacks
+        }
+        for callback in callbacks { callback() }
     }
 }
 
