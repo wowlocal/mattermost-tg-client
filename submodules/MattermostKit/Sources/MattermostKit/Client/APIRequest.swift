@@ -20,6 +20,7 @@ struct APIRequest: Sendable {
     var authenticated: Bool
     /// Whether the response is JSON (sets `Accept`).
     var expectsJSON: Bool
+    var cachePolicy: URLRequest.CachePolicy
 
     init(
         _ method: HTTPMethod,
@@ -28,7 +29,8 @@ struct APIRequest: Sendable {
         body: Data? = nil,
         contentType: String? = nil,
         authenticated: Bool = true,
-        expectsJSON: Bool = true
+        expectsJSON: Bool = true,
+        cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy
     ) {
         self.method = method
         self.path = path
@@ -37,6 +39,7 @@ struct APIRequest: Sendable {
         self.contentType = contentType
         self.authenticated = authenticated
         self.expectsJSON = expectsJSON
+        self.cachePolicy = cachePolicy
     }
 
     /// A request with a JSON body.

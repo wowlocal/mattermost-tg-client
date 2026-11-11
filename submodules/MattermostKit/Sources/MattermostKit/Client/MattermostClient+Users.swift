@@ -13,23 +13,7 @@ extension MattermostClient {
     /// Refreshes the session's WebSocket activity timestamp, including on servers where the active-status
     /// action changes only the user's status. A cached/304 response does not run the server's activity hook.
     public func recordUserActivity() async throws {
-        var request = try urlRequest(for: APIRequest(.get, apiPath("users", "me")))
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-        let (data, response): (Data, URLResponse)
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch {
-            throw MattermostError.wrap(error, url: request.url)
-        }
-        configuration.onServerReached?()
-        do {
-            _ = try validate(response: response, body: data)
-        } catch MattermostError.unauthorized(let appError) {
-            if request.value(forHTTPHeaderField: "Authorization") != nil {
-                configuration.onUnauthorized?()
-            }
-            throw MattermostError.unauthorized(appError)
-        }
+        try await sendIgnoringResponse(APIRequest(.get, apiPath("users", "me"), cachePolicy: .reloadIgnoringLocalCacheData))
     }
 
     /// `GET /users/{user_id}`.

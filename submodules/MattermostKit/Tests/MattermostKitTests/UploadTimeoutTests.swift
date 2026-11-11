@@ -37,4 +37,18 @@ final class UploadTimeoutTests: StubbedClientTestCase {
         XCTAssertTrue(error?.isSessionExpired == true)
         XCTAssertTrue(rejected.current)
     }
+
+    func testActivityUsesRequestDiagnosticsAndServerReachedHook() async throws {
+        StubURLProtocol.respond(with: .json("{}"))
+        let records = Locked<[String]>([])
+        let reached = Locked(false)
+        var configuration = MattermostClient.Configuration(serverURL: serverURL)
+        configuration.onDiagnostic = { line in records.withLock { $0.append(line) } }
+        configuration.onServerReached = { reached.set(true) }
+        let client = MattermostClient(configuration: configuration, session: StubURLProtocol.makeSession())
+        try await client.recordUserActivity()
+        XCTAssertTrue(reached.current)
+        XCTAssertTrue(records.current.contains { $0.contains("start GET /users/me") })
+        XCTAssertTrue(records.current.contains { $0.contains("response=200") })
+    }
 }

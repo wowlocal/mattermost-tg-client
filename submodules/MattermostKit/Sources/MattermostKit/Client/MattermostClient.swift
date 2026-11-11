@@ -90,7 +90,7 @@ public final class MattermostClient: Sendable {
             throw MattermostError.transport(URLError(.badURL))
         }
 
-        var urlRequest = URLRequest(url: url, timeoutInterval: configuration.timeoutInterval)
+        var urlRequest = URLRequest(url: url, cachePolicy: request.cachePolicy, timeoutInterval: configuration.timeoutInterval)
         urlRequest.httpMethod = request.method.rawValue
         // Authenticate with the bearer token only; cookies from the login
         // response would otherwise trigger CSRF checks and outlive logout.
