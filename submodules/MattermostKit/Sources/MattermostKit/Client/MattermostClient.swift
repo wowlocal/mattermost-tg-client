@@ -12,6 +12,7 @@ public final class MattermostClient: Sendable {
         public var userAgent: String?
         public var timeoutInterval: TimeInterval
         public var uploadInactivityTimeout: TimeInterval = 30
+        public var uploadConnectionHealth = UploadConnectionHealth()
         public var onDiagnostic: (@Sendable (String) -> Void)?
         /// Extra headers sent with every request.
         public var additionalHeaders: [String: String]

@@ -105,9 +105,9 @@ extension MattermostClient {
         // Uploads of large files can take far longer than API calls.
         request.timeoutInterval = max(configuration.timeoutInterval, 300)
         let uploadRequest = request
-        let delegate = UploadProgressDelegate(progress)
+        let delegate = UploadProgressDelegate(progress, diagnostic: configuration.onDiagnostic)
         let started = ProcessInfo.processInfo.systemUptime
-        configuration.onDiagnostic?("upload start channel=\(channelId) files=\(files.count) inactivity=\(configuration.uploadInactivityTimeout)s")
+        configuration.onDiagnostic?("upload start channel=\(channelId) files=\(files.count) bodyInactivity=\(configuration.uploadInactivityTimeout)s responseAllowance=\(request.timeoutInterval)s")
 
         let data: Data
         let response: URLResponse
@@ -119,13 +119,13 @@ extension MattermostClient {
                 defer { try? FileManager.default.removeItem(at: bodyURL) }
                 totalBytes = try form.writeBody(to: bodyURL)
                 try Task.checkCancellation()
-                (data, response) = try await uploadWithActivityTimeout(delegate: delegate) {
+                (data, response) = try await uploadWithActivityTimeout(delegate: delegate, totalBytes: totalBytes) {
                     try await self.session.upload(for: uploadRequest, fromFile: bodyURL, delegate: delegate)
                 }
             } else {
                 let body = try form.encodedData()
                 totalBytes = Int64(body.count)
-                (data, response) = try await uploadWithActivityTimeout(delegate: delegate) {
+                (data, response) = try await uploadWithActivityTimeout(delegate: delegate, totalBytes: totalBytes) {
                     try await self.session.upload(for: uploadRequest, from: body, delegate: delegate)
                 }
             }
@@ -140,17 +140,17 @@ extension MattermostClient {
         return result
     }
 
-    private func uploadWithActivityTimeout(delegate: UploadProgressDelegate, operation: @escaping @Sendable () async throws -> (Data, URLResponse)) async throws -> (Data, URLResponse) {
+    private func uploadWithActivityTimeout(delegate: UploadProgressDelegate, totalBytes: Int64, operation: @escaping @Sendable () async throws -> (Data, URLResponse)) async throws -> (Data, URLResponse) {
         let timeout = max(0.01, configuration.uploadInactivityTimeout)
-        delegate.resetActivity()
+        delegate.resetActivity(totalBytes: totalBytes)
         return try await withThrowingTaskGroup(of: (Data, URLResponse).self) { group in
             group.addTask { try await operation() }
             group.addTask {
                 while true {
                     try await Task.sleep(nanoseconds: UInt64(min(1, timeout) * 1_000_000_000))
-                    if delegate.isStalled(timeout: timeout) {
-                        self.configuration.onDiagnostic?("upload stalled: no progress for \(timeout)s, bytes=\(delegate.bytesSent)")
-                        throw URLError(.timedOut)
+                    if let stall = delegate.stall(timeout: timeout, health: self.configuration.uploadConnectionHealth) {
+                        self.configuration.onDiagnostic?("upload stalled: \(stall.reason), bytes=\(delegate.bytesSent)")
+                        throw URLError(stall.code)
                     }
                 }
             }
@@ -167,33 +167,50 @@ extension MattermostClient {
 
 struct UploadActivity {
     private(set) var bytesSent: Int64 = 0
+    private(set) var totalBytes: Int64
     private(set) var lastProgressAt: TimeInterval
 
-    init(now: TimeInterval) { lastProgressAt = now }
+    init(now: TimeInterval, totalBytes: Int64 = .max) {
+        self.lastProgressAt = now
+        self.totalBytes = totalBytes
+    }
+
+    var bodySent: Bool { bytesSent >= totalBytes }
 
     mutating func record(bytesSent: Int64, now: TimeInterval) {
-        if bytesSent > self.bytesSent {
+        if bytesSent != self.bytesSent {
             self.bytesSent = bytesSent
             self.lastProgressAt = now
         }
     }
 
     func isStalled(now: TimeInterval, timeout: TimeInterval) -> Bool {
-        return now - lastProgressAt >= timeout
+        return !bodySent && now - lastProgressAt >= timeout
     }
 }
 
 final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, Sendable {
     private let handler: (@Sendable (UploadProgress) -> Void)?
+    private let diagnostic: (@Sendable (String) -> Void)?
     private let activity = Locked(UploadActivity(now: ProcessInfo.processInfo.systemUptime))
 
-    init(_ handler: (@Sendable (UploadProgress) -> Void)?) {
+    init(_ handler: (@Sendable (UploadProgress) -> Void)?, diagnostic: (@Sendable (String) -> Void)? = nil) {
         self.handler = handler
+        self.diagnostic = diagnostic
     }
 
     var bytesSent: Int64 { activity.current.bytesSent }
-    func resetActivity() { activity.set(UploadActivity(now: ProcessInfo.processInfo.systemUptime)) }
-    func isStalled(timeout: TimeInterval) -> Bool { activity.current.isStalled(now: ProcessInfo.processInfo.systemUptime, timeout: timeout) }
+    func resetActivity(totalBytes: Int64) { activity.set(UploadActivity(now: ProcessInfo.processInfo.systemUptime, totalBytes: totalBytes)) }
+    func stall(timeout: TimeInterval, health: UploadConnectionHealth) -> (reason: String, code: URLError.Code)? {
+        let activity = self.activity.current
+        if activity.isStalled(now: ProcessInfo.processInfo.systemUptime, timeout: timeout) {
+            return ("no body progress for \(timeout)s", .timedOut)
+        }
+        if activity.bodySent, let evidence = health.evidence(after: activity.lastProgressAt) {
+            return (evidence.reason + " after last upload progress", .networkConnectionLost)
+        }
+        return nil
+    }
 
     func urlSession(
         _ session: URLSession,
@@ -202,7 +219,10 @@ final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, Sendable {
         totalBytesSent: Int64,
         totalBytesExpectedToSend: Int64
     ) {
+        let previous = activity.current
         activity.withLock { $0.record(bytesSent: totalBytesSent, now: ProcessInfo.processInfo.systemUptime) }
+        if totalBytesSent < previous.bytesSent { diagnostic?("upload body restarted bytes=\(totalBytesSent)") }
+        if !previous.bodySent && activity.current.bodySent { diagnostic?("upload body sent bytes=\(totalBytesSent); waiting for response") }
         handler?(UploadProgress(bytesSent: totalBytesSent, totalBytes: totalBytesExpectedToSend))
     }
 }

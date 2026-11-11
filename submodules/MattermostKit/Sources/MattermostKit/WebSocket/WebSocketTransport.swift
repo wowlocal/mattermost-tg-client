@@ -23,6 +23,7 @@ public enum WebSocketTransportError: Error, Sendable, Equatable {
     /// The HTTP upgrade was rejected, e.g. 401 for an invalid token.
     case handshakeFailed(statusCode: Int)
     case unsupportedFrame
+    case serverClosed(code: Int)
 }
 
 /// `URLSessionWebSocketTask`-based transport.
@@ -71,6 +72,9 @@ final class URLSessionWebSocketConnection: WebSocketConnection, @unchecked Senda
         } catch {
             if let response = task.response as? HTTPURLResponse, response.statusCode >= 400 {
                 throw WebSocketTransportError.handshakeFailed(statusCode: response.statusCode)
+            }
+            if task.closeCode != .invalid && task.closeCode != .abnormalClosure {
+                throw WebSocketTransportError.serverClosed(code: task.closeCode.rawValue)
             }
             throw error
         }

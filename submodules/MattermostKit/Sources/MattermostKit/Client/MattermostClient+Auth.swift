@@ -128,6 +128,12 @@ extension MattermostClient {
         if configuration.onDiagnostic == nil {
             configuration.onDiagnostic = self.configuration.onDiagnostic
         }
+        let health = self.configuration.uploadConnectionHealth
+        let onTransportFailure = configuration.onTransportFailure
+        configuration.onTransportFailure = {
+            health.transportFailed()
+            onTransportFailure?()
+        }
         return MattermostWebSocket(
             serverURL: serverURL,
             token: token,

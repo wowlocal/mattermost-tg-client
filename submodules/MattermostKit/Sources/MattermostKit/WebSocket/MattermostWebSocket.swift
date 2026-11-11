@@ -87,6 +87,7 @@ public actor MattermostWebSocket {
         public var resumesConnections: Bool
         public var userAgent: String?
         public var onDiagnostic: (@Sendable (String) -> Void)?
+        public var onTransportFailure: (@Sendable () -> Void)?
 
         public init(
             authentication: Authentication = .header,
@@ -321,6 +322,14 @@ public actor MattermostWebSocket {
 
     // MARK: - Connection loop
 
+    private var transportFailureReported = false
+
+    private func reportTransportFailure() {
+        guard !transportFailureReported else { return }
+        transportFailureReported = true
+        configuration.onTransportFailure?()
+    }
+
     private struct SequenceGap: Error {}
     private struct NotAuthenticated: Error {}
 
@@ -343,6 +352,7 @@ public actor MattermostWebSocket {
                     return
                 }
                 connection = newConnection
+                transportFailureReported = false
                 handshakeComplete = false
                 isResumeAttempt = configuration.resumesConnections && connectionId != nil
                 handshakeProbeSequence = nil
@@ -366,6 +376,7 @@ public actor MattermostWebSocket {
                 configuration.onDiagnostic?("websocket authentication rejected")
                 unauthorized = true
             } catch {
+                if handshakeComplete && !Task.isCancelled && !(error is SequenceGap) { reportTransportFailure() }
                 configuration.onDiagnostic?("websocket failed: \(error)")
             }
 
@@ -571,6 +582,7 @@ public actor MattermostWebSocket {
                 return
             }
             if waiter.resolve(.failure(MattermostWebSocketError.timeout)), !sent.current || action == "ping" {
+                self.reportTransportFailure()
                 connection.close()
             }
         }

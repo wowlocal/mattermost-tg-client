@@ -282,7 +282,16 @@ public enum MattermostSync {
     private static func startPathMonitor() {
         let monitor = NWPathMonitor()
         let wasSatisfied = MMLocked<Bool?>(nil)
+        let previousPath = MMLocked<NWPath?>(nil)
         monitor.pathUpdateHandler = { path in
+            let changed = previousPath.with { previous -> Bool in
+                let changed = previous.map { $0 != path } ?? false
+                previous = path
+                return changed
+            }
+            if changed {
+                for sync in self.accounts.with({ Array($0.values) }) { sync.client.configuration.uploadConnectionHealth.pathChanged() }
+            }
             let satisfied = path.status == .satisfied
             MMLog.log("network path: status=\(path.status) interfaces=\(path.availableInterfaces.map { $0.name }.joined(separator: ",")) expensive=\(path.isExpensive) constrained=\(path.isConstrained)")
             let previous = wasSatisfied.with { value -> Bool? in

@@ -505,7 +505,10 @@ final class WebSocketConnectionTests: XCTestCase {
     }
 
     func testActionTimesOut() async throws {
-        let socket = makeSocket(configuration: .init(pingInterval: nil, actionTimeout: 10, handshakeTimeout: nil))
+        let failed = Locked(false)
+        var configuration = MattermostWebSocket.Configuration(pingInterval: nil, actionTimeout: 10, handshakeTimeout: nil)
+        configuration.onTransportFailure = { failed.set(true) }
+        let socket = makeSocket(configuration: configuration)
         await socket.connect()
         let connection = try await connection(0)
         connection.push(Fixtures.hello(connectionId: "abc"))
@@ -522,6 +525,7 @@ final class WebSocketConnectionTests: XCTestCase {
             XCTAssertEqual(error as? MattermostWebSocketError, .timeout)
         }
         XCTAssertFalse(connection.isClosed)
+        XCTAssertFalse(failed.current)
         await assertState(socket, connected: true)
         connection.push(#"{"event":"posted","data":{}}"#)
         let next = Task { try await socket.sendAction("user_update_active_status", data: ["user_is_active": .bool(true), "manual": .bool(false)]) }
@@ -610,6 +614,36 @@ final class WebSocketConnectionTests: XCTestCase {
         await waitUntil { self.clock.pendingSleepers == [30] }
         XCTAssertFalse(connection.isClosed)
         await assertState(socket, connected: true)
+    }
+
+    func testServerRequestedCloseDoesNotInvalidateUploads() async throws {
+        let failed = Locked(false)
+        var configuration = MattermostWebSocket.Configuration(pingInterval: nil, handshakeTimeout: nil)
+        configuration.onTransportFailure = { failed.set(true) }
+        let socket = makeSocket(configuration: configuration)
+        await socket.connect()
+        let connection = try await connection(0)
+        connection.push(Fixtures.hello(connectionId: "abc"))
+        await waitUntil { await socket.isConnected }
+        connection.fail(WebSocketTransportError.serverClosed(code: 1001))
+        await waitForState(socket, .waitingToReconnect(attempt: 2, delay: 0.75))
+        XCTAssertFalse(failed.current)
+    }
+
+    func testTransportFailureInvalidatesUploadsButLocalDisconnectDoesNot() async throws {
+        let failures = Locked(0)
+        var configuration = MattermostWebSocket.Configuration(pingInterval: nil, handshakeTimeout: nil)
+        configuration.onTransportFailure = { failures.withLock { $0 += 1 } }
+        let socket = makeSocket(configuration: configuration)
+        await socket.connect()
+        let connection = try await connection(0)
+        connection.push(Fixtures.hello(connectionId: "abc"))
+        await waitUntil { await socket.isConnected }
+        connection.fail(URLError(.networkConnectionLost))
+        await waitForState(socket, .waitingToReconnect(attempt: 2, delay: 0.75))
+        XCTAssertEqual(failures.current, 1)
+        await socket.disconnect()
+        XCTAssertEqual(failures.current, 1)
     }
 
     // MARK: Backoff policy

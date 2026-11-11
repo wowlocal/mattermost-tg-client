@@ -389,18 +389,23 @@ check after more than 10 s in the background also catches up and checks retained
 A socket waiting out its backoff (up to 60 s) reconnects as soon as a REST request gets an answer (`MattermostClient.Configuration.onServerReached`) or `NWPathMonitor` reports the network
 back. Sends queued while offline go out with the sender's own retry (≤ 5 s).
 
-**Stalled sends and diagnostics (2026-11-11).** Uploads keep their large-request allowance but additionally cancel
-after 30 s without an increase in bytes sent (also while waiting for the response after the final byte). Progress
-resets the inactivity deadline; it is not a 30 s total-transfer limit. The transient retry can then use a fresh
-connection. A local fault proxy accepting an upload without responding held the former client for 301 s.
-WebSocket action deadlines now include the send itself: waiting for `send()` before observing the reply deadline
-could strand a ping despite its timeout firing. A blocked send or missed ping closes the connection. A missing
-reply after a completed non-ping send fails only that action and leaves the socket alive.
-Diagnostics record WebSocket state/attempt/backoff/handshake failures, network path changes, REST method/path and
-duration/status, upload bytes/inactivity, send attempts and retry delays, and per-channel queue waits. They use
-the existing Relay logger and rotation; REST records omit query strings, and no request headers, message bodies
-or credentials are included. WebSocket errors may include the resume URL (connection id and sequence).
-These changes do not establish the cause of the owner's unreproduced production "Connecting…" report.
+**Stalled sends and diagnostics (2026-11-11, review round 1).** While body bytes remain unsent, uploads cancel
+following 30 s without progress. A restarted body resets that timer even below its previous byte high-water mark.
+After all bytes are sent, the existing 300 s request/response allowance remains: a buffered proxy, a slow link
+whose bytes were queued in the kernel, or server processing must not be mistaken for a 30 s body stall.
+Independent evidence after the upload's last progress can abort that response wait early: an established WebSocket
+transport failure/missed ping, or an actual `NWPath` change. A server-requested close, intentional local disconnect,
+sequence gap, initial path observation or missing non-ping action reply is not that evidence. Uploads have three
+attempts total (two re-uploads), then propagate failure to Telegram's retry button. Other write retry policy is
+unchanged. A reachable peer which accepts the body and never responds can still consume the 300 s allowance;
+without server feedback that case cannot be distinguished from healthy processing before a chosen deadline.
+
+WebSocket action deadlines include the send itself. A blocked send or missed ping closes the connection; a
+missing reply after a completed non-ping send fails only that action. Diagnostics record socket state/attempt,
+backoff/handshake failures, path changes, REST method/path/duration/status, upload body completion/restarts/stalls,
+send attempts, bounded upload exhaustion, local preparation and per-channel queue waits. REST records omit query
+strings and all transport records omit headers/bodies/credentials. WebSocket errors may include the resume URL
+(connection id and sequence). These changes do not establish the owner's production "Connecting…" cause.
 
 File logging remains opt-in in release builds (iOS: About Relay → Diagnostics → Save Diagnostic Logs; macOS:
 Developer settings → Enable Logs). Enable it before reproducing an intermittent issue; the existing diagnostics
