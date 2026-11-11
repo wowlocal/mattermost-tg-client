@@ -70,6 +70,7 @@ final class PostSender: MattermostMessageSender {
     func uploadMedia(messageId: MessageId) -> Signal<Float, MattermostSendError> {
         return Signal { subscriber in
             let task = Task {
+                MMLog.log("send requested: upload \(messageId), waiting for the account sync")
                 while true {
                     guard let sync = await self.activeSync(), let sender = sync.sender else {
                         subscriber.putError(.generic)
@@ -116,6 +117,7 @@ final class PostSender: MattermostMessageSender {
     func sendMessageGroup(messageIds: [MessageId]) -> Signal<[MessageId], MattermostSendError> {
         return Signal { subscriber in
             let task = Task {
+                MMLog.log("send requested: post \(messageIds), waiting for the account sync")
                 while !messageIds.isEmpty {
                     guard let sync = await self.activeSync(), let sender = sync.sender else {
                         break
@@ -206,7 +208,9 @@ final class PostSender: MattermostMessageSender {
             guard var source = UploadSource(media: media, messageId: messageId, index: index) else {
                 continue
             }
+            MMLog.log("send prepare: \(messageId) media=\(index) waiting for local data")
             var path = try await sync.completeResourcePath(source.resource)
+            MMLog.log("send prepare: \(messageId) media=\(index) local data ready")
             if let recording = videoMessageRecording, recording.isLocalRecording, recording.file.fileId == (media as? TelegramMediaFile)?.fileId {
                 // A round video (5B): Telegram's recording (H.264 and AAC in an `.mp4`) goes as it is, with a readable name.
                 source.fileName = VideoMessageFile.fileName(prefix: MattermostVideoMessages.fileNamePrefix(), date: date)
@@ -305,7 +309,9 @@ final class PostSender: MattermostMessageSender {
         let pendingPostId = draft.post.pendingPostId
         let queuedAt = CFAbsoluteTimeGetCurrent()
         let outcome = MMLocked<Result<Post, Error>>(.failure(SendFailure.notSent))
+        MMLog.log("send queue: \(messageIds) channel=\(draft.post.channelId) pending=\(pendingPostId) enqueued")
         await self.serially(channelId: draft.post.channelId) {
+            MMLog.log("send queue: \(messageIds) channel=\(draft.post.channelId) starts after \(Int((CFAbsoluteTimeGetCurrent() - queuedAt) * 1000)) ms")
             self.inFlight.with { _ = $0.insert(pendingPostId) }
             do {
                 let post = try await sync.retryingTransient("post \(messageId)", isStillWanted: { await sync.messageExists(messageId) }) {

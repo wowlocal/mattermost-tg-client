@@ -141,6 +141,9 @@ public enum MattermostSync {
         }
         let accountId = account.id
         var configuration = MattermostClient.Configuration(serverURL: url, userAgent: self.userAgent)
+        configuration.onDiagnostic = { message in
+            MMLog.log("network account=\(accountId.int64): \(message)")
+        }
         configuration.onUnauthorized = {
             MattermostSync.reportUnauthorized(accountId: accountId)
         }
@@ -281,6 +284,7 @@ public enum MattermostSync {
         let wasSatisfied = MMLocked<Bool?>(nil)
         monitor.pathUpdateHandler = { path in
             let satisfied = path.status == .satisfied
+            MMLog.log("network path: status=\(path.status) interfaces=\(path.availableInterfaces.map { $0.name }.joined(separator: ",")) expensive=\(path.isExpensive) constrained=\(path.isConstrained)")
             let previous = wasSatisfied.with { value -> Bool? in
                 let previous = value
                 value = satisfied

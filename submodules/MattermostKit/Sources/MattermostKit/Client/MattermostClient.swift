@@ -11,6 +11,8 @@ public final class MattermostClient: Sendable {
         public var serverURL: URL
         public var userAgent: String?
         public var timeoutInterval: TimeInterval
+        public var uploadInactivityTimeout: TimeInterval = 30
+        public var onDiagnostic: (@Sendable (String) -> Void)?
         /// Extra headers sent with every request.
         public var additionalHeaders: [String: String]
         /// Called when the server answers 401 to a request sent with a token, the usual sign of an expired
@@ -122,13 +124,18 @@ public final class MattermostClient: Sendable {
     /// Sends a request and returns the body of a 2xx response.
     func perform(_ request: APIRequest) async throws -> (Data, HTTPURLResponse) {
         let urlRequest = try urlRequest(for: request)
+        let started = ProcessInfo.processInfo.systemUptime
+        let trace = UUID().uuidString.prefix(8)
+        configuration.onDiagnostic?("rest \(trace) start \(request.method.rawValue) \(request.path)")
         let data: Data
         let response: URLResponse
         do {
             (data, response) = try await session.data(for: urlRequest)
         } catch {
+            configuration.onDiagnostic?("rest \(trace) failed after \(Int((ProcessInfo.processInfo.systemUptime - started) * 1000))ms code=\((error as NSError).code)")
             throw MattermostError.wrap(error, url: urlRequest.url)
         }
+        configuration.onDiagnostic?("rest \(trace) response=\((response as? HTTPURLResponse)?.statusCode ?? 0) after \(Int((ProcessInfo.processInfo.systemUptime - started) * 1000))ms")
         configuration.onServerReached?()
         let http: HTTPURLResponse
         do {

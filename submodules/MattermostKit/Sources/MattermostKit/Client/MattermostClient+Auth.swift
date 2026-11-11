@@ -125,6 +125,9 @@ extension MattermostClient {
         if configuration.userAgent == nil {
             configuration.userAgent = self.configuration.userAgent
         }
+        if configuration.onDiagnostic == nil {
+            configuration.onDiagnostic = self.configuration.onDiagnostic
+        }
         return MattermostWebSocket(
             serverURL: serverURL,
             token: token,

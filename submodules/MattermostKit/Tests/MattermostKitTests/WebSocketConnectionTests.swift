@@ -522,6 +522,25 @@ final class WebSocketConnectionTests: XCTestCase {
         }
     }
 
+    func testActionTimeoutIncludesBlockedSend() async throws {
+        let socket = makeSocket(configuration: .init(pingInterval: nil, actionTimeout: 3, handshakeTimeout: nil))
+        await socket.connect()
+        let connection = try await connection(0)
+        connection.push(Fixtures.hello(connectionId: "abc"))
+        await waitUntil { await socket.isConnected }
+        connection.stallSends()
+        let ping = Task { try await socket.ping() }
+        await waitForSleepers(1)
+        clock.advance(by: 3)
+        do {
+            _ = try await ping.value
+            XCTFail("Expected timeout while send is blocked")
+        } catch {
+            XCTAssertEqual(error as? MattermostWebSocketError, .timeout)
+        }
+        XCTAssertTrue(connection.isClosed)
+    }
+
     func testPendingActionFailsWhenConnectionDrops() async throws {
         let socket = makeSocket()
         await socket.connect()

@@ -86,6 +86,7 @@ public actor MattermostWebSocket {
         /// Send `connection_id` and `sequence_number` when reconnecting.
         public var resumesConnections: Bool
         public var userAgent: String?
+        public var onDiagnostic: (@Sendable (String) -> Void)?
 
         public init(
             authentication: Authentication = .header,
@@ -357,13 +358,15 @@ public actor MattermostWebSocket {
                     throw error
                 }
             } catch let error as WebSocketTransportError {
+                configuration.onDiagnostic?("websocket transport failed: \(error)")
                 if case .handshakeFailed(statusCode: 401) = error {
                     unauthorized = true
                 }
             } catch is NotAuthenticated {
+                configuration.onDiagnostic?("websocket authentication rejected")
                 unauthorized = true
             } catch {
-                // Dropped or failed; retry below.
+                configuration.onDiagnostic?("websocket failed: \(error)")
             }
 
             // A cancelled loop has been superseded by disconnect()/reconnectNow(),
@@ -510,6 +513,7 @@ public actor MattermostWebSocket {
             return
         }
         guard !Task.isCancelled, connection === self.connection, !handshakeComplete else { return }
+        configuration.onDiagnostic?("websocket handshake timeout after \(timeout)s")
         // Closing makes the receive loop fail, which triggers a reconnect.
         connection.close()
     }
@@ -565,17 +569,23 @@ public actor MattermostWebSocket {
             } catch {
                 return
             }
-            waiter.resolve(.failure(MattermostWebSocketError.timeout))
+            if waiter.resolve(.failure(MattermostWebSocketError.timeout)) {
+                connection.close()
+            }
         }
         defer {
             timeoutTask.cancel()
             pendingReplies[sequence] = nil
         }
-        do {
-            try await connection.send(Self.encodeAction(action, sequence: sequence, data: data))
-        } catch {
-            throw MattermostWebSocketError.connectionClosed
+        let text = Self.encodeAction(action, sequence: sequence, data: data)
+        let sendTask = Task {
+            do {
+                try await connection.send(text)
+            } catch {
+                waiter.resolve(.failure(MattermostWebSocketError.connectionClosed))
+            }
         }
+        defer { sendTask.cancel() }
         let response = try await waiter.value()
         guard response.isOK else {
             throw MattermostWebSocketError.actionFailed(response)
@@ -607,6 +617,7 @@ public actor MattermostWebSocket {
 
     private func setState(_ newState: WebSocketConnectionState) {
         guard newState != state else { return }
+        configuration.onDiagnostic?("websocket state \(state) -> \(newState)")
         state = newState
         stateBroadcaster.yield(newState)
     }

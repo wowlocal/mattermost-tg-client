@@ -376,6 +376,18 @@ if it is dead or waiting for a retry; a socket waiting out its backoff (up to 60
 request gets an answer (`MattermostClient.Configuration.onServerReached`) or `NWPathMonitor` reports the network
 back. Sends queued while offline go out with the sender's own retry (≤ 5 s).
 
+**Stalled sends and diagnostics (2026-11-11).** Uploads keep their large-request allowance but additionally cancel
+after 30 s without an increase in bytes sent (also while waiting for the response after the final byte). Progress
+resets the inactivity deadline; it is not a 30 s total-transfer limit. The transient retry can then use a fresh
+connection. A local fault proxy accepting an upload without responding held the former client for 301 s.
+WebSocket action deadlines now include the send itself: waiting for `send()` before observing the reply deadline
+could strand a ping despite its timeout firing. The timeout closes that connection and unblocks send/receive.
+Diagnostics record WebSocket state/attempt/backoff/handshake failures, network path changes, REST method/path and
+duration/status, upload bytes/inactivity, send attempts and retry delays, and per-channel queue waits. They use
+the existing Relay logger and rotation; REST records omit query strings, and no request headers, message bodies
+or credentials are included. WebSocket errors may include the resume URL (connection id and sequence).
+These changes do not establish the cause of the owner's unreproduced production "Connecting…" report.
+
 **Background refresh:** `BGAppRefreshTask` `org.relaychat.Relay.refresh` (Telegram's Info.plist already permits
 `<bundle id>.refresh`; `UIBackgroundModes` has `fetch`), registered by `RelayBackgroundRefresh` (TelegramUI) when
 `MattermostBackend.isEnabled`, scheduled at each entry into the background (earliest 15 minutes later): waits up to

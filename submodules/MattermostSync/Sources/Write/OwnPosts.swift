@@ -94,8 +94,13 @@ extension MattermostAccountSync {
     func retryingTransient<T>(_ what: String, isStillWanted: () async -> Bool, _ body: () async throws -> T) async throws -> T {
         var attempt = 0
         while true {
+            try Task.checkCancellation()
+            let started = CFAbsoluteTimeGetCurrent()
+            MMLog.log("send attempt: \(what) attempt=\(attempt + 1) connection=\(self.connectionGeneration.current) connected=\(self.isConnected.current)")
             do {
-                return try await body()
+                let result = try await body()
+                MMLog.log("send attempt: \(what) attempt=\(attempt + 1) completed in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms")
+                return result
             } catch let error as MattermostError where error.isTransient {
                 attempt += 1
                 let isWanted = await isStillWanted()
@@ -103,9 +108,7 @@ extension MattermostAccountSync {
                     throw error
                 }
                 let delay = min(5.0, 0.5 * pow(2.0, Double(min(attempt, 4))))
-                if attempt == 1 || attempt % 10 == 0 {
-                    MMLog.log("\(what): \(describeError(error)); retrying (attempt \(attempt))")
-                }
+                MMLog.log("send attempt: \(what) attempt=\(attempt) failed in \(Int((CFAbsoluteTimeGetCurrent() - started) * 1000)) ms: \(describeError(error)); retry in \(delay) s")
                 await self.waitForReconnect(maxDelay: delay)
             }
         }

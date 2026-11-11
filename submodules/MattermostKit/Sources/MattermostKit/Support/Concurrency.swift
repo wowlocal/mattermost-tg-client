@@ -37,17 +37,19 @@ final class OneShot<Value: Sendable>: @unchecked Sendable {
         return result != nil
     }
 
-    func resolve(_ newResult: Result<Value, Error>) {
+    @discardableResult
+    func resolve(_ newResult: Result<Value, Error>) -> Bool {
         lock.lock()
         guard result == nil else {
             lock.unlock()
-            return
+            return false
         }
         result = newResult
         let waiting = continuation
         continuation = nil
         lock.unlock()
         waiting?.resume(with: newResult)
+        return true
     }
 
     func value() async throws -> Value {

@@ -10,6 +10,9 @@ final class FakeWebSocketConnection: WebSocketConnection, @unchecked Sendable {
     private var waiter: CheckedContinuation<WebSocketFrame, Error>?
     private var sent: [String] = []
     private var closed = false
+    private let sendGate = Locked<OneShot<Void>?>(nil)
+
+    func stallSends() { sendGate.set(OneShot<Void>()) }
 
     init(request: URLRequest) {
         self.request = request
@@ -55,6 +58,7 @@ final class FakeWebSocketConnection: WebSocketConnection, @unchecked Sendable {
 
     func send(_ text: String) async throws {
         try record(text)
+        if let gate = sendGate.current { try await gate.value() }
     }
 
     private func record(_ text: String) throws {
@@ -84,6 +88,7 @@ final class FakeWebSocketConnection: WebSocketConnection, @unchecked Sendable {
     }
 
     func close() {
+        sendGate.current?.resolve(.failure(URLError(.cancelled)))
         lock.lock()
         closed = true
         let waiting = waiter
