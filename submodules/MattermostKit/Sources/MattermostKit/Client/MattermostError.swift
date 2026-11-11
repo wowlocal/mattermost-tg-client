@@ -124,6 +124,7 @@ extension MattermostError: LocalizedError {
             return error.localizedDescription
         case .decoding(let description):
             return "Unexpected server response: \(description)"
+        case .uploadStalled(.connectionUnavailable): return "Upload connection is unavailable."
         case .uploadStalled(.bodyProgress): return "Upload stopped making progress."
         case .uploadStalled(.responseWait): return "The upload received no response within 300 seconds."
         case .uploadStalled(.connectionReplaced): return "The upload connection was replaced."

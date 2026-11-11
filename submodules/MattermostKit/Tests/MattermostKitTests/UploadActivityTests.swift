@@ -53,7 +53,8 @@ final class UploadActivityTests: XCTestCase {
         XCTAssertNil(health.evidence(after: 0))
         clock.set(20)
         health.transportConnected(connection: UUID())
-        XCTAssertNotNil(health.evidence(after: 11))
+        XCTAssertNotNil(health.evidence(after: 9))
+        XCTAssertNil(health.evidence(after: 11))
         XCTAssertNil(health.evidence(after: 21))
     }
 
@@ -69,11 +70,45 @@ final class UploadActivityTests: XCTestCase {
 
     func testAnEarlyTransportTimeoutIsNotAWholeResponseWaitTimeout() {
         var activity = UploadActivity(now: 0, totalBytes: 1000)
-        XCTAssertFalse(activity.exhaustedResponseAllowance(elapsedRequest: 300, allowance: 300))
+        XCTAssertFalse(activity.exhaustedResponseAllowance(now: 300, allowance: 300))
         activity.record(bytesSent: 1000, now: 1)
-        XCTAssertFalse(activity.exhaustedResponseAllowance(elapsedRequest: 30, allowance: 300))
-        XCTAssertFalse(activity.exhaustedResponseAllowance(elapsedRequest: 299, allowance: 300))
-        XCTAssertTrue(activity.exhaustedResponseAllowance(elapsedRequest: 300, allowance: 300))
+        XCTAssertFalse(activity.exhaustedResponseAllowance(now: 30, allowance: 300))
+        XCTAssertFalse(activity.exhaustedResponseAllowance(now: 299, allowance: 300))
+        XCTAssertTrue(activity.exhaustedResponseAllowance(now: 301, allowance: 300))
+    }
+
+    func testLongMovingBodyGetsAFullAllowanceAfterItsLastByte() {
+        var activity = UploadActivity(now: 0, totalBytes: 1000)
+        for second in stride(from: 20, through: 360, by: 20) {
+            activity.record(bytesSent: Int64(second), now: Double(second))
+        }
+        activity.record(bytesSent: 1000, now: 361)
+        XCTAssertFalse(activity.exhaustedResponseAllowance(now: 400, allowance: 300))
+        XCTAssertFalse(activity.exhaustedResponseAllowance(now: 660, allowance: 300))
+        XCTAssertTrue(activity.exhaustedResponseAllowance(now: 661, allowance: 300))
+    }
+
+    func testRestartToZeroStillCountsAsABodyThatStarted() {
+        var activity = UploadActivity(now: 0, totalBytes: 1000)
+        XCTAssertFalse(activity.bodyStarted)
+        activity.record(bytesSent: 100, now: 1)
+        activity.record(bytesSent: 0, now: 2)
+        XCTAssertTrue(activity.bodyStarted)
+        XCTAssertTrue(activity.isStalled(now: 32, timeout: 30))
+    }
+
+    func testFailureBeforeUploadProgressCannotCancelItOnReconnect() {
+        let clock = Locked<TimeInterval>(10)
+        let health = UploadConnectionHealth(now: { clock.current })
+        health.transportFailed(connection: UUID())
+        clock.set(30)
+        health.transportConnected(connection: UUID())
+        XCTAssertNil(health.evidence(after: 20))
+        clock.set(40)
+        health.transportFailed(connection: UUID())
+        clock.set(50)
+        health.transportConnected(connection: UUID())
+        XCTAssertNotNil(health.evidence(after: 20))
     }
 
     func testEvidenceCanRestartAGivenUploadOnlyOnce() {
@@ -86,6 +121,7 @@ final class UploadActivityTests: XCTestCase {
     func testOnlyBodyStallsConsumeTheRetryCapAndResponseWaitIsTerminal() {
         let state = UploadRetryState()
         for _ in 0..<20 {
+            XCTAssertTrue(state.shouldRetry(.uploadStalled(.connectionUnavailable)))
             XCTAssertTrue(state.shouldRetry(.transport(URLError(.notConnectedToInternet))))
             XCTAssertTrue(state.shouldRetry(.server(AppError(message: "restart", statusCode: 503))))
             XCTAssertTrue(state.shouldRetry(.rateLimited(retryAfter: 30)))

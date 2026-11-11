@@ -1,6 +1,7 @@
 import Foundation
 
 public enum UploadStall: Sendable, Equatable {
+    case connectionUnavailable
     case bodyProgress
     case responseWait
     case connectionReplaced(String)
@@ -39,7 +40,7 @@ public final class UploadConnectionHealth: Sendable {
     }
     private struct State {
         var latest: Evidence?
-        var failedConnection: UUID?
+        var failedConnection: (id: UUID, at: TimeInterval)?
     }
     private let state = Locked(State())
     private let now: @Sendable () -> TimeInterval
@@ -54,14 +55,16 @@ public final class UploadConnectionHealth: Sendable {
     }
 
     func transportFailed(connection: UUID) {
-        state.withLock { $0.failedConnection = connection }
+        state.withLock { $0.failedConnection = (connection, now()) }
     }
 
     func transportConnected(connection: UUID) {
         state.withLock {
-            guard let failed = $0.failedConnection, failed != connection else { return }
+            guard let failed = $0.failedConnection, failed.id != connection else { return }
             $0.failedConnection = nil
-            $0.latest = Evidence(at: now(), reason: "failed websocket reconnected on a new transport")
+            if ($0.latest?.at ?? -.infinity) < failed.at {
+                $0.latest = Evidence(at: failed.at, reason: "failed websocket reconnected on a new transport")
+            }
         }
     }
 

@@ -132,7 +132,7 @@ extension MattermostClient {
             }
         } catch {
             configuration.onDiagnostic?("upload failed channel=\(channelId) after \(Int((ProcessInfo.processInfo.systemUptime - started) * 1000))ms bytes=\(delegate.bytesSent) code=\((error as NSError).code)")
-            if let urlError = error as? URLError, urlError.code == .timedOut, delegate.exhaustedResponseAllowance(elapsedRequest: ProcessInfo.processInfo.systemUptime - started, allowance: request.timeoutInterval) {
+            if let urlError = error as? URLError, urlError.code == .timedOut, delegate.exhaustedResponseAllowance(now: ProcessInfo.processInfo.systemUptime, allowance: request.timeoutInterval) {
                 throw MattermostError.uploadStalled(.responseWait)
             }
             throw MattermostError.wrap(error, url: request.url)
@@ -171,6 +171,7 @@ extension MattermostClient {
 
 struct UploadActivity {
     private(set) var bytesSent: Int64 = 0
+    private(set) var bodyStarted = false
     private(set) var totalBytes: Int64
     private(set) var lastProgressAt: TimeInterval
 
@@ -181,11 +182,12 @@ struct UploadActivity {
 
     var bodySent: Bool { bytesSent >= totalBytes }
 
-    func exhaustedResponseAllowance(elapsedRequest: TimeInterval, allowance: TimeInterval) -> Bool {
-        return self.bodySent && elapsedRequest >= allowance
+    func exhaustedResponseAllowance(now: TimeInterval, allowance: TimeInterval) -> Bool {
+        return self.bodySent && now - lastProgressAt >= allowance
     }
 
     mutating func record(bytesSent: Int64, now: TimeInterval, sentBodyBytes: Int64 = 0) {
+        if bytesSent > 0 || sentBodyBytes > 0 { self.bodyStarted = true }
         if bytesSent != self.bytesSent || sentBodyBytes > 0 {
             self.bytesSent = bytesSent
             self.lastProgressAt = now
@@ -208,15 +210,15 @@ final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, Sendable {
     }
 
     var bytesSent: Int64 { activity.current.bytesSent }
-    func exhaustedResponseAllowance(elapsedRequest: TimeInterval, allowance: TimeInterval) -> Bool {
-        return activity.current.exhaustedResponseAllowance(elapsedRequest: elapsedRequest, allowance: allowance)
+    func exhaustedResponseAllowance(now: TimeInterval, allowance: TimeInterval) -> Bool {
+        return activity.current.exhaustedResponseAllowance(now: now, allowance: allowance)
     }
     func resetActivity(totalBytes: Int64) { activity.set(UploadActivity(now: ProcessInfo.processInfo.systemUptime, totalBytes: totalBytes)) }
     func stall(timeout: TimeInterval, responseTimeout: TimeInterval, health: UploadConnectionHealth, retryState: UploadRetryState) -> (reason: String, kind: UploadStall)? {
         let activity = self.activity.current
         let now = ProcessInfo.processInfo.systemUptime
         if activity.isStalled(now: now, timeout: timeout) {
-            return ("no body progress for \(timeout)s", .bodyProgress)
+            return activity.bodyStarted ? ("no body progress for \(timeout)s after body started", .bodyProgress) : ("connection sent no body bytes for \(timeout)s", .connectionUnavailable)
         }
         if activity.bodySent, now - activity.lastProgressAt >= responseTimeout {
             return ("response wait exhausted \(responseTimeout)s", .responseWait)
