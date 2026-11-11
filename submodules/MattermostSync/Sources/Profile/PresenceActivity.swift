@@ -102,12 +102,10 @@ extension MattermostAccountSync {
 
     func reportPresenceActivity() async {
         guard let reporter = self.presenceReporter else { return }
-        let active = self.presenceActive.current
-        let connected = self.isConnected.current && !self.isStopped
         let intent = self.presenceIntent.with { intent -> PresenceActivityIntent in
             intent.revision += 1
-            intent.active = active
-            intent.connected = connected
+            intent.active = self.presenceActive.current
+            intent.connected = self.isConnected.current && !self.isStopped
             return intent
         }
         await reporter.update(intent)
@@ -120,10 +118,9 @@ extension MattermostAccountSync {
         #else
         let mobile = false
         #endif
-        let required = AccountSocketLifecycle.requiresSocket(mobile: mobile, foreground: MattermostSync.applicationInForeground.current, callSignalling: MattermostSync.needsCallSignalling(accountId: self.account.id, userId: self.ownUserId), stopped: self.isStopped)
         let intent = self.socketIntent.with { intent -> AccountSocketIntent in
             intent.revision += 1
-            intent.required = required
+            intent.required = AccountSocketLifecycle.requiresSocket(mobile: mobile, foreground: MattermostSync.applicationInForeground.current, callSignalling: MattermostSync.needsCallSignalling(accountId: self.account.id, userId: self.ownUserId), stopped: self.isStopped)
             if reconnect { intent.reconnect += 1 }
             if verify { intent.verify += 1 }
             return intent
