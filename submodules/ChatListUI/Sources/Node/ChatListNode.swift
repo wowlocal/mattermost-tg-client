@@ -1224,6 +1224,14 @@ public final class ChatListNode: ListViewImpl {
         case archive
     }
     
+    private var receiptPeerIds: [PeerId] = []
+    private var receiptVisible = false
+
+    func setReceiptVisibility(_ visible: Bool) {
+        self.receiptVisible = visible
+        mattermostChatListVisible(accountPeerId: self.context.account.peerId, peerIds: visible ? self.receiptPeerIds : [])
+    }
+
     private let fillPreloadItems: Bool
     private let context: AccountContext
     private let location: ChatListControllerLocation
@@ -2739,7 +2747,10 @@ public final class ChatListNode: ListViewImpl {
                         }
                     }
                 }
-                mattermostChatListVisible(accountPeerId: strongSelf.context.account.peerId, peerIds: receiptPeerIds)
+                strongSelf.receiptPeerIds = receiptPeerIds
+                if strongSelf.receiptVisible {
+                    mattermostChatListVisible(accountPeerId: strongSelf.context.account.peerId, peerIds: receiptPeerIds)
+                }
                 if !isHiddenItemVisible && strongSelf.currentState.hiddenItemShouldBeTemporaryRevealed {
                     strongSelf.updateState { state in
                         var state = state

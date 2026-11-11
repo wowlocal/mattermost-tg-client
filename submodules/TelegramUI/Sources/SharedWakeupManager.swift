@@ -1136,6 +1136,7 @@ public final class SharedWakeupManager {
     private func updateAccounts(hasTasks: Bool, endTaskAfterTransactionsComplete: UIBackgroundTaskIdentifier?) {
         if MattermostBackend.isEnabled {
             MattermostSync.updateApplicationActivity(inForeground: self.inForeground)
+            MattermostSync.updateVisibleReceiptAccounts(self.accountsAndTasks.filter { self.inForeground && $0.1 }.map { $0.0.id })
         }
         let hasBackgroundLocationTask = self.accountsAndTasks.contains(where: { $0.2.backgroundLocation })
         

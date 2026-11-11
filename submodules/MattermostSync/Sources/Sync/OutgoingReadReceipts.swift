@@ -16,7 +16,7 @@ extension MattermostAccountSync {
 
     var receiptPollingVisible: Bool {
         #if os(iOS)
-        return MattermostSync.applicationInForeground.current
+        return MattermostSync.applicationInForeground.current && MattermostSync.receiptVisibleAccounts.with { $0.contains(self.account.id) }
         #else
         return MattermostSync.receiptDisplayVisible.current
         #endif
@@ -56,7 +56,7 @@ extension MattermostAccountSync {
             interests.written = interests.written.filter { now - $0.value < 900 }
             return interests
         }
-        let visible = interests.list.union(interests.histories.keys)
+        let visible = interests.list.union(interests.focused.keys)
         let snapshot = self.state.with { state in
             state.channels.values.filter { $0.kind == .direct && (visible.contains($0.peerId) || interests.written[$0.channel.id] != nil) }.compactMap { channel -> (ChannelState, User)? in
                 guard let partner = channel.channel.directMessagePartnerId(myUserId: self.ownUserId), let user = state.users[partner], !user.isDeactivated else { return nil }
@@ -65,7 +65,7 @@ extension MattermostAccountSync {
         }
         guard !snapshot.isEmpty else { return }
         let candidates = snapshot.map { channel, user in
-            DirectMessageReceiptPollCandidate(channelId: channel.channel.id, revision: channel.channel.lastPostAt, isBot: user.isBot, priority: interests.histories[channel.peerId] != nil ? 2 : interests.list.contains(channel.peerId) ? 1 : 0, opened: interests.opened[channel.peerId] ?? 0)
+            DirectMessageReceiptPollCandidate(channelId: channel.channel.id, revision: channel.channel.lastPostAt, isBot: user.isBot, priority: interests.focused[channel.peerId] != nil ? 2 : interests.list.contains(channel.peerId) ? 1 : 0, opened: interests.opened[channel.peerId] ?? 0)
         }
         guard let candidate = self.receiptScheduler.with({ $0.next(candidates, now: now) }), let state = self.channelState(candidate.channelId), let partner = state.channel.directMessagePartnerId(myUserId: self.ownUserId) else { return }
         let channelId = candidate.channelId
@@ -112,7 +112,7 @@ extension MattermostAccountSync {
 
 struct ReceiptPollInterests {
     var opened: [PeerId: Int] = [:]
-    var histories: [PeerId: Int] = [:]
+    var focused: [PeerId: Int] = [:]
     var list = Set<PeerId>()
     var written: [String: Double] = [:]
 }

@@ -2065,11 +2065,7 @@ public final class AccountViewTracker {
         if MattermostBackend.isEnabled, let peerId = peerId, let accountPeerId = self.account?.peerId {
             return Signal { subscriber in
                 mattermostChatHistoryOpened(accountPeerId: accountPeerId, peerId: peerId)
-                let disposable = history.start(next: { subscriber.putNext($0) }, completed: { subscriber.putCompletion() })
-                return ActionDisposable {
-                    disposable.dispose()
-                    mattermostChatHistoryClosed(accountPeerId: accountPeerId, peerId: peerId)
-                }
+                return history.start(next: { subscriber.putNext($0) }, completed: { subscriber.putCompletion() })
             }
         }
         if !MattermostBackend.isEnabled, let peerId = peerId, peerId.namespace == Namespaces.Peer.CloudChannel {

@@ -129,6 +129,13 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
         return _validLayoutReady.get()
     }
     
+    private var receiptVisible = false
+
+    func setReceiptVisibility(_ visible: Bool) {
+        self.receiptVisible = visible
+        self.currentItemNodeValue?.listNode.setReceiptVisibility(visible)
+    }
+
     private var currentItemNodeValue: ChatListContainerItemNode?
     public var currentItemNode: ChatListNode {
         return self.currentItemNodeValue!.listNode
@@ -150,6 +157,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
     
     private func applyItemNodeAsCurrent(id: ChatListFilterTabEntryId, itemNode: ChatListContainerItemNode) {
         if let previousItemNode = self.currentItemNodeValue {
+            previousItemNode.listNode.setReceiptVisibility(false)
             previousItemNode.listNode.activateSearch = nil
             previousItemNode.listNode.presentAlert = nil
             previousItemNode.listNode.present = nil
@@ -182,6 +190,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
             previousItemNode.accessibilityElementsHidden = true
         }
         self.currentItemNodeValue = itemNode
+        itemNode.listNode.setReceiptVisibility(self.receiptVisible)
         itemNode.accessibilityElementsHidden = false
         
         itemNode.listNode.activateSearch = { [weak self] in

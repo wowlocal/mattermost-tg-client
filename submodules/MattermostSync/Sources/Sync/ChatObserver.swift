@@ -22,21 +22,20 @@ final class ChatObserver: MattermostChatObserver {
     }
 
     func chatHistoryOpened(peerId: PeerId) {
-        self.sync?.receiptInterests.with {
-            $0.histories[peerId, default: 0] += 1
-            $0.opened[peerId, default: 0] += 1
-        }
         self.sync?.chatOpened(peerId: peerId)
     }
 
     func chatHistoryFocused(peerId: PeerId) {
-        self.sync?.receiptInterests.with { $0.opened[peerId, default: 0] += 1 }
+        self.sync?.receiptInterests.with {
+            $0.focused[peerId, default: 0] += 1
+            $0.opened[peerId, default: 0] += 1
+        }
     }
 
-    func chatHistoryClosed(peerId: PeerId) {
+    func chatHistoryBlurred(peerId: PeerId) {
         self.sync?.receiptInterests.with { interests in
-            let count = (interests.histories[peerId] ?? 1) - 1
-            interests.histories[peerId] = count > 0 ? count : nil
+            let count = (interests.focused[peerId] ?? 1) - 1
+            interests.focused[peerId] = count > 0 ? count : nil
         }
     }
 

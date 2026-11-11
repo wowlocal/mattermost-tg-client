@@ -2391,6 +2391,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     
     override public func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        self.chatListDisplayNode.effectiveContainerNode.setReceiptVisibility(true)
                 
         if self.powerSavingMonitoringDisposable == nil {
             self.powerSavingMonitoringDisposable = (self.context.sharedContext.automaticMediaDownloadSettings
@@ -2874,6 +2875,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     
     override public func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        self.chatListDisplayNode.effectiveContainerNode.setReceiptVisibility(false)
         
         self.chatListDisplayNode.mainContainerNode.updateEnableAdjacentFilterLoading(false)
         

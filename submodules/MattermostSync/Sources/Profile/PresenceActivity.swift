@@ -7,6 +7,12 @@ import MattermostSyncCore
 import RelayCallsCore
 
 extension MattermostSync {
+    static let receiptVisibleAccounts = MMLocked<Set<AccountRecordId>>([])
+
+    public static func updateVisibleReceiptAccounts(_ ids: [AccountRecordId]) {
+        self.receiptVisibleAccounts.with { $0 = Set(ids) }
+    }
+
     static let receiptDisplayVisible = MMLocked<Bool>(false)
 
     public static func updateReceiptDisplayVisibility(visible: Bool) {

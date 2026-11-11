@@ -7868,9 +7868,12 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         }
     }
 
+    private var receiptHistoryVisible = false
+
     override public func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        if let peerId = self.chatLocation.peerId {
+        if !self.receiptHistoryVisible, let peerId = self.chatLocation.peerId {
+            self.receiptHistoryVisible = true
             mattermostChatHistoryFocused(accountPeerId: self.context.account.peerId, peerId: peerId)
         }
         
@@ -8303,6 +8306,10 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     
     override public func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        if self.receiptHistoryVisible, let peerId = self.chatLocation.peerId {
+            self.receiptHistoryVisible = false
+            mattermostChatHistoryBlurred(accountPeerId: self.context.account.peerId, peerId: peerId)
+        }
 
         self.walletTransferAnimationsVisible = false
         

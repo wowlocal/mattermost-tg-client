@@ -15,7 +15,7 @@ public protocol MattermostChatObserver: AnyObject {
     /// A history view of the chat opened (the chat screen, a thread, a profile's media tab).
     func chatHistoryOpened(peerId: PeerId)
     func chatHistoryFocused(peerId: PeerId)
-    func chatHistoryClosed(peerId: PeerId)
+    func chatHistoryBlurred(peerId: PeerId)
     func chatListVisible(peerIds: [PeerId])
     /// Where a thread view of a Mattermost thread starts (4F): its first unread reply, with the unread separator
     /// above it, when the user follows the thread and it has unread replies (Postbox keeps no read state for
@@ -71,10 +71,6 @@ func mattermostThreadReadState(accountPeerId: PeerId, peerId: PeerId, threadId: 
     return mattermostChatObservers.with({ $0[accountPeerId]?.observer })?.threadReadState(peerId: peerId, threadId: threadId, transaction: transaction)
 }
 
-func mattermostChatHistoryClosed(accountPeerId: PeerId, peerId: PeerId) {
-    mattermostChatObservers.with({ $0[accountPeerId]?.observer })?.chatHistoryClosed(peerId: peerId)
-}
-
 public func mattermostChatListVisible(accountPeerId: PeerId, peerIds: [PeerId]) {
     guard MattermostBackend.isEnabled else { return }
     mattermostChatObservers.with({ $0[accountPeerId]?.observer })?.chatListVisible(peerIds: peerIds)
@@ -83,4 +79,9 @@ public func mattermostChatListVisible(accountPeerId: PeerId, peerIds: [PeerId]) 
 public func mattermostChatHistoryFocused(accountPeerId: PeerId, peerId: PeerId) {
     guard MattermostBackend.isEnabled else { return }
     mattermostChatObservers.with({ $0[accountPeerId]?.observer })?.chatHistoryFocused(peerId: peerId)
+}
+
+public func mattermostChatHistoryBlurred(accountPeerId: PeerId, peerId: PeerId) {
+    guard MattermostBackend.isEnabled else { return }
+    mattermostChatObservers.with({ $0[accountPeerId]?.observer })?.chatHistoryBlurred(peerId: peerId)
 }
