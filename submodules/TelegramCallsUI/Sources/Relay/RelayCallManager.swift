@@ -93,6 +93,33 @@ public final class RelayCallManager: PresentationCallManager {
         RelayCallAudio.prepare()
         RelayCallKitBridge.install()
         RelayCallManager.instance = self
+        #if DEBUG
+        MattermostSync.debugCallCommand = { [weak self] action, command, completion in
+            guard ["call-state", "call-accept", "call-hangup", "call-push"].contains(action) else { return false }
+            relayOnMain {
+                guard let self else { completion(false, "no call manager", [:]); return }
+                if action == "call-push" {
+                    guard let file = command["file"] as? String, let data = try? Data(contentsOf: URL(fileURLWithPath: file)), let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+                        completion(false, "missing push file", [:]); return
+                    }
+                    let converted = Dictionary(uniqueKeysWithValues: payload.map { (AnyHashable($0.key), $0.value) })
+                    let handled = RelayCallManager.handleVoIPPush(converted, completion: {})
+                    completion(handled, handled ? nil : "invalid call push", [:])
+                    return
+                }
+                guard let call = self.currentCall else {
+                    completion(action == "call-state", action == "call-state" ? nil : "no direct call", ["hasCall": self.hasActiveCall])
+                    return
+                }
+                if action == "call-accept" { call.answer() }
+                if action == "call-hangup" { let _ = call.hangUp().start() }
+                let _ = (call.state |> take(1)).start(next: { state in
+                    completion(true, nil, ["hasCall": true, "accountId": String(call.context.account.id.int64), "callId": call.relayCallId ?? "", "state": String(describing: state.state)])
+                })
+            }
+            return true
+        }
+        #endif
 
         self.activeAccountsDisposable = (activeAccounts
         |> deliverOnMainQueue).start(next: { [weak self] contexts in

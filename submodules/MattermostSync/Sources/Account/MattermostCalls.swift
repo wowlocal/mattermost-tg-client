@@ -162,3 +162,9 @@ extension MattermostSync {
         await self.sync(accountId: accountId)?.ensureUsers(Set(userIds))
     }
 }
+
+#if DEBUG
+extension MattermostSync {
+    public static var debugCallCommand: ((_ action: String, _ command: [String: Any], _ completion: @escaping (Bool, String?, [String: Any]) -> Void) -> Bool)?
+}
+#endif

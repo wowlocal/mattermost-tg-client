@@ -309,6 +309,12 @@ final class MattermostDebugRemote {
             }) {
                 return
             }
+            if let handler = MattermostSync.debugCallCommand, handler(action, command, { [weak self] ok, error, extra in
+                self?.lastExtra = extra
+                self?.writeResult(id: id, ok: ok, error: error)
+            }) {
+                return
+            }
             // Chat-level commands of TelegramUI's debug driver (`compose`, `suggestions`, `pick`, `send`, …).
             if let handler = MattermostDebugHooks.chatCommand, handler(action, command, { [weak self] ok, error, info in
                 self?.lastChatInfo = info

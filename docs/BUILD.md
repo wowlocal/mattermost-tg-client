@@ -593,3 +593,11 @@ cd submodules/MattermostShare && swift test            # MM_INTEGRATION=1: also 
 ## Local Mattermost server
 
 See `infra/dev-server/README.md`; its push proxy: `infra/push-proxy/README.md`.
+
+### Review-only call verification in Debug
+
+On the simulator, `tools/relay-remote.py "$UDID" call-state`, `call-accept` and `call-hangup` use the real
+`RelayCallManager` / `RelayPresentationCall` methods (including CallKit answer transactions). `call-push file=…`
+passes a local JSON VoIP payload to the real push handler, without foregrounding the app. These hooks compile
+only in Debug. They let headless simulators test background signalling when the Simulator GUI is not installed;
+they do not establish delivery by APNs/PushKit on a physical device.
