@@ -319,8 +319,13 @@ One card per post, and only when the message carrying the text has no other medi
 ## Own status, profile, notifications, sharing (3F)
 
 **Automatic presence (2026-11-11).** `PresenceActivity` observes the account's `shouldKeepOnlinePresence`,
-reports on transitions/reconnects and every 30 s. Active reports call uncached `GET /users/me` before the
-WebSocket `user_update_active_status` (`user_is_active`, always `manual: false`). Both are necessary on
+reports on transitions/reconnects and every 30 s. Every retained connection refreshes its per-session hub timestamp
+with uncached `GET /users/me` before WebSocket `user_update_active_status` (`user_is_active`, always `manual: false`).
+Only actual activity sets `user_is_active=true`. The GET alone does not set global status online or advance the
+status's `last_activity_at`; idle false reports still let the server's away timeout expire. Refreshing only active
+connections was insufficient: when the active phone backgrounded, an old idle Mac connection could roll the global
+activity time backward. Refreshing the retained idle connection prevents that handoff rollback without inventing
+global user activity. Both are necessary on
 11.7.14 and 11.10.1: the action changes the user's status, but only the REST activity hook updates the hub's
 connection timestamp (by session token). Otherwise closing a second socket can roll the user back to an idle
 connection's activity time and away. Inactive desktop reports ask `SetStatusAwayIfNeeded`, never force away;

@@ -76,7 +76,7 @@ extension MattermostAccountSync {
         self.presenceReporter = PresenceActivityReporter { [weak self] active in
             guard let self, !self.isStopped, let socket = self.socket else { return }
             do {
-                if active { try await self.client.recordUserActivity() }
+                try await self.client.recordUserActivity()
                 guard !self.isStopped, active == self.presenceActive.current else { return }
                 try await socket.updateActiveStatus(isActive: active)
                 MMLog.log("presence: activity active=\(active) (automatic)")
