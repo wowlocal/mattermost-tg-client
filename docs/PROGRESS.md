@@ -826,3 +826,49 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
     2.5 GiB X5 scratch removed. Shared build caches, simulator data, production app and other tasks preserved.
   - **Evidence:** `/Users/michael/Developer/relay-calls-integration/results/presence-read-marks/REPORT.md`, with raw
     status timelines, source comparisons, build/test logs, native row states, screenshots and local fault probes.
+
+- **Presence/read marks/slow sends — review round 1** (`codex/presence-read-marks`, dev only; supersedes the
+  original-round policies above).
+  - **Findings 1/2/7:** socket demand is separate from activity. All foreground accounts get live events; a current
+    call or bounded VoIP push lease retains background signalling. A serial revisioned coordinator makes the last
+    connection intent win; presence transitions coalesce and failures back off. Native simulator ringing and real
+    CallKit-connected calls received remote hangup in background before foregrounding; two accounts received live
+    posts/calls while secondary. The real push handler also reconnected from background and cleared the call before
+    foreground; physical APNs/cold OS launch remains unverified.
+  - **Presence follow-up:** re-running the original complaint found active-only session refresh still rolled activity
+    backward when the active phone left an idle Mac. Every retained session now refreshes its hub timestamp, while
+    only actual use sends active=true. Native before: online to away with a 7.5-minute timestamp rollback. After:
+    same recent timestamp on handoff, away by 335 s idle without timestamp drift. Manual DND/away/offline survived
+    foreground phone heartbeats; a single phone without a call became offline within 2.6 s in background.
+  - **Findings 3/6/9:** common REST diagnostics/cache policy for activity. Missing non-ping replies fail only the
+    action; unfinished sends and missed pings still close the socket. Two native sockets remained connected through
+    120 s of missing activity replies, with sends/events working and backoff. Uploads detect unsent-body stalls
+    after 30 s; full-body response waits retain 300 s unless independent later WS transport/ping or path-change
+    evidence exists. Three total attempts, then failed/retry UI. Healthy 32 KiB at 512 B/s and 4 MiB at 64 KiB/s
+    each completed in 65 s; buffered response completed in 45 s. Native repeated transport failures exhausted three
+    attempts in 12.1 s, remained failed and delivered on explicit retry. A reachable silent peer still took 300.3 s,
+    as the owner explicitly chose; the original 31.5 s watchdog result is historical and unsafe, not current behavior.
+  - **Finding 4:** active interested DMs only; incoming newest/deactivated excluded; fixed rolling budget of 12 REST
+    reservations/minute including lazy migration, with confirmation backoff and non-viewing bots at one hour.
+    Actual local requests for 100 unconfirmed DMs: old serial loop 400/60 s, production scheduler harness 12/60 s.
+    No all-DM migration after bootstrap; one candidate Postbox transaction/tick. Battery/CPU was not measured.
+  - **Findings 5/10:** shared outgoing-read helper for chat/list/accessibility/context menu, including bot shortcuts.
+    Clean native iOS G: one to two in chat/list 45.220 s after Bob's view, persisted on relaunch; later H/I stayed
+    one while G stayed two. An older reply under the root watermark stayed one in the real context menu. Bot
+    answers kept membership 0/0; iOS chat/list and Mac native chat stayed one. Mac list glyph capture and a fresh
+    Mac one-to-two/relaunch repeat remain unverified because the desktop locked. No forced receipt/activity state.
+  - **Finding 8:** Mac away/DND strings localized in English/Russian; tomorrow's DND header visibly includes Nov 12
+    and 9:00 AM. Russian strings compile/lint, no Russian UI session tested.
+  - **Checks:** MattermostKit 229 tests (5 skipped), SyncCore 242, zero failures. Final iOS Debug build succeeded
+    (17 actions, 24.230 s; bundle checks passed); final Mac Debug build succeeded and was signed. Build scripts ran
+    sequentially. Named Relay simulators were absent; reused the existing iPhone 17, no device/runtime created.
+  - **Limits/evidence:** no production access, git push, release, physical device, actual VPN/interface switch or OS cold
+    PushKit launch. Mac was locked again after initial access; native bitmap renders omit list checkmark glyphs,
+    so those are not claimed as passing screenshots. Full per-finding commits, logs, screenshots, measurements and
+    cleanup are in `/Users/michael/Developer/relay-calls-integration/results/presence-read-marks/REPORT.md`,
+    section “Review round 1”.
+  - **Review cleanup:** both clients' task accounts logged out, isolated Keychain empty, task apps/proxy/probes/log
+    streams/caffeinate stopped, task simulator app/test runner uninstalled and microphone permission reset. Removed
+    the 1.4 GiB scratch root and own probe crashes/caches; kept evidence and shared caches/devices. Soft-deactivated
+    54 task-created fixture users after the initial seeding hit the dev safety limit; measured DMs used existing
+    load-test peers, which were not changed. No server configuration changed. Final internal/X5 free: 40/166 GiB.

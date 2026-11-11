@@ -192,6 +192,9 @@ prevents a root's cumulative outgoing watermark from accidentally marking a repl
 newest DM page is rewritten once, within that same request budget and only when the DM is of current interest,
 to add eligibility to older data. There is no all-DM migration after bootstrap. macOS's Telegram heuristic "an incoming
 message follows this one, therefore it was read" is disabled for Mattermost, particularly for bot replies.
+`Message`/`EngineMessage.outgoingReadState` is the shared UI policy; read-state facades, chat/list rows,
+accessibility and the iOS context menu all use it. Telegram bot shortcuts cannot override Mattermost eligibility;
+Saved Messages remains read.
 
 Server contract checked on 11.7.14 and in public 11.10.1 source: membership timestamps for other users are -1;
 viewing takes the greatest of membership and channel counters; totals are cumulative counted insertions,
@@ -341,7 +344,8 @@ suspended operations. Presence reports coalesce to the latest transition and ret
 report finishes; repeated failures of the same activity back off 30/60/120 s, including after reconnect.
 Pending posts use `set_online` only while active, so an upload completing in the background cannot revive online.
 Other users' polling compares `last_activity_at` as well as status/DND end, so an unchanged offline status can
-still update "last seen". macOS renders away/DND explicitly and reserves its online dot for online.
+still update "last seen". macOS renders away/DND explicitly and reserves its online dot for online. Status text uses localized English/Russian strings;
+a DND end outside the current day includes its date.
 
 | Mattermost | Telegram | Where |
 |---|---|---|
