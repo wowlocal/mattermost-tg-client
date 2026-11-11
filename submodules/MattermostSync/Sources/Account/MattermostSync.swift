@@ -284,7 +284,7 @@ public enum MattermostSync {
         let wasSatisfied = MMLocked<Bool?>(nil)
         let previousPath = MMLocked<NWPath?>(nil)
         monitor.pathUpdateHandler = { path in
-            let used = Set(path.availableInterfaces.filter { path.usesInterfaceType($0.type) }.map { "\($0.name):\($0.index)" })
+            let available = Set(path.availableInterfaces.map { "\($0.name):\($0.index)" })
             let priorPath = previousPath.with { previous -> NWPath? in
                 let old = previous
                 previous = path
@@ -292,7 +292,7 @@ public enum MattermostSync {
             }
             if let priorPath {
                 let oldUsed = Set(priorPath.availableInterfaces.first(where: { priorPath.usesInterfaceType($0.type) }).map { ["\($0.name):\($0.index)"] } ?? [])
-                for sync in self.accounts.with({ Array($0.values) }) { sync.client.configuration.uploadConnectionHealth.pathChanged(from: oldUsed, to: used) }
+                for sync in self.accounts.with({ Array($0.values) }) { sync.client.configuration.uploadConnectionHealth.pathChanged(from: oldUsed, to: available) }
             }
             let satisfied = path.status == .satisfied
             MMLog.log("network path: status=\(path.status) interfaces=\(path.availableInterfaces.map { $0.name }.joined(separator: ",")) expensive=\(path.isExpensive) constrained=\(path.isConstrained)")
