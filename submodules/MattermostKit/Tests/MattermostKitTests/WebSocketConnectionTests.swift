@@ -512,6 +512,7 @@ final class WebSocketConnectionTests: XCTestCase {
         await waitUntil { await socket.isConnected }
 
         let task = Task { try await socket.sendAction("get_statuses") }
+        await waitUntil { connection.sentTexts.count == 2 }
         await waitForSleepers(1)
         clock.advance(by: 10)
         do {
@@ -520,6 +521,14 @@ final class WebSocketConnectionTests: XCTestCase {
         } catch {
             XCTAssertEqual(error as? MattermostWebSocketError, .timeout)
         }
+        XCTAssertFalse(connection.isClosed)
+        await assertState(socket, connected: true)
+        connection.push(#"{"event":"posted","data":{}}"#)
+        let next = Task { try await socket.sendAction("user_update_active_status", data: ["user_is_active": .bool(true), "manual": .bool(false)]) }
+        await waitUntil { connection.sentTexts.count == 3 }
+        let sequence = try XCTUnwrap(connection.sentActions.last?["seq"]?.int64Value)
+        connection.push(#"{"status":"OK","seq_reply":\#(sequence)}"#)
+        _ = try await next.value
     }
 
     func testActionTimeoutIncludesBlockedSend() async throws {

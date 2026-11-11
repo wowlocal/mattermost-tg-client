@@ -563,13 +563,14 @@ public actor MattermostWebSocket {
         let waiter = OneShot<WebSocketResponse>()
         pendingReplies[sequence] = waiter
         let clock = self.clock
+        let sent = Locked(false)
         let timeoutTask = Task {
             do {
                 try await clock.sleep(for: timeout)
             } catch {
                 return
             }
-            if waiter.resolve(.failure(MattermostWebSocketError.timeout)) {
+            if waiter.resolve(.failure(MattermostWebSocketError.timeout)), !sent.current || action == "ping" {
                 connection.close()
             }
         }
@@ -581,6 +582,7 @@ public actor MattermostWebSocket {
         let sendTask = Task {
             do {
                 try await connection.send(text)
+                sent.set(true)
             } catch {
                 waiter.resolve(.failure(MattermostWebSocketError.connectionClosed))
             }
