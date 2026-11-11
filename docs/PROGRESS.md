@@ -872,3 +872,44 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
     the 1.4 GiB scratch root and own probe crashes/caches; kept evidence and shared caches/devices. Soft-deactivated
     54 task-created fixture users after the initial seeding hit the dev safety limit; measured DMs used existing
     load-test peers, which were not changed. No server configuration changed. Final internal/X5 free: 40/166 GiB.
+
+- **Presence/read marks/slow sends — review round 2** (`codex/presence-read-marks`, implementation and local checks;
+  positive Mac visible-window check unverified because the desktop remained locked).
+  - **A/J:** SyncCore selects an eligible own root above the checkpoint past newer incoming/thread/deleted posts;
+    real author/deletion/eligibility metadata replaces dead scheduler flags. Native iOS conversation: M1 confirmed
+    after Bob's newer incoming answer; M2 confirmed without an answer in 6.961 s; M2 stayed two through relaunch
+    while later M3 remained one. List-only confirmation took 23.551 s without opening the sender chat.
+  - **C/F/H:** receipt polling follows selected/displayed accounts, focused chats and displayed list rows, separately
+    from input/presence. Focus resets due time, open chats sample about every 10 s, errors/aborts do not grow unread
+    backoff. Scheduler checks due/budget before any Postbox access and reads only its selected DM. Real 100-DM
+    harness: 12 requests and six due/storage selections per minute; test with 15 genuinely unconfirmed rows in
+    backoff has no selections for a minute. Initial locked Mac session has zero receipt samples; the positive
+    visible/no-input Mac conversation/list/relaunch check remains unverified while the desktop is locked.
+  - **B/D/E (new owner policy, replaces round 1):** offline/5xx/429/ordinary transport errors retry as on main.
+    Only body stalls consume the three-stall limit. Response-wait timeout is terminal after one 300 s allowance;
+    early transport timeouts stay transient. A failed WebSocket must reconnect on a new transport, or the prior
+    preferred used interface must disappear/be replaced, for one evidence restart. Interface addition/preference
+    change with the old interface retained and a 3 s activation probe are not evidence. Further evidence is ignored
+    after that restart; body-progress timeout remains 30 s. Healthy buffer45/slow-small/slow-large cases completed
+    in 45/65/66 s; interface addition during buffered response took 45 s, one attempt. Dead path recovered in
+    4.046 s. Repeated normal periodic ping loss caused one restart; second upload completed after 107.504 s total.
+    Reachable silent peer: 300.265 s, one attempt; native iOS: failed/retry UI at 300.371 s with no second attempt,
+    including a short background/no-socket interval. Native video+text recovered after 55 s of clean HTTP503,
+    including 13 upload failures before attempt14 succeeded, with no user retry.
+  - **Additional proved transport defect:** graceful URLSession WebSocket close left receive suspended after ping
+    timeout, so the CLI could stay connected without reconnecting. Transport now releases pending send/receive
+    waiters and cancels its task. Unit test deliberately uses I/O that ignores cancellation; real periodic-ping
+    fault rerun then reconnects and performs the bounded restart above. No production cause is asserted.
+  - **G:** activity/socket inputs and revision now share the same lock. Ten rapid native iOS BG/FG cycles ended
+    with the last foreground connection retained and final send `connection=11 connected=true`.
+  - **I:** Russian Relay presence values are supplied through the actual in-memory Language dictionary, preserving
+    downloaded overrides. Removed unused .lproj/Xcode resource references. Actual lookup source passed 12 CLI
+    assertions; Russian native UI has not been exercised.
+  - **Checks:** Kit 236 tests (5 skipped), Core 246, zero failures. Both app build scripts have successful final
+    feature-code builds, run sequentially with disk checks; exact commands/results and failures fixed on the way
+    are in the report. Existing iPhone 17 reused; no new runtime/device. No push, merge, release or production access.
+  - **Fixture cleanup:** all 54 previous relay-r1 fixture accounts are inactive again; only the budget account was
+    temporarily reactivated. Shared load-test users unchanged. Task apps/accounts/helpers are stopped/logged out, isolated Keychain empty,
+    task simulator app uninstalled and 1.1 GiB scratch removed; shared caches/devices preserved. Final internal/X5
+    free space: 40/166 GiB. Positive Mac visible/no-input/list/relaunch verification remains a documented gap. Evidence and pending work: external REPORT.md
+    section “Review round 2” and results/presence-read-marks/review2/WORKING.md.

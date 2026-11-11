@@ -169,15 +169,26 @@ Each consumer observes the same Postbox source the Telegram one does (`KeyedOper
 
 ### Outgoing read marks (2026-11-11)
 
-`OutgoingReadReceipts` runs only for an active account and considers open histories, displayed chat-list rows and
-DMs written to within 15 minutes. It skips incoming newest posts and deactivated partners. A rolling per-account
-budget allows at most 12 reserved REST requests per minute, regardless of DM count; each sample costs two, an
-old-page migration costs one more. One candidate is scheduled per 5 s tick. Open histories take priority. Failed
-confirmations back off 30 s exponentially, up to 2 minutes for an open chat or 30 minutes otherwise; non-viewing
-bots back off for an hour. A new own post resets that DM's backoff. One Postbox transaction collects candidates
-per tick, rather than one per DM. A persisted post-key checkpoint resolves to Postbox's `maxOutgoingReadId`
-on every server read-state reset and survives relaunch/ID renumbering. Before querying the channel and then
-its members, the sampler freezes the newest known post key. It advances only when the other member's
+`OutgoingReadReceipts` is driven by display visibility, separately from online/input activity. iOS polls the
+selected account while foregrounded; macOS requires a visible, unhidden, non-minimized, unoccluded window and
+an unlocked, awake session. Thirty seconds without input does not stop receipt polling. Focus/blur callbacks
+identify displayed histories; list rows are cached and published only while their list is on screen. Recently
+written DMs remain of interest for 15 minutes. Deactivated partners are excluded.
+
+The scheduler first chooses a due channel using in-memory state and the remaining rolling budget of 12 REST
+request reservations per minute. If no channel is due or the budget is exhausted, it does no Postbox/store work.
+Only the selected channel opens a candidate transaction. SyncCore selects its newest eligible own root above the
+checkpoint, skipping newer incoming posts, thread replies and deleted posts. An old root without eligibility is
+refetched individually, not by rewriting every DM page. A sample reserves two requests; this lazy migration
+reserves one more. There is no all-DM migration after bootstrap.
+
+Opening/focusing a chat makes it due now; a displayed chat is sampled about every 10 seconds, with priority over
+list rows. Unconfirmed list rows back off from 30 seconds up to 30 minutes; non-viewing bots reach one hour while
+not open. A new channel post resets that channel's schedule, so an incoming answer cannot hide a pending own root.
+Network errors retry after 10 seconds without growing confirmation backoff; aborted samples become due again.
+No-pending/confirmed channels sleep until a new post or a new focus. A persisted post-key checkpoint resolves to
+Postbox's `maxOutgoingReadId` on every server read-state reset and survives relaunch/ID renumbering. Before querying the channel and then
+its members, the sampler freezes the selected own root's post key. It advances only when the other member's
 `msg_count == total_msg_count` **and** `msg_count_root == total_msg_count_root`. New messages arriving during
 the sample cannot enter that checkpoint. It deliberately waits for a fully caught-up sample rather than
 subtracting an unread count from loaded history: deletes remain in cumulative totals, missing history has no
@@ -188,10 +199,9 @@ Only counted DM roots (ordinary or `/me`, not silent unless force-notified) get
 `MattermostReadReceiptEligibleAttribute`; every other post keeps one check. Channel views advance **both**
 membership counters even with collapsed threads, without proving the replies were read. Therefore replies
 keep one check even in DMs; group messages/channels also keep one (no all-read receipt). The eligibility mark
-prevents a root's cumulative outgoing watermark from accidentally marking a reply or silent post read. The
-newest DM page is rewritten once, within that same request budget and only when the DM is of current interest,
-to add eligibility to older data. There is no all-DM migration after bootstrap. macOS's Telegram heuristic "an incoming
-message follows this one, therefore it was read" is disabled for Mattermost, particularly for bot replies.
+prevents a root's cumulative outgoing watermark from accidentally marking a reply or silent post read. Legacy
+roots acquire eligibility only after their individual post has been refetched within the same request budget.
+macOS's Telegram heuristic "an incoming message follows this one, therefore it was read" is disabled for Mattermost, particularly for bot replies.
 `Message`/`EngineMessage.outgoingReadState` is the shared UI policy; read-state facades, chat/list rows,
 accessibility and the iOS context menu all use it. Telegram bot shortcuts cannot override Mattermost eligibility;
 Saved Messages remains read.
@@ -339,13 +349,14 @@ presence: all logged-in iOS accounts connect in the foreground. A current call k
 background; a VoIP push acquires a 90 s signalling lease before accounts start, released by an ended/absent call or
 expiry. Once the call UI owns signalling, it consumes the push lease; terminal `call_state` events also release
 it, not only the legacy `call_ended` event. Without call demand, background sockets close and availability goes offline. A revisioned, serial socket
-coordinator owns connect/disconnect, activation probes and requested reconnects. The latest intent wins even across
-suspended operations. Presence reports coalesce to the latest transition and retry it immediately after an older
+coordinator owns connect/disconnect, activation probes and requested reconnects. Each intent's inputs and revision
+are read/assigned under the same lock. The latest intent wins even across suspended operations. Presence reports coalesce to the latest transition and retry it immediately after an older
 report finishes; repeated failures of the same activity back off 30/60/120 s, including after reconnect.
 Pending posts use `set_online` only while active, so an upload completing in the background cannot revive online.
 Other users' polling compares `last_activity_at` as well as status/DND end, so an unchanged offline status can
 still update "last seen". macOS renders away/DND explicitly and reserves its online dot for online. Status text uses localized English/Russian strings;
-a DND end outside the current day includes its date.
+Russian Relay keys enter the actual in-memory `Language` dictionary, preserving downloaded overrides rather than
+relying on an unused `.lproj`. A DND end outside the current day includes its date.
 
 | Mattermost | Telegram | Where |
 |---|---|---|
@@ -399,19 +410,35 @@ check after more than 10 s in the background also catches up and checks retained
 A socket waiting out its backoff (up to 60 s) reconnects as soon as a REST request gets an answer (`MattermostClient.Configuration.onServerReached`) or `NWPathMonitor` reports the network
 back. Sends queued while offline go out with the sender's own retry (≤ 5 s).
 
-**Stalled sends and diagnostics (2026-11-11, review round 1).** While body bytes remain unsent, uploads cancel
-following 30 s without progress. A restarted body resets that timer even below its previous byte high-water mark.
-After all bytes are sent, the existing 300 s request/response allowance remains: a buffered proxy, a slow link
-whose bytes were queued in the kernel, or server processing must not be mistaken for a 30 s body stall.
-Independent evidence after the upload's last progress can abort that response wait early: an established WebSocket
-transport failure/missed ping, or an actual `NWPath` change. A server-requested close, intentional local disconnect,
-sequence gap, initial path observation or missing non-ping action reply is not that evidence. Uploads have three
-attempts total (two re-uploads), then propagate failure to Telegram's retry button. Other write retry policy is
-unchanged. A reachable peer which accepts the body and never responds can still consume the 300 s allowance;
-without server feedback that case cannot be distinguished from healthy processing before a chosen deadline.
+**Stalled sends and diagnostics (2026-11-11, review round 2; replaces round 1's upload policy).** While body
+bytes remain unsent, uploads cancel following 30 seconds without growth. A restarted body resets that timer even
+below its previous high-water mark. Only these body stalls consume the three-stall retry limit. Ordinary offline,
+server-down, 5xx, 429 and transport failures retain the existing transient retry/backoff behavior: queued media
+recovers automatically like text.
+
+After the whole body is handed to the transport, buffered forwarding/server processing retains the 300-second
+response allowance. Exhausting that allowance is terminal for this automatic send: Telegram shows its failed
+state/retry control, without a second 300-second attempt. Independent evidence may restart an upload once: an
+established WebSocket failed and then completed a new transport connection (resuming the same server connection ID
+still counts as a new transport), or a path update removed/replaced the previous preferred used-interface identity.
+A normal-deadline missed ping qualifies only after reconnect; the three-second activation probe does not.
+Server-requested/local closes, sequence gaps, initial path observation, missing non-ping replies, cost changes and
+an interface merely being added do not qualify. The old interface must no longer be available; changing the default
+preference while retaining it does not cancel a transfer. After one evidence restart, later evidence is ignored for
+that upload operation; the restarted attempt retains its full response allowance. Explicit user retry creates a
+new operation. A silent reachable peer therefore fails after one response timeout, not three.
+
+The path monitor compares identities (`name:index`) from the app's default path, not a per-request socket route.
+It chooses the prior preferred candidate of a used type and compares it against all newly available interfaces,
+conservatively avoiding inference from additions or disappearance of an unrelated interface. Apple's
+[`NWPath` contract](https://developer.apple.com/documentation/network/nwpath) defines interface preference order
+and interface-type availability. This heuristic does not establish behavior for every physical VPN/multipath route;
+only the qualified event can cause the single bounded restart.
 
 WebSocket action deadlines include the send itself. A blocked send or missed ping closes the connection; a
-missing reply after a completed non-ping send fails only that action. Diagnostics record socket state/attempt,
+missing reply after a completed non-ping send fails only that action. The real URLSession transport explicitly
+releases pending send/receive waiters when closed and cancels its task: graceful WebSocket close alone was observed
+to leave a receive suspended after ping timeout, preventing reconnect. Diagnostics record socket state/attempt,
 backoff/handshake failures, path changes, REST method/path/duration/status, upload body completion/restarts/stalls,
 send attempts, bounded upload exhaustion, local preparation and per-channel queue waits. REST records omit query
 strings and all transport records omit headers/bodies/credentials. WebSocket errors may include the resume URL
