@@ -193,7 +193,8 @@ including soft-deleted posts, with separate root totals; join/leave posts are ex
 excludes notification-suppressed posts (`silent_notification`, unless `force_notification`), whereas 11.7.14's
 insertion path excludes only join/leave posts. Relay excludes silent posts on both versions. A bot's answer
 does not itself view its channel; bots that never call view retain one check. No inference from presence,
-typing, answers or timestamps hidden by the server is used.
+typing, answers or timestamps hidden by the server is used. macOS's message row also disables Telegram's
+separate "bots are always read" override; the entry builder alone is insufficient.
 
 | Mattermost | Telegram | Where |
 |---|---|---|
@@ -321,8 +322,9 @@ the server decides from the latest activity across devices and preserves manual 
 system input activity (including while another app is in front), sleep and lock state; after 30 s without input
 it stops active heartbeats, then the server's away timeout applies. iOS closes its socket when the account is
 inactive/backgrounded and opens it on activation, matching Mattermost mobile's foreground-only availability.
+Pending posts use `set_online` only while active, so an upload completing in the background cannot revive online.
 Other users' polling compares `last_activity_at` as well as status/DND end, so an unchanged offline status can
-still update "last seen". macOS renders away/DND explicitly and reserves the green dot for online.
+still update "last seen". macOS renders away/DND explicitly and reserves its online dot for online.
 
 | Mattermost | Telegram | Where |
 |---|---|---|
@@ -387,6 +389,10 @@ duration/status, upload bytes/inactivity, send attempts and retry delays, and pe
 the existing Relay logger and rotation; REST records omit query strings, and no request headers, message bodies
 or credentials are included. WebSocket errors may include the resume URL (connection id and sequence).
 These changes do not establish the cause of the owner's unreproduced production "Connecting…" report.
+
+File logging remains opt-in in release builds (iOS: About Relay → Diagnostics → Save Diagnostic Logs; macOS:
+Developer settings → Enable Logs). Enable it before reproducing an intermittent issue; the existing diagnostics
+export redacts the logs. The added timeline does not override the user's logging preference.
 
 **Background refresh:** `BGAppRefreshTask` `org.relaychat.Relay.refresh` (Telegram's Info.plist already permits
 `<bundle id>.refresh`; `UIBackgroundModes` has `fetch`), registered by `RelayBackgroundRefresh` (TelegramUI) when

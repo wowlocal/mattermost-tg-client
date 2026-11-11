@@ -787,3 +787,36 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
   15 MB circle on the Mac shows the blurred thumbnail with a download button; the notification service extension
   says "Video message". Not checked: recording on the Mac (camera permission needs the owner), the Mattermost web,
   desktop and mobile apps (a plain H.264/AAC `.mp4`).
+
+### 2026‑11‑11
+
+- **Daily-use feedback: presence, DM read marks, slow sends** (`codex/presence-read-marks`, both clients; dev server only).
+  - **Presence:** reproduced the stale second-socket rollback: online after a post → away with the idle socket's
+    connect-time activity when the posting socket closes. Automatic activity now sends uncached `/users/me`
+    (updates the hub's session timestamp) and `user_update_active_status` with `manual: false`, on activity changes,
+    reconnect and every 30 s while active. iOS closes inactive/background sockets; background-completing posts use
+    `set_online=false`. macOS follows system input, sleep and lock state. Changed `last_activity_at` updates an
+    unchanged status; Mac away/DND text and online dot agree with the server.
+  - **Read marks:** counted DM roots get two checks only from a fully caught-up pair of membership counters sampled
+    after the known post boundary. Post-key checkpoints survive relaunch and ID renumbering. Replies, groups,
+    channels and silent posts keep one. Both Mac Telegram shortcuts (incoming answer implies read; bots always
+    read) are disabled for Mattermost. Bot answers left membership counters at zero; no receipt is inferred.
+  - **Slow sends:** a silent upload held the old simulator app for 312 s including resume/retry; the new app retries
+    and finishes in 31.5 s. Separate text behind the upload sent promptly in both builds. Uploads now cancel after
+    30 s without byte progress; WebSocket action deadlines include a blocked send. Added request/preparation,
+    queue, attempt/retry and connection timelines to the existing opt-in log. A Mac post stalled for 30 s held the
+    next post for 30.8 s, visibly diagnosed in the log. No five-minute Connecting recovery reproduced: native Mac
+    recovered 10.5 s after a 70 s WebSocket blackhole, and ~32 ms after resuming over replacement transport.
+  - **Checks:** MattermostKit 223 tests (5 skipped), SyncCore 231, zero failures; both Debug apps build, Mac signed
+    and relaunched. Native Mac A: one → two in chat/list 3.45 s after Bob opened, retained on relaunch; B after Bob
+    left stayed one. Native Mac plus idle scripted client: online through 330 s of use and second-socket close,
+    away after five minutes idle, manual DND preserved through input. Away/DND and unchanged-offline last seen
+    checked in the Mac UI. After the extra bot-row fix, the native row reports `read=false` after an answer.
+  - **Gaps:** the named Relay simulators were absent; the sole existing iPhone 17 was used for upload checks until
+    another Snippets run began taking its foreground. No new simulator was created. iOS receipt UI/relaunch and
+    foreground network-change checks await an available Relay simulator; further Mac screenshots were blocked by
+    the desktop becoming locked. No real VPN/IP change, physical devices, production, release or push. Dev 11.7.14
+    has CRT default-on (on in these accounts), production 11.10.1 forces always-on; 11.10.1 also excludes silent
+    posts from insertion counters. Older cached pages beyond the newest-page migration may keep one until fetched.
+  - **Evidence:** `/Users/michael/Developer/relay-calls-integration/results/presence-read-marks/REPORT.md`, with raw
+    status timelines, source comparisons, build/test logs, native row states, screenshots and local fault probes.

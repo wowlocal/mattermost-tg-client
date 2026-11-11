@@ -143,6 +143,9 @@ screens, notifications while Relay isn't running (no push on macOS), sharing, vo
   echoing the secret, then publishes. Its `yc` path cannot log in with an OAuth token: Yandex Cloud refuses OAuth tokens
   issued after 2026-06-01 for IAM exchange, and `yc config set token` puts the token into its log file's name.
   `tools/relay-mac-publish.sh` uploads an already built release.
+- Isolated Debug verification: set `RELAY_DEBUG_DATA_PATH` to a disposable directory when launching the Debug
+  executable and running `tools/relay-mac-remote.swift`. Its data and Keychain services are isolated from the
+  normal Debug/Release profiles. `activate` brings that Debug instance's window forward after a background launch.
 - Debug remote (debug builds): `tools/relay-mac-remote.swift` posts a command on the distributed notification
   `org.relaychat.RelayMac.debug.command` and prints the answer from `relay-debug/result.json`: `state`, `login
   server= login= [password=|RELAY_REMOTE_PASSWORD]`, `login-state`, `open-chat query=`, `send text=`, `thread`, `notifications`, `screen
