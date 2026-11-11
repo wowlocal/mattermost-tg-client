@@ -1224,7 +1224,7 @@ public final class ChatListNode: ListViewImpl {
         case archive
     }
     
-    private var receiptPeerIds: [PeerId] = []
+    private var receiptPeerIds: [EnginePeer.Id] = []
     private var receiptVisible = false
 
     func setReceiptVisibility(_ visible: Bool) {
