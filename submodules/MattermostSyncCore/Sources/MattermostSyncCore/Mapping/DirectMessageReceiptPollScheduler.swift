@@ -58,6 +58,7 @@ public struct DirectMessageReceiptPollScheduler: Sendable {
         var lastCheck: TimeInterval = -.infinity
         var complete = false
     }
+    private var lastSelectionWasOpen = false
     private var listDue = false
     private var attempts: [String: Attempt] = [:]
     private var reservations: [(at: TimeInterval, count: Int, open: Bool)] = []
@@ -103,7 +104,7 @@ public struct DirectMessageReceiptPollScheduler: Sendable {
             if !attempt.complete && attempt.nextCheck <= now { due.append(candidate) }
         }
         listDue = due.contains(where: { $0.priority < 2 })
-        if listDue && reservations.filter({ $0.open }).reduce(0, { $0 + $1.count }) >= Self.requestsPerMinute / 2 {
+        if listDue && (lastSelectionWasOpen || reservations.filter({ $0.open }).reduce(0, { $0 + $1.count }) >= Self.requestsPerMinute / 2) {
             due.removeAll { $0.priority >= 2 }
         }
         due.sort {
@@ -113,6 +114,7 @@ public struct DirectMessageReceiptPollScheduler: Sendable {
             return left == right ? $0.channelId < $1.channelId : left < right
         }
         guard let candidate = due.first else { return nil }
+        lastSelectionWasOpen = candidate.priority >= 2
         attempts[candidate.channelId]?.lastCheck = now
         attempts[candidate.channelId]?.nextCheck = now + 10
         return candidate

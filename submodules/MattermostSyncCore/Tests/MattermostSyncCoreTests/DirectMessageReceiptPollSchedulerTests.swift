@@ -186,4 +186,19 @@ final class DirectMessageReceiptPollSchedulerTests: XCTestCase {
         XCTAssertNotNil(scheduler.next([chat], now: 151))
     }
 
+    func testSlowSamplesCannotGiveEveryTickToTheOpenChat() {
+        var scheduler = DirectMessageReceiptPollScheduler()
+        let open = candidate(0, priority: 2)
+        let row = candidate(1)
+        var rowTimes: [Int] = []
+        for second in stride(from: 0, through: 50, by: 10) {
+            let now = Double(second)
+            let next = scheduler.next([open, row], now: now)!
+            XCTAssertTrue(scheduler.reserveRequests(2, for: next, now: now))
+            if next.channelId == row.channelId { rowTimes.append(second) }
+            scheduler.completed(next, result: .unconfirmed, now: now)
+        }
+        XCTAssertEqual(rowTimes, [10, 40])
+    }
+
 }
