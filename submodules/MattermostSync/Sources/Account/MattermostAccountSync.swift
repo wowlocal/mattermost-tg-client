@@ -123,6 +123,8 @@ public final class MattermostAccountSync: @unchecked Sendable {
     /// Counts WebSocket connections; retries of offline requests wake up when it changes.
     let connectionGeneration = MMLocked<Int>(0)
     let isConnected = MMLocked<Bool>(false)
+    let presenceActive = MMLocked<Bool>(false)
+    let presenceReporting = MMLocked<Bool>(false)
     /// Set by `stop()` (logout, session expiry); a stopped sync is never restarted.
     private let stoppedFlag = MMLocked<Bool>(false)
     var isStopped: Bool {
@@ -194,6 +196,7 @@ public final class MattermostAccountSync: @unchecked Sendable {
 
     func start() {
         MMLog.log("account \(self.account.id.int64): starting sync for \(self.server.url) as \(self.server.userId)")
+        self.startPresenceActivity()
         MattermostResourceClients.shared.register(postbox: self.postbox, client: self.client)
         // Collapsed reply threads as last known, before any chat opens (the bootstrap checks the server).
         self.restoreCollapsedThreads()
@@ -333,6 +336,9 @@ public final class MattermostAccountSync: @unchecked Sendable {
             }
         })
         Task {
+            #if os(iOS)
+            guard self.presenceActive.current else { return }
+            #endif
             await socket.connect()
         }
     }
@@ -344,6 +350,7 @@ public final class MattermostAccountSync: @unchecked Sendable {
             self.isConnected.with { $0 = true }
             self.isWaitingToReconnect.with { $0 = false }
             self.connectionGeneration.with { $0 += 1 }
+            self.addTask(Task { [weak self] in await self?.reportPresenceActivity() })
             self.account.network.mattermostSetConnectionState(isConnected: true, isNetworkAvailable: true)
             // Relay calls: the plugin's events are not replayed, so every (re)connect reloads the live calls.
             self.addTask(Task { [weak self] in
@@ -423,6 +430,9 @@ public final class MattermostAccountSync: @unchecked Sendable {
         guard let socket = self.socket, !self.isStopped, self.isWaitingToReconnect.current else {
             return
         }
+        #if os(iOS)
+        guard self.presenceActive.current else { return }
+        #endif
         let now = CFAbsoluteTimeGetCurrent()
         let due = self.lastEarlyReconnect.with { last -> Bool in
             if now - last < 5.0 {

@@ -625,7 +625,7 @@ extension MattermostAccountSync {
             var changed: [UserStatus] = []
             for status in statuses {
                 let previous = values.knownStatuses[status.userId]
-                if previous?.status != status.status || previous?.dndEndTime != status.dndEndTime {
+                if previous?.status != status.status || previous?.dndEndTime != status.dndEndTime || previous?.lastActivityAt != status.lastActivityAt {
                     changed.append(status)
                 }
                 values.knownStatuses[status.userId] = status

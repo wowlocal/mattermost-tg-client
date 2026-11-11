@@ -443,6 +443,21 @@ final class WebSocketConnectionTests: XCTestCase {
 
     // MARK: Actions
 
+    func testActivityIsAlwaysAutomatic() async throws {
+        let socket = makeSocket()
+        await socket.connect()
+        let connection = try await connection(0)
+        connection.push(Fixtures.hello(connectionId: "abc"))
+        await waitUntil { await socket.isConnected }
+        for (index, active) in [true, false].enumerated() {
+            let action = Task { try await socket.updateActiveStatus(isActive: active) }
+            await waitUntil { connection.sentTexts.count == index + 2 }
+            XCTAssertEqual(connection.sentActions[index + 1], ["action": "user_update_active_status", "seq": .int(Int64(index + 2)), "data": ["user_is_active": .bool(active), "manual": false]])
+            connection.push("{\"status\":\"OK\",\"seq_reply\":\(index + 2)}")
+            try await action.value
+        }
+    }
+
     func testUserTyping() async throws {
         let socket = makeSocket()
         await socket.connect()

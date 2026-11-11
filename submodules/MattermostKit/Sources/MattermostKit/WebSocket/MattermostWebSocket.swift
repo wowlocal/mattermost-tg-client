@@ -266,6 +266,10 @@ public actor MattermostWebSocket {
         try await sendAction("ping")
     }
 
+    public func updateActiveStatus(isActive: Bool) async throws {
+        try await sendAction("user_update_active_status", data: ["user_is_active": .bool(isActive), "manual": .bool(false)])
+    }
+
     /// Sends a `ping` action that fails after `timeout`, e.g. a quick check that the connection survived while
     /// the app was suspended.
     @discardableResult

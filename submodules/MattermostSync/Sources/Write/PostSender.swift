@@ -309,7 +309,7 @@ final class PostSender: MattermostMessageSender {
             self.inFlight.with { _ = $0.insert(pendingPostId) }
             do {
                 let post = try await sync.retryingTransient("post \(messageId)", isStillWanted: { await sync.messageExists(messageId) }) {
-                    try await sync.client.createPost(draft.post)
+                    try await sync.client.createPost(draft.post, setOnline: sync.presenceActive.current)
                 }
                 outcome.with { $0 = .success(post) }
             } catch {

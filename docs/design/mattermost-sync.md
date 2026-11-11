@@ -283,6 +283,19 @@ One card per post, and only when the message carrying the text has no other medi
 
 ## Own status, profile, notifications, sharing (3F)
 
+**Automatic presence (2026-11-11).** `PresenceActivity` observes the account's `shouldKeepOnlinePresence`,
+reports on transitions/reconnects and every 30 s. Active reports call uncached `GET /users/me` before the
+WebSocket `user_update_active_status` (`user_is_active`, always `manual: false`). Both are necessary on
+11.7.14 and 11.10.1: the action changes the user's status, but only the REST activity hook updates the hub's
+connection timestamp (by session token). Otherwise closing a second socket can roll the user back to an idle
+connection's activity time and away. Inactive desktop reports ask `SetStatusAwayIfNeeded`, never force away;
+the server decides from the latest activity across devices and preserves manual DND/away/offline. macOS uses
+system input activity (including while another app is in front), sleep and lock state; after 30 s without input
+it stops active heartbeats, then the server's away timeout applies. iOS closes its socket when the account is
+inactive/backgrounded and opens it on activation, matching Mattermost mobile's foreground-only availability.
+Other users' polling compares `last_activity_at` as well as status/DND end, so an unchanged offline status can
+still update "last seen". macOS renders away/DND explicitly and reserves the green dot for online.
+
 | Mattermost | Telegram | Where |
 |---|---|---|
 | Own status: `GET /users/me/status` (bootstrap, every new WebSocket connection), own `status_change` (another device, the server ending a DND, auto away); set with `PUT /users/{id}/status` (`dnd_end_time` in Unix seconds, truncated to the minute by the server, which restores the previous status at the end) | Settings: a row named after the status (icon in its colour, "Until 4:35 PM" for a DND end) → Status screen (Online / Away / Do Not Disturb with 30 min, 1 h, 2 h, tomorrow 9:00, a date and time / Offline); the same choices at the top of the Settings tab's long-press menu (Do Not Disturb pushes its durations). The own presence in Postbox carries the status too. | MattermostSync `Profile/MattermostProfile.swift` (`MattermostProfile` API); SyncCore `DoNotDisturbDuration`; MattermostUI `MattermostStatusControllers.swift`; PeerInfoScreen `MattermostProfileSettings.swift` |
