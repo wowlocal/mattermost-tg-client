@@ -535,6 +535,25 @@ final class WebSocketConnectionTests: XCTestCase {
         _ = try await next.value
     }
 
+    func testShortActivationProbeTimeoutDoesNotReportDeadTransportEvidence() async throws {
+        let failures = Locked(0)
+        var configuration = MattermostWebSocket.Configuration(pingInterval: nil, actionTimeout: 10, handshakeTimeout: nil)
+        configuration.onTransportFailure = { failures.withLock { $0 += 1 } }
+        let socket = makeSocket(configuration: configuration)
+        await socket.connect()
+        let first = try await connection(0)
+        first.push(Fixtures.hello(connectionId: "first"))
+        await waitUntil { await socket.isConnected }
+        let ping = Task { try await socket.ping(timeout: 3) }
+        await waitUntil { first.sentTexts.count == 2 }
+        await waitForSleepers(1)
+        clock.advance(by: 3)
+        do { _ = try await ping.value; XCTFail("Expected probe timeout") } catch { }
+        await waitUntil { first.isClosed }
+        await waitForState(socket, .waitingToReconnect(attempt: 2, delay: 0.75))
+        XCTAssertEqual(failures.current, 0)
+    }
+
     func testActionTimeoutIncludesBlockedSend() async throws {
         let socket = makeSocket(configuration: .init(pingInterval: nil, actionTimeout: 3, handshakeTimeout: nil))
         await socket.connect()
@@ -573,7 +592,10 @@ final class WebSocketConnectionTests: XCTestCase {
     }
 
     func testPingKeepsConnectionAliveAndTimeoutReconnects() async throws {
-        let socket = makeSocket(configuration: .init(pingInterval: 30, actionTimeout: 5, handshakeTimeout: nil))
+        let failed = Locked(false)
+        var configuration = MattermostWebSocket.Configuration(pingInterval: 30, actionTimeout: 5, handshakeTimeout: nil)
+        configuration.onTransportFailure = { failed.set(true) }
+        let socket = makeSocket(configuration: configuration)
         await socket.connect()
         let first = try await connection(0)
         first.push(Fixtures.hello(connectionId: "abc"))
@@ -600,6 +622,7 @@ final class WebSocketConnectionTests: XCTestCase {
         clock.advance(by: 0.75)
         let second = try await connection(1)
         XCTAssertEqual(query(second.request)["connection_id"], "abc")
+        XCTAssertTrue(failed.current)
     }
 
     func testFailedPingReplyStillCountsAsAlive() async throws {

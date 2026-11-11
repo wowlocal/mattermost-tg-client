@@ -88,6 +88,7 @@ public actor MattermostWebSocket {
         public var userAgent: String?
         public var onDiagnostic: (@Sendable (String) -> Void)?
         public var onTransportFailure: (@Sendable () -> Void)?
+        public var onTransportConnected: (@Sendable () -> Void)?
 
         public init(
             authentication: Authentication = .header,
@@ -323,9 +324,10 @@ public actor MattermostWebSocket {
     // MARK: - Connection loop
 
     private var transportFailureReported = false
+    private var activationProbeTimedOut = false
 
     private func reportTransportFailure() {
-        guard !transportFailureReported else { return }
+        guard !transportFailureReported, !activationProbeTimedOut else { return }
         transportFailureReported = true
         configuration.onTransportFailure?()
     }
@@ -353,6 +355,7 @@ public actor MattermostWebSocket {
                 }
                 connection = newConnection
                 transportFailureReported = false
+                activationProbeTimedOut = false
                 handshakeComplete = false
                 isResumeAttempt = configuration.resumesConnections && connectionId != nil
                 handshakeProbeSequence = nil
@@ -489,6 +492,7 @@ public actor MattermostWebSocket {
         handshakeTask = nil
         consecutiveFailures = 0
         setState(.connected(info))
+        configuration.onTransportConnected?()
         startPinging(connection)
     }
 
@@ -582,7 +586,8 @@ public actor MattermostWebSocket {
                 return
             }
             if waiter.resolve(.failure(MattermostWebSocketError.timeout)), !sent.current || action == "ping" {
-                self.reportTransportFailure()
+                if action == "ping", timeout < self.configuration.actionTimeout { self.activationProbeTimedOut = true }
+                if !self.activationProbeTimedOut { self.reportTransportFailure() }
                 connection.close()
             }
         }

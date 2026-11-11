@@ -19,6 +19,7 @@ public enum MattermostError: Error, Sendable, Equatable {
     case decoding(String)
     /// The task or request was cancelled.
     case cancelled
+    case uploadStalled(UploadStall)
 }
 
 extension MattermostError {
@@ -36,6 +37,7 @@ extension MattermostError {
             return a.code == b.code
         case let (.decoding(a), .decoding(b)):
             return a == b
+        case let (.uploadStalled(a), .uploadStalled(b)): return a == b
         case (.cancelled, .cancelled):
             return true
         default:
@@ -51,7 +53,7 @@ extension MattermostError {
         case .notFound: return 404
         case .rateLimited: return 429
         case .server(let error): return error.statusCode
-        case .transport, .decoding, .cancelled: return nil
+        case .transport, .decoding, .cancelled, .uploadStalled: return nil
         }
     }
 
@@ -60,7 +62,7 @@ extension MattermostError {
         switch self {
         case .unauthorized(let error), .forbidden(let error), .notFound(let error): return error
         case .server(let error): return error
-        case .rateLimited, .transport, .decoding, .cancelled: return nil
+        case .rateLimited, .transport, .decoding, .cancelled, .uploadStalled: return nil
         }
     }
 
@@ -68,6 +70,7 @@ extension MattermostError {
     /// rate limiting and 5xx responses. Never true for other 4xx responses.
     public var isTransient: Bool {
         switch self {
+        case .uploadStalled(let reason): return reason != .responseWait
         case .transport, .rateLimited:
             return true
         case .server(let error):
@@ -121,6 +124,9 @@ extension MattermostError: LocalizedError {
             return error.localizedDescription
         case .decoding(let description):
             return "Unexpected server response: \(description)"
+        case .uploadStalled(.bodyProgress): return "Upload stopped making progress."
+        case .uploadStalled(.responseWait): return "The upload received no response within 300 seconds."
+        case .uploadStalled(.connectionReplaced): return "The upload connection was replaced."
         case .cancelled:
             return "Cancelled"
         }

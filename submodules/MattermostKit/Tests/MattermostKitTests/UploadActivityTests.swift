@@ -42,15 +42,49 @@ final class UploadActivityTests: XCTestCase {
         XCTAssertTrue(activity.isStalled(now: 630, timeout: 30))
     }
 
-    func testOnlyIndependentEvidenceAfterLastProgressInvalidatesAResponseWait() {
+    func testFailedWebSocketNeedsANewTransportBeforeItIsEvidence() {
         let clock = Locked<TimeInterval>(10)
         let health = UploadConnectionHealth(now: { clock.current })
-        health.pathChanged()
-        XCTAssertNil(health.evidence(after: 10))
-        XCTAssertNil(health.evidence(after: 11))
+        let old = UUID()
+        health.transportConnected(connection: old)
+        health.transportFailed(connection: old)
+        XCTAssertNil(health.evidence(after: 0))
+        health.transportConnected(connection: old)
+        XCTAssertNil(health.evidence(after: 0))
         clock.set(20)
-        health.transportFailed()
-        XCTAssertEqual(health.evidence(after: 11)?.reason, "websocket transport failed")
+        health.transportConnected(connection: UUID())
+        XCTAssertNotNil(health.evidence(after: 11))
         XCTAssertNil(health.evidence(after: 21))
+    }
+
+    func testAddingAnInterfaceIsNotEvidenceButReplacingUsedInterfaceIs() {
+        let clock = Locked<TimeInterval>(10)
+        let health = UploadConnectionHealth(now: { clock.current })
+        health.pathChanged(from: [], to: ["wifi"])
+        health.pathChanged(from: ["wifi"], to: ["wifi", "vpn"])
+        XCTAssertNil(health.evidence(after: 0))
+        health.pathChanged(from: ["wifi"], to: ["cellular"])
+        XCTAssertNotNil(health.evidence(after: 0))
+    }
+
+    func testEvidenceCanRestartAGivenUploadOnlyOnce() {
+        let state = UploadRetryState()
+        XCTAssertTrue(state.claimEvidenceRestart())
+        XCTAssertFalse(state.claimEvidenceRestart())
+        XCTAssertFalse(state.claimEvidenceRestart())
+    }
+
+    func testOnlyBodyStallsConsumeTheRetryCapAndResponseWaitIsTerminal() {
+        let state = UploadRetryState()
+        for _ in 0..<20 {
+            XCTAssertTrue(state.shouldRetry(.transport(URLError(.notConnectedToInternet))))
+            XCTAssertTrue(state.shouldRetry(.server(AppError(message: "restart", statusCode: 503))))
+            XCTAssertTrue(state.shouldRetry(.rateLimited(retryAfter: 30)))
+        }
+        XCTAssertTrue(state.shouldRetry(.uploadStalled(.bodyProgress)))
+        XCTAssertTrue(state.shouldRetry(.uploadStalled(.bodyProgress)))
+        XCTAssertFalse(state.shouldRetry(.uploadStalled(.bodyProgress)))
+        XCTAssertFalse(state.shouldRetry(.uploadStalled(.responseWait)))
+        XCTAssertFalse(MattermostError.uploadStalled(.responseWait).isTransient)
     }
 }

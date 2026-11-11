@@ -130,9 +130,17 @@ extension MattermostClient {
         }
         let health = self.configuration.uploadConnectionHealth
         let onTransportFailure = configuration.onTransportFailure
+        let connection = Locked(UUID())
+        let onConnected = configuration.onTransportConnected
         configuration.onTransportFailure = {
-            health.transportFailed()
+            health.transportFailed(connection: connection.current)
             onTransportFailure?()
+        }
+        configuration.onTransportConnected = {
+            let new = UUID()
+            connection.set(new)
+            health.transportConnected(connection: new)
+            onConnected?()
         }
         return MattermostWebSocket(
             serverURL: serverURL,

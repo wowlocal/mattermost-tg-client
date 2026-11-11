@@ -13,8 +13,8 @@ final class UploadTimeoutTests: StubbedClientTestCase {
         do {
             _ = try await client.uploadFiles([FileUpload(fileName: "stalled.txt", content: .data(Data([1])))], channelId: "channel")
             XCTFail("Expected timeout")
-        } catch MattermostError.transport(let error) {
-            XCTAssertEqual((error as NSError).code, URLError.timedOut.rawValue)
+        } catch MattermostError.uploadStalled(let reason) {
+            XCTAssertEqual(reason, .bodyProgress)
         }
         XCTAssertLessThan(Date().timeIntervalSince(started), 1)
     }

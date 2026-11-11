@@ -91,7 +91,7 @@ extension MattermostAccountSync {
     /// Runs `body`, retrying transient errors (offline, server down, 5xx, 429) with a backoff of up to 5 s,
     /// sooner once the WebSocket reconnects, for as long as `isStillWanted` holds.
     @discardableResult
-    func retryingTransient<T>(_ what: String, maximumAttempts: Int? = nil, isStillWanted: () async -> Bool, _ body: () async throws -> T) async throws -> T {
+    func retryingTransient<T>(_ what: String, uploadRetry: UploadRetryState? = nil, isStillWanted: () async -> Bool, _ body: () async throws -> T) async throws -> T {
         var attempt = 0
         while true {
             try Task.checkCancellation()
@@ -103,8 +103,8 @@ extension MattermostAccountSync {
                 return result
             } catch let error as MattermostError where error.isTransient {
                 attempt += 1
-                if let maximumAttempts, attempt >= maximumAttempts {
-                    MMLog.log("send attempt: \(what) exhausted \(maximumAttempts) attempts; message will fail")
+                if let uploadRetry, !uploadRetry.shouldRetry(error) {
+                    MMLog.log("send attempt: \(what) exhausted upload body-stall retries; message will fail")
                     throw error
                 }
                 let isWanted = await isStillWanted()

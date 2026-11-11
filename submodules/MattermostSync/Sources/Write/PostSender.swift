@@ -242,8 +242,9 @@ final class PostSender: MattermostMessageSender {
         }
         progress(0.0)
         let started = CFAbsoluteTimeGetCurrent()
-        let response = try await sync.retryingTransient("upload \(messageId)", maximumAttempts: 3, isStillWanted: { await sync.messageExists(messageId) }) {
-            try await sync.client.uploadFiles(items.map { $0.upload }, channelId: channelId, progress: { value in
+        let uploadRetry = UploadRetryState()
+        let response = try await sync.retryingTransient("upload \(messageId)", uploadRetry: uploadRetry, isStillWanted: { await sync.messageExists(messageId) }) {
+            try await sync.client.uploadFiles(items.map { $0.upload }, channelId: channelId, retryState: uploadRetry, progress: { value in
                 progress(Float(value.fractionCompleted))
             })
         }
