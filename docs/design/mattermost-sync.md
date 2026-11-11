@@ -192,7 +192,8 @@ row gets the turn after an open chat, including when slow requests make every ti
 List failure counts are independent of open-chat samples; returning to the list makes the first list sample due without
 inheriting time spent in the chat. Unconfirmed list rows back off from 30 seconds up to 30 minutes; non-viewing
 bots use one hour while not open. A new channel post resets that channel's completion/list schedule, so an
-incoming answer cannot hide a pending own root; it does not extend the open-chat fast minute.
+incoming answer cannot hide a pending own root; it does not extend the open-chat fast minute. Expiry of a
+recent-send interest does not restart that minute either.
 Network errors retry after 10 seconds without growing confirmation backoff; aborted/incomplete scans become due
 again. Permanent errors (including 403/404) and invalid DM membership complete the attempt until a new post or
 focus; no-pending/confirmed channels also sleep until then. iOS releases a history's focus on disappearance or

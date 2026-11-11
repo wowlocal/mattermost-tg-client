@@ -919,7 +919,7 @@ The open decisions in [09](plan/09-risks-and-decisions.md#open-decisions) were n
 - **Receipt fairness/backoff:** 24 REST requests per rolling minute, including migration requests; open histories
   use at most half while a list row is due, and due rows alternate with open histories even when samples are slow.
   Open chats sample every10s for the first minute after focus/own post, then30/60s. Open samples do not inflate
-  list failures. Permanent 403/404/invalid membership completes until revision/focus; transient retries preserve
+  list failures; expiry of recent-send interest does not restart the fast minute. Permanent 403/404/invalid membership completes until revision/focus; transient retries preserve
   confirmation backoff. Candidate scans yield after180 entries, resume next tick and reject incoming authors
   before migration cursor queries. ChatController deinit releases any focus left by root replacement.
 - **Upload edges:** a30s stall before any body byte is a connectivity failure and never consumes the three

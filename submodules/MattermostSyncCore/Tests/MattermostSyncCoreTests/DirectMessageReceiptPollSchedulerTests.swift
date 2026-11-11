@@ -201,4 +201,18 @@ final class DirectMessageReceiptPollSchedulerTests: XCTestCase {
         XCTAssertEqual(rowTimes, [10, 40])
     }
 
+    func testExpiredSendInterestDoesNotRestartTheOpenFastMinute() {
+        var scheduler = DirectMessageReceiptPollScheduler()
+        var chat = candidate(0, priority: 2)
+        chat.written = 1
+        for second in 0...210 {
+            if let next = scheduler.next([chat], now: Double(second)) {
+                scheduler.completed(next, result: .unconfirmed, now: Double(second))
+            }
+        }
+        chat.written = 0
+        XCTAssertNil(scheduler.next([chat], now: 211))
+        XCTAssertNotNil(scheduler.next([chat], now: 270))
+    }
+
 }

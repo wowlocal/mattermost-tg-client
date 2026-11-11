@@ -89,7 +89,7 @@ public struct DirectMessageReceiptPollScheduler: Sendable {
                 attempt.nextCheck = now
                 attempt.listFailures = 0
             }
-            if candidate.priority >= 2 && (attempt.priority < 2 || attempt.opened != candidate.opened || attempt.written != candidate.written) {
+            if candidate.priority >= 2 && (attempt.priority < 2 || attempt.opened != candidate.opened || candidate.written > attempt.written) {
                 attempt.fastUntil = now + 60
                 attempt.slowOpenSamples = 0
                 attempt.nextCheck = now
