@@ -90,6 +90,20 @@ final class DirectMessageReceiptPollSchedulerTests: XCTestCase {
         XCTAssertNotNil(scheduler.next([candidate(0, revision: 2)], now: 60))
     }
 
+    func testFifteenUnconfirmedRowsInBackoffCauseNoStorageSelectionsForAMinute() {
+        var scheduler = DirectMessageReceiptPollScheduler()
+        let channels = (0..<15).map { candidate($0) }
+        for round in 0..<8 {
+            for (index, channel) in channels.enumerated() {
+                let now = Double(round * 4000 + index * 61)
+                XCTAssertNotNil(scheduler.next([channel], now: now))
+                XCTAssertTrue(scheduler.reserveRequests(2, now: now))
+                scheduler.completed(channel, result: .unconfirmed, now: now)
+            }
+        }
+        for now in 28855..<28915 { XCTAssertNil(scheduler.next(channels, now: Double(now))) }
+    }
+
     func testOpenChatGetsSixSamplesAMinuteWithoutInputActivity() {
         var scheduler = DirectMessageReceiptPollScheduler()
         let chat = candidate(0, priority: 2)
