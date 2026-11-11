@@ -83,6 +83,10 @@ public struct EnginePeerReadCounters: Equatable {
         return state.isOutgoingMessageIndexRead(index)
     }
 
+    public func isOutgoingMessageRead(_ message: EngineMessage) -> Bool {
+        return message.outgoingReadState(confirmed: self.isOutgoingMessageIndexRead(message.index))
+    }
+
     public func isIncomingMessageIndexRead(_ index: EngineMessage.Index) -> Bool {
         guard let state = self.state else {
             return false

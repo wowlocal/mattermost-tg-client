@@ -197,10 +197,7 @@ func chatHistoryEntriesForView(
         if let customThreadOutgoingReadState = customThreadOutgoingReadState {
             isRead = customThreadOutgoingReadState >= message.id
         }
-        // MATTERMOST: channel views cannot prove threaded replies or uncounted posts were read.
-        if MattermostBackend.isEnabled && !message.mattermostReadReceiptEligible {
-            isRead = false
-        }
+        isRead = message.outgoingReadState(confirmed: isRead)
         
         if let customChannelDiscussionReadState = customChannelDiscussionReadState {
             attibuteLoop: for i in 0 ..< message.attributes.count {

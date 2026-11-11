@@ -880,12 +880,12 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             guard let threadData else {
                 return false
             }
-            return threadData.maxOutgoingReadId >= message.id.id
+            return message.outgoingReadState(confirmed: threadData.maxOutgoingReadId >= message.id.id)
         }
     } else {
         readCounters = context.engine.data.get(TelegramEngine.EngineData.Item.Messages.PeerReadCounters(id: messages[0].id.peerId))
         |> map { readCounters -> Bool in
-            return readCounters.isOutgoingMessageIndexRead(message.index)
+            return readCounters.isOutgoingMessageRead(message)
         }
     }
     
